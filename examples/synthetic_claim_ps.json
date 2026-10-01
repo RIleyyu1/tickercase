@@ -1,0 +1,21 @@
+{
+  "_note": "SYNTHETIC example input. SYNT is a fictional company; every number below is invented for demonstration.",
+  "draft": {
+    "claim_text": "SYNT will trade at $100 in five years.",
+    "ticker": "SYNT",
+    "currency": "USD",
+    "target_price": "100",
+    "reference_price": "50",
+    "reference_price_date": "2026-09-30",
+    "reference_price_source": "synthetic example value",
+    "horizon_years": "5",
+    "target_assumed_shares": "100000000",
+    "current_shares": "95000000",
+    "valuation_method": "price_to_sales",
+    "valuation_multiple": "25",
+    "base_annual_metric": "200000000",
+    "base_metric_currency": "USD",
+    "base_metric_period": "FY2025 (synthetic)",
+    "filings_since": "2024-01-01"
+  }
+}

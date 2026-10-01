@@ -1,0 +1,25 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://data.sec.gov/submissions/CIK0009999902.json"
+ },
+ "response": {
+  "cik": "9999902",
+  "filings": {
+   "files": [],
+   "recent": {
+    "accessionNumber": [],
+    "filingDate": [],
+    "form": [],
+    "primaryDocDescription": [],
+    "primaryDocument": [],
+    "reportDate": []
+   }
+  },
+  "name": "Synthetic Empty Filer Inc (fictional)"
+ },
+ "schema": "tickercase.snapshot/1"
+}

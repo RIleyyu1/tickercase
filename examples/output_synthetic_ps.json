@@ -1,0 +1,396 @@
+{
+  "case_id": "491c7e666b954d9ba4e9ade6ceaedc2e",
+  "created_at": "2026-10-01T15:07:47.036141Z",
+  "status": "evaluated",
+  "input_fingerprint": "cb6b1200a4c54fd469a431a148b07df9816c36ba84bc062f901b90b55f1f407c",
+  "confirmed_claim": {
+    "values": {
+      "claim_text": "SYNT will trade at $100 in five years.",
+      "ticker": "SYNT",
+      "currency": "USD",
+      "target_price": "100",
+      "reference_price": "50",
+      "reference_price_date": "2026-09-30",
+      "reference_price_source": "synthetic example value",
+      "horizon_years": "5",
+      "target_assumed_shares": "100000000",
+      "current_shares": "95000000",
+      "valuation_method": "price_to_sales",
+      "valuation_multiple": "25",
+      "base_annual_metric": "200000000",
+      "base_metric_currency": "USD",
+      "base_metric_period": "FY2025 (synthetic)",
+      "filings_since": "2024-01-01"
+    },
+    "fingerprint": "cb6b1200a4c54fd469a431a148b07df9816c36ba84bc062f901b90b55f1f407c",
+    "confirmed_at": "2026-10-01T15:07:47.035976Z",
+    "value_provenance": {
+      "claim_text": "user_input",
+      "ticker": "user_input",
+      "currency": "user_input",
+      "target_price": "user_input:claim",
+      "reference_price": "user_input:manual_reference_value",
+      "reference_price_date": "user_input:manual_reference_value",
+      "reference_price_source": "user_input",
+      "horizon_years": "user_input:assumption",
+      "target_assumed_shares": "user_input:assumption",
+      "current_shares": "user_input:manual_reference_value",
+      "valuation_method": "user_input:assumption",
+      "valuation_multiple": "user_input:assumption",
+      "base_annual_metric": "user_input:manual_reference_value",
+      "base_metric_currency": "user_input",
+      "base_metric_period": "user_input",
+      "filings_since": "user_input"
+    }
+  },
+  "calculations": [
+    {
+      "name": "required_return",
+      "status": "ok",
+      "value": "1",
+      "unit": "ratio",
+      "formula": "target_price / reference_price - 1",
+      "inputs": {
+        "target_price": "100",
+        "reference_price": "50",
+        "reference_price_date": "2026-09-30"
+      },
+      "assumptions": [
+        "reference price is a manual value entered by the user"
+      ],
+      "reason": null
+    },
+    {
+      "name": "annualized_price_return",
+      "status": "ok",
+      "value": "0.148698354997035006798626946777928",
+      "unit": "ratio per year",
+      "formula": "(target_price / reference_price) ** (1 / horizon_years) - 1",
+      "inputs": {
+        "target_price": "100",
+        "reference_price": "50",
+        "reference_price_date": "2026-09-30",
+        "horizon_years": "5"
+      },
+      "assumptions": [
+        "horizon_years is a user assumption"
+      ],
+      "reason": null
+    },
+    {
+      "name": "target_market_cap",
+      "status": "ok",
+      "value": "10000000000",
+      "unit": "USD",
+      "formula": "target_price * target_assumed_shares",
+      "inputs": {
+        "target_price": "100",
+        "target_assumed_shares": "100000000"
+      },
+      "assumptions": [
+        "target_assumed_shares is the user's assumed share count at the target date, separate from the current count"
+      ],
+      "reason": null
+    },
+    {
+      "name": "implied_share_count_change",
+      "status": "ok",
+      "value": "0.052631578947368421052631578947368",
+      "unit": "ratio",
+      "formula": "target_assumed_shares / current_shares - 1",
+      "inputs": {
+        "target_assumed_shares": "100000000",
+        "current_shares": "95000000"
+      },
+      "assumptions": [
+        "current_shares is a manual reference value entered by the user"
+      ],
+      "reason": null
+    },
+    {
+      "name": "required_annual_revenue",
+      "status": "ok",
+      "value": "400000000",
+      "unit": "USD per year",
+      "formula": "target_market_cap / assumed_price_to_sales",
+      "inputs": {
+        "target_market_cap": "10000000000",
+        "assumed_price_to_sales": "25"
+      },
+      "assumptions": [
+        "assumed_price_to_sales at the target date is a user assumption"
+      ],
+      "reason": null
+    },
+    {
+      "name": "required_metric_cagr",
+      "status": "ok",
+      "value": "0.148698354997035006798626946777928",
+      "unit": "ratio per year",
+      "formula": "(required_annual_revenue / base_annual_revenue) ** (1 / horizon_years) - 1",
+      "inputs": {
+        "required_annual_revenue": "400000000",
+        "horizon_years": "5",
+        "base_annual_revenue": "200000000"
+      },
+      "assumptions": [
+        "base_annual_revenue is a manual reference value entered by the user",
+        "base period: FY2025 (synthetic)"
+      ],
+      "reason": null
+    }
+  ],
+  "evidence_records": [
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-26-000013",
+      "form_type": "8-K",
+      "is_amendment": false,
+      "filing_date": "2026-08-05",
+      "report_date": "2026-08-04",
+      "primary_document": "synt-20260804.htm",
+      "primary_document_description": "8-K",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/synt-20260804.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/0009999901-26-000013-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-26-000012",
+      "form_type": "10-Q",
+      "is_amendment": false,
+      "filing_date": "2026-08-01",
+      "report_date": "2026-06-30",
+      "primary_document": "synt-20260630.htm",
+      "primary_document_description": "10-Q",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/synt-20260630.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/0009999901-26-000012-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-26-000010",
+      "form_type": "10-Q",
+      "is_amendment": false,
+      "filing_date": "2026-05-02",
+      "report_date": "2026-03-31",
+      "primary_document": "synt-20260331.htm",
+      "primary_document_description": "10-Q",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/synt-20260331.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/0009999901-26-000010-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-26-000009",
+      "form_type": "10-K/A",
+      "is_amendment": true,
+      "filing_date": "2026-03-20",
+      "report_date": "2025-12-31",
+      "primary_document": "synt-20251231a.htm",
+      "primary_document_description": "10-K/A",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/synt-20251231a.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/0009999901-26-000009-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-26-000008",
+      "form_type": "10-K",
+      "is_amendment": false,
+      "filing_date": "2026-02-20",
+      "report_date": "2025-12-31",
+      "primary_document": "synt-20251231.htm",
+      "primary_document_description": "10-K",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/synt-20251231.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/0009999901-26-000008-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-26-000007",
+      "form_type": "8-K",
+      "is_amendment": false,
+      "filing_date": "2026-01-15",
+      "report_date": "2026-01-14",
+      "primary_document": "synt-20260114.htm",
+      "primary_document_description": "8-K",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/synt-20260114.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/0009999901-26-000007-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-25-000006",
+      "form_type": "10-Q",
+      "is_amendment": false,
+      "filing_date": "2025-11-01",
+      "report_date": "2025-09-30",
+      "primary_document": "synt-20250930.htm",
+      "primary_document_description": "10-Q",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/synt-20250930.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/0009999901-25-000006-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-25-000005",
+      "form_type": "10-Q",
+      "is_amendment": false,
+      "filing_date": "2025-08-01",
+      "report_date": "2025-06-30",
+      "primary_document": "synt-20250630.htm",
+      "primary_document_description": "10-Q",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/synt-20250630.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/0009999901-25-000005-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-25-000004",
+      "form_type": "10-Q",
+      "is_amendment": false,
+      "filing_date": "2025-05-02",
+      "report_date": "2025-03-31",
+      "primary_document": "synt-20250331.htm",
+      "primary_document_description": "10-Q",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/synt-20250331.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/0009999901-25-000004-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-25-000003",
+      "form_type": "10-K",
+      "is_amendment": false,
+      "filing_date": "2025-02-21",
+      "report_date": "2024-12-31",
+      "primary_document": "synt-20241231.htm",
+      "primary_document_description": "10-K",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/synt-20241231.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/0009999901-25-000003-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    },
+    {
+      "provider_id": "sec_edgar_submissions",
+      "ticker": "SYNT",
+      "cik": "0009999901",
+      "company_name": "Synthetic Example Corp (fictional)",
+      "accession_number": "0009999901-24-000001",
+      "form_type": "10-K",
+      "is_amendment": false,
+      "filing_date": "2024-02-23",
+      "report_date": "2023-12-31",
+      "primary_document": "synt-20231231.htm",
+      "primary_document_description": "10-K",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/synt-20231231.htm",
+      "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/0009999901-24-000001-index.htm",
+      "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
+      "retrieved_at": "2026-10-01T15:07:47.037243Z",
+      "source_captured_at": "2026-10-01T00:00:00Z",
+      "data_mode": "synthetic",
+      "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
+    }
+  ],
+  "coverage": {
+    "requested_since": "2024-01-01",
+    "recent_earliest_filing_date": "2024-02-23",
+    "recent_latest_filing_date": "2026-08-05",
+    "recent_row_count": 13,
+    "coverage_gap": true,
+    "older_files": [
+      {
+        "name": "CIK0009999901-submissions-001.json",
+        "filing_from": "2012-03-01",
+        "filing_to": "2024-01-31",
+        "filing_count": 120,
+        "url": "https://data.sec.gov/submissions/CIK0009999901-submissions-001.json"
+      }
+    ],
+    "message": "Coverage gap: the requested window starts 2024-01-01, but the parsed recent block covers 2024-02-23 to 2026-08-05. SEC lists 1 older submission file(s) that were not fetched, so filings before 2024-02-23 were not checked."
+  },
+  "provider_errors": [],
+  "validation_issues": [],
+  "missing_fields": [],
+  "warnings": [
+    "SEC section uses synthetic example data, not real SEC filings"
+  ],
+  "data_modes": {
+    "claim_inputs": "user_input",
+    "sec_filings": "synthetic"
+  },
+  "mixed_sources": true,
+  "analysis_status": "not_implemented",
+  "verdict": null,
+  "disclaimer": "TickerCase shows what a claim requires under the user's own assumptions. It does not rate the claim, estimate a probability, or give investment advice."
+}
