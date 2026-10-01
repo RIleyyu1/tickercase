@@ -279,6 +279,19 @@ def snapshot_filename(url: str) -> str:
     return f"{safe}__{digest}.json"
 
 
+def _replace_with_retry(src: str, dst: Path, attempts: int = 50, delay: float = 0.01) -> None:
+    """``os.replace`` with a bounded retry: on Windows a concurrent replace of the
+    same target raises a transient PermissionError instead of being atomic."""
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if os.name != "nt" or attempt == attempts - 1:
+                raise
+            time.sleep(delay)
+
+
 def write_snapshot(
     snapshot_dir: Union[str, Path],
     url: str,
@@ -307,7 +320,7 @@ def write_snapshot(
             json.dump(envelope, handle, ensure_ascii=False, indent=1, sort_keys=True)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp_name, target)
+        _replace_with_retry(tmp_name, target)
     except BaseException:
         try:
             os.unlink(tmp_name)
