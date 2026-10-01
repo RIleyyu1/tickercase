@@ -462,6 +462,180 @@ class PlainReport(BaseModel):
     monitor: list[MonitorRow] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------- oracle layers (v0.5)
+
+
+class _Sourced(BaseModel):
+    source_url: str
+    retrieved_at: datetime
+    source_captured_at: Optional[datetime] = None
+    data_mode: DataMode
+
+
+class OptionQuote(BaseModel):
+    strike: DecimalStr
+    implied_volatility: Optional[float] = None
+    open_interest: int = 0
+    bid: Optional[float] = None
+    ask: Optional[float] = None
+    last: Optional[float] = None
+
+
+class OptionsSnapshot(_Sourced):
+    """Call chain of the expiry closest to (and preferably after) the claim's target date."""
+
+    provider_id: str = "yahoo_finance_options"
+    symbol: str
+    underlying_price: Optional[DecimalStr] = None
+    expiry: date
+    days_to_expiry: int
+    expirations: list[date] = Field(default_factory=list)
+    atm_iv: Optional[float] = None
+    target_iv: Optional[float] = None
+    target_iv_extrapolated: bool = False
+    max_strike: Optional[DecimalStr] = None
+    oi_at_or_above_target: int = 0
+    total_call_oi: int = 0
+    calls: list[OptionQuote] = Field(default_factory=list)
+
+
+class BaseRate(BaseModel):
+    """How many US-listed companies of a similar size reached the required growth (SEC XBRL frames)."""
+
+    metric: str
+    start_year: int
+    end_year: int
+    size_low: DecimalStr
+    size_high: DecimalStr
+    companies: int
+    achieved: int
+    rate: Optional[float] = None
+    required_cagr: DecimalStr
+    percentile_of_required: Optional[float] = None
+    median_cagr: Optional[DecimalStr] = None
+    p90_cagr: Optional[DecimalStr] = None
+    examples: list[dict[str, str]] = Field(default_factory=list)
+    concepts: list[str] = Field(default_factory=list)
+    source_urls: list[str] = Field(default_factory=list)
+    data_mode: DataMode
+    note: str = "Survivors only: companies that reported in both years. Acquired or delisted companies are missing, which makes the rate optimistic."
+
+
+class PriceBaseRate(_Sourced):
+    """Share of past windows of the same length in which this stock rose at least the required amount."""
+
+    symbol: str
+    window_months: int
+    windows: int
+    hits: int
+    rate: Optional[float] = None
+    required_return: DecimalStr
+    median_return: Optional[DecimalStr] = None
+    best_return: Optional[DecimalStr] = None
+    history_start: date
+
+
+class BenchmarkReturn(BaseModel):
+    symbol: str
+    label: str
+    start: date
+    end: date
+    total_return: DecimalStr
+    annual_return: DecimalStr
+    data_mode: DataMode
+
+
+class InsiderTransaction(BaseModel):
+    filed: date
+    owner: str
+    role: str
+    code: str
+    shares: DecimalStr
+    price: Optional[DecimalStr] = None
+    value: Optional[DecimalStr] = None
+    acquired: bool
+    plan_10b5_1: bool = False
+    url: str
+
+
+class InsiderSummary(BaseModel):
+    """Form 4 transactions by type. Only codes P (open-market purchase) and S (open-market sale) are trades by choice."""
+
+    window_start: date
+    filings_listed: int
+    filings_read: int
+    filings_failed: int = 0
+    purchases: int = 0
+    purchase_value: DecimalStr = Decimal(0)
+    sales: int = 0
+    sale_value: DecimalStr = Decimal(0)
+    plan_sale_value: DecimalStr = Decimal(0)
+    buyers: int = 0
+    sellers: int = 0
+    grants: int = 0
+    exercises: int = 0
+    tax_withholding: int = 0
+    other: int = 0
+    net_open_market_value: DecimalStr = Decimal(0)
+    transactions: list[InsiderTransaction] = Field(default_factory=list)
+    data_mode: DataMode
+
+
+class PredictionMarket(BaseModel):
+    question: str
+    probability_yes: Optional[float] = None
+    end_date: Optional[datetime] = None
+    volume: Optional[float] = None
+    url: str
+
+
+class PredictionMarkets(_Sourced):
+    query: str
+    markets: list[PredictionMarket] = Field(default_factory=list)
+
+
+class SentimentSnapshot(_Sourced):
+    score: float
+    rating: str
+    previous_week: Optional[float] = None
+    previous_month: Optional[float] = None
+    as_of: Optional[datetime] = None
+
+
+class ProbabilityMethod(BaseModel):
+    id: str
+    name: "Text"
+    status: Literal["ok", "not_computable"]
+    probability: Optional[float] = None  # P(price at the target date >= target)
+    touch_probability: Optional[float] = None  # P(price reaches the target at any time before the date)
+    measures: "Text"
+    detail: "Text"
+    inputs: dict[str, str] = Field(default_factory=dict)
+    limitations: list["Text"] = Field(default_factory=list)
+
+
+class LadderRow(BaseModel):
+    level: DecimalStr
+    label: "Text"
+    options_p: Optional[float] = None
+    model_p: Optional[float] = None
+
+
+class OracleSummary(BaseModel):
+    """Probability that the claim comes true, from several independent methods compared side by side."""
+
+    target_price: DecimalStr
+    target_date: date
+    low: Optional[float] = None
+    high: Optional[float] = None
+    tier: Literal["lottery", "low", "possible", "likely", "unknown"]
+    tier_label: "Text"
+    methods: list[ProbabilityMethod] = Field(default_factory=list)
+    ladder: list[LadderRow] = Field(default_factory=list)
+    agreement: "Text"
+    risk_free_rate: Optional[DecimalStr] = None
+
+
 class ReferenceSuggestion(BaseModel):
     value: str
     source: str
@@ -509,6 +683,15 @@ class CaseResult(BaseModel):
     probability: Optional[ProbabilityReference] = None
     sensitivity: Optional[Sensitivity] = None
     report: Optional[PlainReport] = None
+    options: Optional[OptionsSnapshot] = None
+    base_rate: Optional[BaseRate] = None
+    price_base_rate: Optional[PriceBaseRate] = None
+    benchmarks: list[BenchmarkReturn] = Field(default_factory=list)
+    insiders: Optional[InsiderSummary] = None
+    prediction_markets: Optional[PredictionMarkets] = None
+    sentiment: Optional[SentimentSnapshot] = None
+    oracle: Optional[OracleSummary] = None
+    data_steps: dict[str, str] = Field(default_factory=dict)  # step -> "ok" | "failed"
     provider_errors: list[ProviderErrorRecord] = Field(default_factory=list)
     validation_issues: list[ValidationIssue] = Field(default_factory=list)
     missing_fields: list[MissingField] = Field(default_factory=list)

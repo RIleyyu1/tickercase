@@ -1,0 +1,20 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+ },
+ "response": {
+  "fear_and_greed": {
+   "previous_1_month": 45.0,
+   "previous_1_week": 48.0,
+   "previous_close": 49.0,
+   "rating": "neutral",
+   "score": 50.0,
+   "timestamp": "2026-10-01T00:00:00+00:00"
+  }
+ },
+ "schema": "tickercase.snapshot/1"
+}

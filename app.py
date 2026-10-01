@@ -100,8 +100,29 @@ S = {
     "case": ("投资案例", "Investment case"),
     "as_of": ("证据截至 {d} · {r} · 描述当日的证据状态，不是价格预测", "Evidence as of {d} · {r} · describes the evidence on that date; not a price prediction"),
     "notes": ("提示（{n}）", "Notes ({n})"),
-    "tabs": (["简明报告", "结论与依据", "证据", "计算", "公开数据", "概率参考（附加）", "运行记录"],
-             ["Plain report", "Verdict details", "Evidence", "Calculations", "Public data", "Probability (extra)", "Run log"]),
+    "tabs": (["简明报告", "概率与验证", "结论与依据", "证据", "计算", "公开数据", "概率参考（模型）", "运行记录"],
+             ["Plain report", "Probability & checks", "Verdict details", "Evidence", "Calculations", "Public data", "Probability (model)", "Run log"]),
+    "pipeline": ("拉取数据", "Fetching data"),
+    "steps_summary": ("{ok} 项成功 · {failed} 项失败", "{ok} succeeded · {failed} failed"),
+    "prob_title": ("概率约 {lo}–{hi} · {tier}", "Probability about {lo}–{hi} · {tier}"),
+    "prob_sub": ("{when} 前后股价 ≥ {target} · 证据截至 {asof} · 多种独立方法交叉验证，每个数字可追溯", "Price ≥ {target} around {when} · evidence as of {asof} · independent methods cross-checked; every number traceable"),
+    "prob_none": ("数据不足，无法计算概率", "Not enough data to compute a probability"),
+    "m_cols": (("方法", "到期时 ≥ 目标", "期间曾触及", "衡量的是什么", "计入区间"), ("Method", "End ≥ target", "Touch before", "What it measures", "In range")),
+    "ladder_title": ("不同价位的概率（到期时 ≥ 该价位）", "Probability by price level (end ≥ level)"),
+    "ladder_cols": (("价位", "说明", "期权隐含", "历史波动模型"), ("Level", "Label", "Option-implied", "Historical-vol model")),
+    "method_detail": ("每种方法的算法、输入和限制", "How each method works, its inputs and limits"),
+    "why_trust": ("为什么比直接问 AI 更可信", "Why this is more reliable than asking an AI directly"),
+    "why_trust_body": (
+        "- 每个数字都是本次实时抓取或计算出来的，带来源链接和时间；不靠模型记忆。\n"
+        "- 概率由多种独立方法分别计算并并排展示，分歧会被说明；不是一个凭感觉给的数字。\n"
+        "- 同样的输入得到同样的结果（可用 replay 模式回放）。\n"
+        "- 取不到的数据会明确列出，不会被编造补齐。\n"
+        "- 内部人交易按交易类型区分，授予、行权、代扣税不算作卖出。",
+        "- Every number was fetched or computed in this run, with a source link and time; nothing comes from model memory.\n"
+        "- The probability is computed by several independent methods shown side by side, and disagreements are explained.\n"
+        "- The same inputs give the same result (replayable in replay mode).\n"
+        "- Missing data is listed, never filled in.\n"
+        "- Insider trades are separated by type: grants, exercises and tax withholding are not counted as selling."),
     "rationale": ("判断依据", "Rationale"), "rechecks": ("何时需要重新评估", "When to review again"),
     "watch": ("观察：", "Watch: "), "threshold": ("阈值：", "Threshold: "), "linked": ("关联：", "Linked to: "),
     "limits": ("这个结论的限制", "Limits of this verdict"),
@@ -927,6 +948,88 @@ def tab_run_log(result: CaseResult, key_suffix: str) -> None:
 
 
 TONE_ICON = {"good": "✔", "bad": "✖", "missing": "…", "neutral": "·"}
+STEP_LABELS = {
+    "sec_filings": ("SEC 申报列表", "SEC filings"), "sec_facts": ("SEC 财务数据", "SEC financials"), "price_history": ("日线行情", "Daily prices"),
+    "options": ("期权链", "Option chain"), "risk_free_rate": ("美债利率", "Treasury yield"), "price_base_rate": ("本股历史涨幅", "Own price history"),
+    "benchmarks": ("大盘对标", "Benchmarks"), "base_rate": ("同规模公司基准率", "Peer base rate"), "insiders": ("内部人交易", "Insider trades"),
+    "prediction_markets": ("预测市场", "Prediction markets"), "fear_greed": ("恐惧贪婪指数", "Fear & Greed"),
+}
+TIER_TONE = {"lottery": "critical", "low": "warning", "possible": "neutral", "likely": "good", "unknown": "neutral"}
+
+
+def step_chips(steps: dict) -> str:
+    chips = []
+    for key, state in steps.items():
+        label = STEP_LABELS.get(key, (key, key))[0 if lang() == "zh" else 1]
+        icon, color = ("✔", "#0ca30c") if state == "ok" else ("✖", "#d03b3b") if state == "failed" else ("…", "#898781")
+        chips.append(f'<span style="display:inline-block;margin:2px 4px;padding:2px 10px;border-radius:999px;border:1px solid {color};font-size:0.82rem">'
+                     f'<span style="color:{color}">{icon}</span> {label}</span>')
+    return "".join(chips)
+
+
+def pct_p(p) -> str:
+    if p is None:
+        return "—"
+    return "<0.1%" if p < 0.001 else f"{p * 100:.1f}%"
+
+
+def render_probability_card(result: CaseResult) -> None:
+    o = result.oracle
+    if o is None:
+        return
+    tone = TIER_TONE[o.tier]
+    if o.low is None:
+        title = t("prob_none")
+    else:
+        title = t("prob_title", lo=pct_p(o.low), hi=pct_p(o.high), tier=tr(o.tier_label))
+    asof = result.verdict.as_of if result.verdict else result.created_at.date()
+    sub = t("prob_sub", when=f"{o.target_date:%Y-%m}", target=format(o.target_price, "f"), asof=asof)
+    st.markdown(f'<div class="tc-verdict tc-{tone}"><div class="tc-label">{title}</div><div class="tc-sub">{sub}</div></div>', unsafe_allow_html=True)
+    if result.data_steps:
+        ok = sum(1 for v in result.data_steps.values() if v == "ok")
+        failed = sum(1 for v in result.data_steps.values() if v == "failed")
+        st.markdown(f'<div style="margin:4px 0 8px 0">{step_chips(result.data_steps)}</div>', unsafe_allow_html=True)
+        st.caption(t("steps_summary", ok=ok, failed=failed))
+
+
+def render_methods_table(result: CaseResult) -> None:
+    o = result.oracle
+    if o is None:
+        return
+    i = 0 if lang() == "zh" else 1
+    in_range = {"zh": ("是", "否", "—"), "en": ("yes", "no", "—")}["zh" if i == 0 else "en"]
+    lo, hi = o.low, o.high
+    rows = []
+    for m in o.methods:
+        used = m.status == "ok" and m.probability is not None and lo is not None and lo - 1e-12 <= m.probability <= hi + 1e-12 \
+            and not (m.id == "M4" and any("重叠" in x.zh for x in m.limitations))
+        rows.append((f"{m.id} {tr(m.name)}", pct_p(m.probability) if m.status == "ok" else "—", pct_p(m.touch_probability),
+                     tr(m.measures), in_range[0] if used else in_range[1] if m.status == "ok" else in_range[2]))
+    st.markdown(_md_table(S["m_cols"][i], rows))
+    st.caption(tr(o.agreement))
+
+
+def tab_oracle(result: CaseResult) -> None:
+    o = result.oracle
+    if o is None:
+        st.caption(t("r_none"))
+        return
+    render_methods_table(result)
+    if o.ladder:
+        i = 0 if lang() == "zh" else 1
+        st.markdown(f"#### {t('ladder_title')}")
+        st.markdown(_md_table(S["ladder_cols"][i], [(f"{x.level:,}", tr(x.label), pct_p(x.options_p), pct_p(x.model_p)) for x in o.ladder]))
+    st.markdown(f"#### {t('method_detail')}")
+    for m in o.methods:
+        with st.expander(f"{m.id} · {tr(m.name)} · {pct_p(m.probability) if m.status == 'ok' else '—'}"):
+            st.markdown(tr(m.detail))
+            if m.inputs:
+                st.json(m.inputs, expanded=False)
+            for lim in m.limitations:
+                st.markdown(f"- {tr(lim)}")
+    with st.container(border=True):
+        st.markdown(f"**{t('why_trust')}**")
+        st.markdown(t("why_trust_body"))
 
 
 def tr(text: Optional[Text]) -> str:
@@ -994,7 +1097,10 @@ def render_result(result: CaseResult, key_suffix: str = "current") -> None:
         return
     if result.confirmed_claim is None:
         return
-    render_verdict(result)
+    if result.oracle is not None:
+        render_probability_card(result)
+    else:
+        render_verdict(result)
     if result.report is not None:
         st.markdown(f"<div style='font-size:1.08rem; line-height:1.6; margin: 0 0 8px 0'>{tr(result.report.headline)}</div>", unsafe_allow_html=True)
     for e in result.provider_errors:
@@ -1006,20 +1112,26 @@ def render_result(result: CaseResult, key_suffix: str = "current") -> None:
                 st.warning(w)
     tabs = st.tabs(S["tabs"][0 if lang() == "zh" else 1])
     with tabs[0]:
+        if result.oracle is not None:
+            render_methods_table(result)
         render_report(result.report)
     with tabs[1]:
+        tab_oracle(result)
+    with tabs[2]:
+        if result.oracle is not None:
+            render_verdict(result)
         render_key_numbers(result)
         if result.verdict is not None:
             tab_conclusion(result)
-    with tabs[2]:
-        tab_evidence(result)
     with tabs[3]:
-        tab_calculations(result)
+        tab_evidence(result)
     with tabs[4]:
-        tab_public_data(result)
+        tab_calculations(result)
     with tabs[5]:
-        tab_probability(result)
+        tab_public_data(result)
     with tabs[6]:
+        tab_probability(result)
+    with tabs[7]:
         tab_run_log(result, key_suffix)
 
 
@@ -1178,9 +1290,17 @@ def view_new() -> None:
     if run_clicked:
         st.session_state["result"] = None
         st.session_state["run_error"] = None
-        with st.spinner(t("spinner")):
+        with st.status(t("pipeline"), expanded=True) as status:
+            board = st.empty()
+            live_steps: dict[str, str] = {}
+
+            def on_step(step: str, state: str) -> None:
+                live_steps[step] = state
+                board.markdown(step_chips(live_steps), unsafe_allow_html=True)
+
             try:
-                st.session_state["result"] = get_service().evaluate(draft, confirmation, sec_mode=st.session_state["sec_mode"])
+                st.session_state["result"] = get_service().evaluate(draft, confirmation, sec_mode=st.session_state["sec_mode"], progress=on_step)
+                status.update(state="complete")
                 st.session_state["result_mode"] = st.session_state["sec_mode"]
             except Exception as exc:  # unexpected failure; keep page usable and show it
                 st.session_state["run_error"] = f"{type(exc).__name__}: {exc}"

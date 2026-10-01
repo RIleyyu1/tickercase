@@ -130,3 +130,34 @@ class YahooChartProvider(Provider):
             source_captured_at=fetched.source_captured_at,
             data_mode=fetched.data_mode,
         )
+
+
+MONTHLY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=max&interval=1mo"
+
+
+def monthly_closes(payload: Any, url: str) -> list[tuple[date, float]]:
+    """One adjusted close per calendar month (the month's last bar; falls back to closes)."""
+    chart = payload.get("chart") if isinstance(payload, Mapping) else None
+    results = chart.get("result") if isinstance(chart, Mapping) else None
+    if not isinstance(results, list) or not results:
+        raise ProviderError("no_prices", "monthly chart has no result", url=url)
+    r = results[0]
+    stamps = r.get("timestamp") or []
+    ind = r.get("indicators") or {}
+    adj = ((ind.get("adjclose") or [{}])[0] or {}).get("adjclose") or ((ind.get("quote") or [{}])[0] or {}).get("close") or []
+    by_month: dict[tuple[int, int], tuple[date, float]] = {}
+    for ts, px in zip(stamps, adj):
+        v = _num(px)
+        if isinstance(ts, int) and not isinstance(ts, bool) and v is not None:
+            d = datetime.fromtimestamp(ts, tz=timezone.utc).date()
+            by_month[(d.year, d.month)] = (d, v)  # Yahoo may return weekly bars for range=max; keep the last close of each month
+    return [by_month[k] for k in sorted(by_month)]
+
+
+def price_base_rate(closes: list[tuple[date, float]], months: int, required_return: Decimal):
+    """(windows, hits, median return, best return) over every start month with a full window."""
+    if months < 1 or len(closes) <= months:
+        return 0, 0, None, None
+    returns = sorted(closes[i + months][1] / closes[i][1] - 1 for i in range(len(closes) - months))
+    hits = sum(1 for x in returns if x >= float(required_return))
+    return len(returns), hits, returns[len(returns) // 2], returns[-1]

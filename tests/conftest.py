@@ -86,11 +86,11 @@ def settings(tmp_path):
 
 
 def offline_factory(settings: Settings):
-    """Real fetchers for SEC (live mode still needs a User-Agent); the market source never touches the network."""
+    """Real fetchers for SEC (live mode still needs a User-Agent); market, options and web sources never touch the network."""
     from tickercase.service import build_fetcher
 
     def factory(mode: str, source: str):
-        if source == "market" and mode in ("live", "record"):
+        if source in ("market", "options", "web") and mode in ("live", "record"):
             return FakeHttpClient({}, data_mode=DataMode.LIVE)
         return build_fetcher(mode, settings, source)
 

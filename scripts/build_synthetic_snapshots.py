@@ -19,7 +19,11 @@ import random  # noqa: E402
 from datetime import date, timedelta  # noqa: E402
 
 from tickercase.http_client import ORIGIN_SYNTHETIC, write_snapshot  # noqa: E402
-from tickercase.providers.market import CHART_URL  # noqa: E402
+from tickercase.providers.insiders import xml_url  # noqa: E402
+from tickercase.providers.market import CHART_URL, MONTHLY_URL  # noqa: E402
+from tickercase.providers.options import OPTIONS_URL  # noqa: E402
+from tickercase.providers.sec_frames import FRAMES_URL  # noqa: E402
+from tickercase.providers.sentiment import FEAR_GREED_URL, POLYMARKET_URL  # noqa: E402
 from tickercase.providers.sec import SUBMISSIONS_URL, TICKERS_URL  # noqa: E402
 from tickercase.providers.sec_facts import COMPANYFACTS_URL  # noqa: E402
 
@@ -152,6 +156,104 @@ def price_chart() -> dict:
     }
 
 
+def _daily_path(seed: int, end_value: float, vol: float, drift: float = 0.0004) -> tuple[list[date], list[float]]:
+    rng = random.Random(seed)
+    days, d = [], date(2021, 10, 1)
+    while d <= date(2026, 9, 30):
+        if d.weekday() < 5:
+            days.append(d)
+        d += timedelta(days=1)
+    sigma = vol / math.sqrt(252)
+    logs, x = [], 0.0
+    for _ in days:
+        x += rng.gauss(drift, sigma)
+        logs.append(x)
+    shift = math.log(end_value) - logs[-1]
+    closes = [round(math.exp(v + shift), 4) for v in logs]
+    closes[-1] = end_value
+    return days, closes
+
+
+def _chart(symbol: str, days: list[date], closes: list[float]) -> dict:
+    stamps = [int(datetime(dd.year, dd.month, dd.day, 13, 30, tzinfo=timezone.utc).timestamp()) for dd in days]
+    return {"chart": {"result": [{"meta": {"currency": "USD", "symbol": symbol, "gmtoffset": -14400}, "timestamp": stamps,
+                                  "indicators": {"quote": [{"close": closes}], "adjclose": [{"adjclose": closes}]}}], "error": None}}
+
+
+def _monthly(days: list[date], closes: list[float]) -> tuple[list[date], list[float]]:
+    last: dict[tuple[int, int], tuple[date, float]] = {}
+    for d, c in zip(days, closes):
+        last[(d.year, d.month)] = (d, c)
+    keys = sorted(last)
+    return [last[k][0] for k in keys], [last[k][1] for k in keys]
+
+
+EXPIRIES = (date(2027, 1, 15), date(2028, 12, 15))
+
+
+def _ts(d: date) -> int:
+    return int(datetime(d.year, d.month, d.day, tzinfo=timezone.utc).timestamp())
+
+
+def option_chain(expiry: date) -> dict:
+    """Fictional calls: strikes 20-120, IV smile around 45%, open interest thinning at high strikes."""
+    calls = []
+    for k in range(20, 125, 5):
+        iv = 0.45 + 0.0015 * abs(k - 50)
+        calls.append({"contractSymbol": f"SYNT{expiry:%y%m%d}C{k:05d}000", "strike": float(k), "impliedVolatility": round(iv, 4),
+                      "openInterest": max(0, 900 - 9 * k), "bid": round(max(0.05, 50 - k + 8), 2), "ask": round(max(0.1, 50 - k + 9), 2),
+                      "lastPrice": round(max(0.08, 50 - k + 8.5), 2)})
+    return {"optionChain": {"result": [{"underlyingSymbol": "SYNT", "expirationDates": [_ts(e) for e in EXPIRIES],
+                                        "quote": {"regularMarketPrice": 50.0}, "options": [{"expirationDate": _ts(expiry), "calls": calls, "puts": []}]}],
+                            "error": None}}
+
+
+def frames(concept: str, year: int, seed: int) -> dict:
+    """About 300 fictional filers with revenue 50M-600M in 2020 and random 5-year growth."""
+    rng = random.Random(seed)
+    rows = []
+    for i in range(300):
+        base = rng.uniform(50e6, 600e6)
+        growth = rng.gauss(0.07, 0.12)
+        value = base if year == 2020 else base * (1 + growth) ** 5
+        if concept == "NetIncomeLoss":
+            value = value * rng.uniform(-0.05, 0.2)
+        rows.append({"accn": f"0009990{i:03d}-{year % 100 + 1:02d}-000001", "cik": 9990000 + i, "entityName": f"Synthetic Filer {i:03d} (fictional)",
+                     "loc": "US-DE", "end": f"{year}-12-31", "val": int(value)})
+    if concept == "Revenues":
+        rows = rows[:40]  # the second concept only fills a few gaps
+    return {"taxonomy": "us-gaap", "tag": concept, "ccp": f"CY{year}", "uom": "USD", "label": concept, "pts": len(rows), "data": rows}
+
+
+FORM4_XML = """<?xml version="1.0"?>
+<ownershipDocument>
+  <schemaVersion>X0508</schemaVersion>
+  <documentType>4</documentType>
+  <periodOfReport>2026-05-29</periodOfReport>
+  <aff10b5One>1</aff10b5One>
+  <issuer><issuerCik>0009999901</issuerCik><issuerName>Synthetic Example Corp (fictional)</issuerName><issuerTradingSymbol>SYNT</issuerTradingSymbol></issuer>
+  <reportingOwner>
+    <reportingOwnerId><rptOwnerCik>0009999990</rptOwnerCik><rptOwnerName>Example Officer (fictional)</rptOwnerName></reportingOwnerId>
+    <reportingOwnerRelationship><isDirector>0</isDirector><isOfficer>1</isOfficer><officerTitle>Chief Executive Officer</officerTitle></reportingOwnerRelationship>
+  </reportingOwner>
+  <nonDerivativeTable>
+    <nonDerivativeTransaction>
+      <securityTitle><value>Common Stock</value></securityTitle>
+      <transactionDate><value>2026-05-29</value></transactionDate>
+      <transactionCoding><transactionFormType>4</transactionFormType><transactionCode>S</transactionCode></transactionCoding>
+      <transactionAmounts><transactionShares><value>20000</value></transactionShares><transactionPricePerShare><value>48.50</value></transactionPricePerShare><transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode></transactionAmounts>
+    </nonDerivativeTransaction>
+    <nonDerivativeTransaction>
+      <securityTitle><value>Common Stock</value></securityTitle>
+      <transactionDate><value>2026-05-29</value></transactionDate>
+      <transactionCoding><transactionFormType>4</transactionFormType><transactionCode>A</transactionCode></transactionCoding>
+      <transactionAmounts><transactionShares><value>15000</value></transactionShares><transactionPricePerShare><value>0</value></transactionPricePerShare><transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode></transactionAmounts>
+    </nonDerivativeTransaction>
+  </nonDerivativeTable>
+</ownershipDocument>
+"""
+
+
 def main() -> None:
     for path in OUT.glob("*.json"):
         path.unlink()
@@ -160,6 +262,35 @@ def main() -> None:
     write_snapshot(OUT, SUBMISSIONS_URL.format(cik="0009999902"), empty_submissions(), captured_at=AUTHORED_AT, origin=ORIGIN_SYNTHETIC, note=NOTE)
     write_snapshot(OUT, COMPANYFACTS_URL.format(cik=CIK), companyfacts(), captured_at=AUTHORED_AT, origin=ORIGIN_SYNTHETIC, note=NOTE)
     write_snapshot(OUT, CHART_URL.format(symbol="SYNT"), price_chart(), captured_at=AUTHORED_AT, origin=ORIGIN_SYNTHETIC, note=NOTE)
+    w = lambda url, payload: write_snapshot(OUT, url, payload, captured_at=AUTHORED_AT, origin=ORIGIN_SYNTHETIC, note=NOTE)  # noqa: E731
+    # option chains
+    w(OPTIONS_URL.format(symbol="SYNT"), option_chain(EXPIRIES[0]))
+    for e in EXPIRIES:
+        w(f"{OPTIONS_URL.format(symbol='SYNT')}?date={_ts(e)}", option_chain(e))
+    # 10-year yield (^TNX is quoted in percent, 4.2 = 4.2%): flat
+    days, _ = _daily_path(1, 4.2, 0.05)
+    w(CHART_URL.format(symbol="^TNX"), _chart("^TNX", days, [4.2] * len(days)))
+    # monthly histories: SYNT from its daily synthetic path, SPY and QQQ as fictional index paths
+    chart = price_chart()["chart"]["result"][0]
+    synt_days = [datetime.fromtimestamp(t, tz=timezone.utc).date() for t in chart["timestamp"]]
+    md, mc = _monthly(synt_days, chart["indicators"]["adjclose"][0]["adjclose"])
+    w(MONTHLY_URL.format(symbol="SYNT"), _chart("SYNT", md, mc))
+    for sym, seed, end in (("SPY", 11, 600.0), ("QQQ", 12, 520.0)):
+        dd, cc = _daily_path(seed, end, 0.18, 0.0004)
+        md, mc = _monthly(dd, cc)
+        w(MONTHLY_URL.format(symbol=sym), _chart(sym, md, mc))
+    # SEC frames for the base rate (2020 -> 2025)
+    for concept, seed in (("RevenueFromContractWithCustomerExcludingAssessedTax", 21), ("Revenues", 22), ("NetIncomeLoss", 23)):
+        for year in (2020, 2025):
+            w(FRAMES_URL.format(concept=concept, year=year), frames(concept, year, seed))
+    # Form 4: the submissions block lists one Form 4 on 2026-06-02
+    form4_index = next(i for i, row in enumerate(ROWS) if row[0] == "4")
+    accession = f"{CIK}-{ROWS[form4_index][1][2:4]}-{len(ROWS) - form4_index:06d}"
+    w(xml_url(CIK, accession, ROWS[form4_index][3]), FORM4_XML)
+    # no prediction market for a fictional company; a neutral market mood
+    w(POLYMARKET_URL.format(q="SYNT"), {"events": [], "tags": [], "profiles": []})
+    w(FEAR_GREED_URL, {"fear_and_greed": {"score": 50.0, "rating": "neutral", "timestamp": "2026-10-01T00:00:00+00:00",
+                                          "previous_close": 49.0, "previous_1_week": 48.0, "previous_1_month": 45.0}})
     print(f"wrote {len(list(OUT.glob('*.json')))} synthetic snapshots to {OUT}")
 
 

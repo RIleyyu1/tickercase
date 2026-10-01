@@ -1,5 +1,18 @@
 # TickerCase
 
+**Since v0.5 TickerCase is a stock-only version of digital-oracle:** the headline answer to a claim such as "RKLB reaches $300 within 3 years" is a probability range computed by independent methods and cross-checked, with every number traced to a source. The original evidence-as-of verdict (OA.13) is kept as a secondary view. This changes the product scope of the Team 12 course documents, which describe a verdict without price prediction; the documents need revising.
+
+## Probability and cross-checks (v0.5)
+
+| Method | What it measures | Source |
+| --- | --- | --- |
+| M1 option market | risk-neutral P(price at the target date ≥ target) from the implied volatility at the target strike of the expiry nearest the target date (Black-Scholes N(d2)); also the probability of touching the target before the date | Yahoo option chains (session crumb), 10-year Treasury yield (^TNX) |
+| M2 statistical model | the same formula with the stock's historical volatility | daily prices |
+| M3 base rate | share of US companies of similar size (0.5x–2x, widened to 0.25x–4x below 30 companies) whose revenue or net income grew at least as fast as the claim needs over the same number of years | SEC XBRL frames (all filers); survivors only, so optimistic |
+| M4 own history | share of past windows of the same length in which this stock rose enough | monthly closes; used in the range only when the history holds ≥ 4 non-overlapping windows |
+
+The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
+
 TickerCase turns a stock claim ("SYNT will be $100 in five years") into an inspectable investment case: explicit assumptions, reproducible numbers, dated public evidence, an evidence-as-of verdict and the conditions that should trigger a new review. It follows UC.1 *Evaluate a Stock Claim* from the Team 12 operational concept.
 
 It does **not** trade, manage portfolios, predict prices or give investment advice. The verdict describes the state of the evidence on a date. An optional probability section shows a model output under your assumptions; it never feeds the verdict.
@@ -108,7 +121,12 @@ Acceptance example (synthetic): reference 50, target 100, 5 years, 100,000,000 t
 | --- | --- | --- | --- |
 | SEC EDGAR submissions `data.sec.gov/submissions` | 10-K / 10-Q / 8-K filing list, links | free, no key | requires a User-Agent with contact email (`SEC_USER_AGENT`); max 10 requests/s |
 | SEC XBRL company facts `data.sec.gov/api/xbrl/companyfacts` | annual revenue, annual net income, shares outstanding | free, no key | same User-Agent rule; reported values as tagged by the filer |
-| Yahoo Finance chart `query1.finance.yahoo.com/v8/finance/chart` | daily closes, historical volatility | free, no key | unofficial endpoint without published terms or service guarantee; may rate-limit; sent with `TickerCase/0.2` as User-Agent, no email |
+| Yahoo Finance chart `query1.finance.yahoo.com/v8/finance/chart` | daily and monthly closes, historical volatility, ^TNX, SPY, QQQ | free, no key | unofficial endpoint without published terms or service guarantee; may rate-limit; sent with `TickerCase/0.2` as User-Agent, no email |
+| Yahoo Finance options `query2.finance.yahoo.com/v7/finance/options` | option chains, implied volatility | free, no key | needs a session cookie and crumb (handled by `YahooAuthedClient`); unofficial |
+| SEC XBRL frames `data.sec.gov/api/xbrl/frames` | revenue / net income of all filers for a calendar year | free, no key | SEC User-Agent rule |
+| SEC Archives Form 4 XML | insider transactions | free, no key | SEC User-Agent rule; at most 40 filings per run |
+| Polymarket `gamma-api.polymarket.com/public-search` | event contracts on the ticker | free, no key | usually weekly or monthly contracts |
+| CNN Fear & Greed `production.dataviz.cnn.io` | market sentiment | free, no key | needs browser headers |
 
 None of the sources in this version needs a paid plan. Paid items would only appear with later features: an AI API for OA.2–OA.3 / OA.10–OA.11 is billed per token, and a licensed market-data feed would replace the unofficial quote endpoint for production use. Stooq was tested as an alternative price source and now requires a browser JavaScript check, so it cannot be called from code.
 

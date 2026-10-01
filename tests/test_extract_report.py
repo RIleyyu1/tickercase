@@ -84,8 +84,8 @@ def make_settings_tmp():
 def test_report_layers_and_scenarios_ps():
     r = _run(ps_draft(ticker="SYNT", current_shares="95000000"))
     rep = r.report
-    assert [layer.title.zh[:5] for layer in rep.layers] == ["第 1 层", "第 2 层", "第 3 层", "第 4 层"]
-    assert "部分成立" in rep.headline.zh and "partly supported" in rep.headline.en
+    assert [layer.title.zh[:5] for layer in rep.layers] == ["第 1 层", "第 2 层", "第 3 层", "第 4 层", "第 5 层"]
+    assert "概率约" in rep.headline.zh and "Probability that" in rep.headline.en
     # the claim's own path reproduces the target price
     claim_path = rep.scenarios[-1]
     assert Decimal(claim_path.price.replace(",", "")) == pytest.approx(Decimal(100), abs=Decimal("0.01"))
@@ -96,8 +96,8 @@ def test_report_layers_and_scenarios_ps():
 def test_report_not_supported_pe_explains_the_divergence():
     r = _run(pe_draft(ticker="SYNT", base_annual_metric="40000000", current_shares="95000000"))
     rep = r.report
-    assert "不成立" in rep.headline.zh
-    assert any("问题不在估值" in d.zh for d in rep.divergences)
+    assert "<0.1%" in rep.headline.zh  # no similar company grew net income that fast
+    assert any("问题不在估值" in d.zh or "期权市场" in d.zh for d in rep.divergences)
     assert any(row.tone == "bad" for row in rep.layers[0].rows)
 
 

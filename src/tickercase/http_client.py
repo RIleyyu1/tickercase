@@ -147,6 +147,7 @@ class LiveHttpClient:
     cache_ttl_seconds: Mapping[str, float] = field(default_factory=dict)
     require_contact_email: bool = True  # SEC fair-access rule; other sources only need a non-empty User-Agent
     service_name: str = "SEC"
+    extra_headers: Mapping[str, str] = field(default_factory=dict)
     transport: Transport = urllib_transport
     sleep: Callable[[float], None] = time.sleep
     monotonic: Callable[[], float] = time.monotonic
@@ -193,8 +194,9 @@ class LiveHttpClient:
 
         headers = {
             "User-Agent": self.user_agent.strip(),
-            "Accept": "application/json",
+            "Accept": "application/json, text/xml;q=0.9, */*;q=0.5",
             "Accept-Encoding": "gzip",
+            **self.extra_headers,
         }
         last_error: Optional[FetchError] = None
         for attempt in range(self.max_retries + 1):
@@ -268,6 +270,8 @@ class LiveHttpClient:
                 body = gzip.decompress(body)
             except OSError as exc:
                 raise FetchError("invalid_payload", f"could not decompress gzip body from {url}", url=url, data_mode=DataMode.LIVE) from exc
+        if urlparse(url).path.lower().endswith(".xml"):
+            return body.decode("utf-8", "replace")  # SEC ownership documents (Form 4) are XML; kept as text
         try:
             return json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:

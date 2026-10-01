@@ -246,7 +246,8 @@ def test_one_sentence_is_enough(app_env):
     button(at, "btn_run").click()
     run(at)
     result = at.session_state["result"]
-    assert result.report is not None and len(result.report.layers) == 4
+    assert result.report is not None and len(result.report.layers) == 5
+    assert result.oracle is not None and result.oracle.low is not None
     assert result.confirmed_claim.value_provenance["ticker"].startswith("claim_text:")
     page = " ".join(m.value for m in at.markdown)
     assert "第 1 层" in page and "情景推演" in page and "需要关注的信号" in page

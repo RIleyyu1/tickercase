@@ -1,0 +1,11 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000011/form4.xml"
+ },
+ "response": "<?xml version=\"1.0\"?>\n<ownershipDocument>\n  <schemaVersion>X0508</schemaVersion>\n  <documentType>4</documentType>\n  <periodOfReport>2026-05-29</periodOfReport>\n  <aff10b5One>1</aff10b5One>\n  <issuer><issuerCik>0009999901</issuerCik><issuerName>Synthetic Example Corp (fictional)</issuerName><issuerTradingSymbol>SYNT</issuerTradingSymbol></issuer>\n  <reportingOwner>\n    <reportingOwnerId><rptOwnerCik>0009999990</rptOwnerCik><rptOwnerName>Example Officer (fictional)</rptOwnerName></reportingOwnerId>\n    <reportingOwnerRelationship><isDirector>0</isDirector><isOfficer>1</isOfficer><officerTitle>Chief Executive Officer</officerTitle></reportingOwnerRelationship>\n  </reportingOwner>\n  <nonDerivativeTable>\n    <nonDerivativeTransaction>\n      <securityTitle><value>Common Stock</value></securityTitle>\n      <transactionDate><value>2026-05-29</value></transactionDate>\n      <transactionCoding><transactionFormType>4</transactionFormType><transactionCode>S</transactionCode></transactionCoding>\n      <transactionAmounts><transactionShares><value>20000</value></transactionShares><transactionPricePerShare><value>48.50</value></transactionPricePerShare><transactionAcquiredDisposedCode><value>D</value></transactionAcquiredDisposedCode></transactionAmounts>\n    </nonDerivativeTransaction>\n    <nonDerivativeTransaction>\n      <securityTitle><value>Common Stock</value></securityTitle>\n      <transactionDate><value>2026-05-29</value></transactionDate>\n      <transactionCoding><transactionFormType>4</transactionFormType><transactionCode>A</transactionCode></transactionCoding>\n      <transactionAmounts><transactionShares><value>15000</value></transactionShares><transactionPricePerShare><value>0</value></transactionPricePerShare><transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode></transactionAmounts>\n    </nonDerivativeTransaction>\n  </nonDerivativeTable>\n</ownershipDocument>\n",
+ "schema": "tickercase.snapshot/1"
+}

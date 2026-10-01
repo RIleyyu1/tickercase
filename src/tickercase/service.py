@@ -13,7 +13,7 @@ other data source is substituted for a failed one.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Callable, Optional, TypeVar
 
@@ -29,7 +29,9 @@ from .models import (
     ConfirmedClaim,
     DataMode,
     ProviderErrorRecord,
+    BenchmarkReturn,
     ClaimExtraction,
+    PriceBaseRate,
     ReferenceSnapshot,
     ReferenceSuggestion,
 )
@@ -37,7 +39,13 @@ from .extract import extract_claim
 from .probability import probability_reference
 from .report import build_report
 from .providers.base import ProviderError
-from .providers.market import CHART_URL, YahooChartProvider
+from .oracle import build_oracle
+from .providers.insiders import InsiderProvider
+from .providers.market import CHART_URL, MONTHLY_URL, YahooChartProvider, monthly_closes, price_base_rate
+from .providers.options import YahooOptionsProvider
+from .providers.sec_frames import SecFramesBaseRateProvider
+from .providers.sentiment import FearGreedProvider, PolymarketProvider
+from .providers.yahoo_auth import BROWSER_UA, YahooAuthedClient
 from .providers.sec import SecFilingProvider, SecFilingQuery
 from .providers.sec_facts import SecCompanyFactsProvider
 from .storage import CaseStore
@@ -71,7 +79,9 @@ CLAIM_TEXT_PREFIX = "claim_text:"
 SEC_PROVIDER_ID = SecFilingProvider.provider_id
 FACTS_PROVIDER_ID = SecCompanyFactsProvider.provider_id
 MARKET_PROVIDER_ID = YahooChartProvider.provider_id
-SOURCES = ("sec", "market")
+SOURCES = ("sec", "market", "options", "web")
+OPTIONS_PROVIDER_ID = YahooOptionsProvider.provider_id
+BENCHMARKS = (("SPY", "S&P 500 (SPY)"), ("QQQ", "Nasdaq-100 (QQQ)"))
 
 T = TypeVar("T")
 
@@ -85,7 +95,17 @@ def build_fetcher(mode: str, settings: Settings, source: str = "sec") -> JsonFet
         return ReplayHttpClient(settings.synthetic_dir)
     if mode == "replay":
         return ReplayHttpClient(settings.snapshot_dir)
-    if source == "market":
+    if source == "options":
+        authed = YahooAuthedClient(timeout_seconds=max(settings.timeout_seconds, 15.0))
+        return RecordingHttpClient(authed, settings.snapshot_dir) if mode == "record" else authed
+    if source == "web":
+        live = LiveHttpClient(
+            user_agent=BROWSER_UA, require_contact_email=False, service_name="CNN",
+            timeout_seconds=settings.timeout_seconds, max_retries=settings.max_retries,
+            min_interval_seconds=settings.market_min_interval_seconds, max_retry_after_seconds=settings.max_retry_after_seconds,
+            extra_headers={"Referer": "https://edition.cnn.com/"}, cache_ttl_seconds={"https://production.dataviz.cnn.io/": 600},
+        )
+    elif source == "market":
         live = LiveHttpClient(
             user_agent=settings.market_user_agent,
             require_contact_email=False,
@@ -94,7 +114,7 @@ def build_fetcher(mode: str, settings: Settings, source: str = "sec") -> JsonFet
             max_retries=settings.max_retries,
             min_interval_seconds=settings.market_min_interval_seconds,
             max_retry_after_seconds=settings.max_retry_after_seconds,
-            cache_ttl_seconds={CHART_URL.split("{")[0]: 300},
+            cache_ttl_seconds={CHART_URL.split("{")[0]: 300, "https://gamma-api.polymarket.com/": 300},
         )
     else:
         live = LiveHttpClient(
@@ -107,6 +127,8 @@ def build_fetcher(mode: str, settings: Settings, source: str = "sec") -> JsonFet
                 "https://www.sec.gov/files/company_tickers.json": 24 * 3600,
                 "https://data.sec.gov/submissions/": 600,
                 "https://data.sec.gov/api/xbrl/companyfacts/": 3600,
+                "https://data.sec.gov/api/xbrl/frames/": 24 * 3600,
+                "https://www.sec.gov/Archives/": 24 * 3600,
             },
         )
     if mode == "record":
@@ -159,9 +181,14 @@ class CaseService:
 
     # ---------------------------------------------------------------- evaluate
 
-    def evaluate(self, draft: ClaimDraft, confirmation: Optional[Confirmation], *, sec_mode: str) -> CaseResult:
-        """Run one confirmed case. ``sec_mode`` is the data mode for every external source."""
+    def evaluate(self, draft: ClaimDraft, confirmation: Optional[Confirmation], *, sec_mode: str,
+                 progress: Optional[Callable[[str, str], None]] = None) -> CaseResult:
+        """Run one confirmed case. ``sec_mode`` is the data mode for every external source.
+
+        ``progress(step, state)`` is called with state "running", "ok" or "failed" for each data step.
+        """
         mode = sec_mode
+        report_step = progress or (lambda step, state: None)
         case_id = uuid.uuid4().hex
         created = self.now()
         validation = validate_draft(draft, today=self.today())
@@ -201,14 +228,25 @@ class CaseService:
 
         errors: list[ProviderErrorRecord] = []
         warnings = base["warnings"]
+
+        steps: dict[str, str] = {}
+
+        def step(name: str, provider_id: str, call):
+            report_step(name, "running")
+            before = len(errors)
+            value = self._guard(provider_id, mode, errors, call)
+            steps[name] = "ok" if value is not None and len(errors) == before else "failed"
+            report_step(name, steps[name])
+            return value
+
         sec_fetcher = self._guard(SEC_PROVIDER_ID, mode, errors, lambda: self._fetcher(mode, "sec"))
         filings = facts = market = None
+        filing_provider = SecFilingProvider(sec_fetcher) if sec_fetcher is not None else None
         if sec_fetcher is not None:
-            filing_provider = SecFilingProvider(sec_fetcher)
-            filings = self._guard(SEC_PROVIDER_ID, mode, errors, lambda: filing_provider.fetch_filings(
+            filings = step("sec_filings", SEC_PROVIDER_ID, lambda: filing_provider.fetch_filings(
                 SecFilingQuery(ticker=claim.ticker, since=claim.filings_since)))
-            facts = self._guard(FACTS_PROVIDER_ID, mode, errors, lambda: SecCompanyFactsProvider(sec_fetcher, filing_provider).fetch_facts(claim.ticker))
-        market = self._guard(MARKET_PROVIDER_ID, mode, errors, lambda: YahooChartProvider(self._fetcher(mode, "market")).fetch_history(claim.ticker))
+            facts = step("sec_facts", FACTS_PROVIDER_ID, lambda: SecCompanyFactsProvider(sec_fetcher, filing_provider).fetch_facts(claim.ticker))
+        market = step("price_history", MARKET_PROVIDER_ID, lambda: YahooChartProvider(self._fetcher(mode, "market")).fetch_history(claim.ticker))
 
         records = filings.records if filings else []
         for w in filings.warnings if filings else []:
@@ -220,6 +258,46 @@ class CaseService:
         for w in outcome.warnings:
             warn(w.en, w.zh)
 
+        probability = probability_reference(claim, market)
+
+        # ---------------------------------------------------------------- oracle layers
+        target_date = claim.reference_price_date + timedelta(days=round(float(claim.horizon_years) * 365.25))
+        market_fetcher = self._guard(MARKET_PROVIDER_ID, mode, errors, lambda: self._fetcher(mode, "market"))
+        options = step("options", OPTIONS_PROVIDER_ID, lambda: YahooOptionsProvider(self._fetcher(mode, "options")).fetch_chain(
+            claim.ticker, target_date, claim.target_price))
+        risk_free = None
+        if market_fetcher is not None:
+            tnx = step("risk_free_rate", MARKET_PROVIDER_ID, lambda: YahooChartProvider(market_fetcher).fetch_history("^TNX"))
+            risk_free = (tnx.last_close / 100).quantize(Decimal("0.0001")) if tnx is not None else None
+        spot = market.last_close if market is not None else claim.reference_price
+        months = max(1, round(float(claim.horizon_years) * 12))
+        price_rate = benchmarks = None
+        if market_fetcher is not None:
+            price_rate = step("price_base_rate", MARKET_PROVIDER_ID, lambda: self._price_base_rate(market_fetcher, claim, months, spot))
+            benchmarks = step("benchmarks", MARKET_PROVIDER_ID, lambda: self._benchmarks(market_fetcher, months))
+        base_rate = None
+        e1 = next((i for i in outcome.items if i.id == "E1"), None)
+        series = (facts.revenue if claim.valuation_method.metric_name == "annual_revenue" else facts.net_income) if facts else []
+        if sec_fetcher is not None and e1 is not None and "required_cagr_from_reported" in e1.measured and series:
+            end_year = self.today().year - (1 if self.today().month >= 4 else 2)
+            years = max(1, min(10, round(float(claim.horizon_years))))
+            base_rate = step("base_rate", SecFramesBaseRateProvider.provider_id, lambda: SecFramesBaseRateProvider(sec_fetcher).base_rate(
+                metric=claim.valuation_method.metric_name, base_value=series[-1].value,
+                required_cagr=Decimal(e1.measured["required_cagr_from_reported"]).quantize(Decimal("0.0001")), end_year=end_year, years=years,
+                exclude_cik=int(facts.cik)))
+        insiders = None
+        if sec_fetcher is not None:
+            insiders = step("insiders", InsiderProvider.provider_id, lambda: InsiderProvider(sec_fetcher, filing_provider).summary(claim.ticker, today=self.today()))
+        prediction = None
+        if market_fetcher is not None:
+            prediction = step("prediction_markets", PolymarketProvider.provider_id, lambda: PolymarketProvider(market_fetcher).search(claim.ticker, now=self.now()))
+        sentiment = step("fear_greed", FearGreedProvider.provider_id, lambda: FearGreedProvider(self._fetcher(mode, "web")).snapshot())
+        oracle = build_oracle(claim, market=market, options=options, base_rate=base_rate, price_rate=price_rate,
+                              risk_free=risk_free, today=self.today())
+        report = build_report(claim, calculations, facts=facts, market=market, items=outcome.items, verdict=outcome.verdict,
+                              rechecks=outcome.rechecks, probability=probability, today=self.today(), oracle=oracle, options=options,
+                              base_rate=base_rate, price_rate=price_rate, benchmarks=benchmarks, insiders=insiders,
+                              prediction=prediction, sentiment=sentiment)
         failed = sorted({e.provider_id for e in errors})
         if failed:
             warn(f"data unavailable for this run from {', '.join(failed)}; affected checks are listed as missing, calculations use only your inputs",
@@ -235,15 +313,16 @@ class CaseService:
             "sec_filings": mode_of(filings is not None, {r.data_mode.value for r in records}),
             "sec_facts": mode_of(facts is not None, {facts.data_mode.value} if facts else set()),
             "market_prices": mode_of(market is not None, {market.data_mode.value} if market else set()),
+            "options": mode_of(options is not None, {options.data_mode.value} if options else set()),
+            "base_rate": mode_of(base_rate is not None, {base_rate.data_mode.value} if base_rate else set()),
+            "insiders": mode_of(insiders is not None, {insiders.data_mode.value} if insiders else set()),
+            "fear_greed": mode_of(sentiment is not None, {sentiment.data_mode.value} if sentiment else set()),
             "analysis": f"deterministic {RULES_VERSION}",
         }
         if DataMode.SYNTHETIC.value in data_modes.values():
             warn("synthetic example data is used for public sources in this run, not real SEC or market data",
                  "本次公开数据使用合成示例数据，不是真实的 SEC 或市场数据")
 
-        probability = probability_reference(claim, market)
-        report = build_report(claim, calculations, facts=facts, market=market, items=outcome.items, verdict=outcome.verdict,
-                              rechecks=outcome.rechecks, probability=probability, today=self.today())
         result = CaseResult(
             status=CaseStatus.EVALUATED_WITH_PROVIDER_ERRORS if errors else CaseStatus.EVALUATED,
             confirmed_claim=confirmed,
@@ -258,6 +337,15 @@ class CaseService:
             probability=probability,
             sensitivity=outcome.sensitivity,
             report=report,
+            options=options,
+            base_rate=base_rate,
+            price_base_rate=price_rate,
+            benchmarks=benchmarks or [],
+            insiders=insiders,
+            prediction_markets=prediction,
+            sentiment=sentiment,
+            oracle=oracle,
+            data_steps=steps,
             provider_errors=errors,
             data_modes=data_modes,
             mixed_sources=bool(records or facts or market),
@@ -265,6 +353,38 @@ class CaseService:
             **base,
         )
         return self._finish(result)
+
+    @staticmethod
+    def _price_base_rate(fetcher: JsonFetcher, claim, months: int, spot: Decimal) -> PriceBaseRate:
+        from .providers.market import yahoo_symbol
+
+        url = MONTHLY_URL.format(symbol=yahoo_symbol(claim.ticker))
+        fetched = fetcher.get_json(url)
+        closes = monthly_closes(fetched.payload, url)
+        required = claim.target_price / spot - 1
+        windows, hits, med, best = price_base_rate(closes, months, required)
+        return PriceBaseRate(
+            symbol=yahoo_symbol(claim.ticker), window_months=months, windows=windows, hits=hits, rate=hits / windows if windows else None,
+            required_return=required.quantize(Decimal("0.0001")), median_return=Decimal(str(round(med, 4))) if med is not None else None,
+            best_return=Decimal(str(round(best, 4))) if best is not None else None, history_start=closes[0][0] if closes else date.today(),
+            source_url=url, retrieved_at=fetched.retrieved_at, source_captured_at=fetched.source_captured_at, data_mode=fetched.data_mode)
+
+    @staticmethod
+    def _benchmarks(fetcher: JsonFetcher, months: int) -> list[BenchmarkReturn]:
+        out = []
+        for symbol, label in BENCHMARKS:
+            url = MONTHLY_URL.format(symbol=symbol)
+            fetched = fetcher.get_json(url)
+            closes = monthly_closes(fetched.payload, url)
+            n = min(months, len(closes) - 1)
+            if n < 1:
+                continue
+            (d0, p0), (d1, p1) = closes[-1 - n], closes[-1]
+            total = Decimal(str(p1 / p0 - 1))
+            annual = Decimal(str((p1 / p0) ** (12 / n) - 1))
+            out.append(BenchmarkReturn(symbol=symbol, label=label, start=d0, end=d1, total_return=total.quantize(Decimal("0.0001")),
+                                       annual_return=annual.quantize(Decimal("0.0001")), data_mode=fetched.data_mode))
+        return out
 
     # ---------------------------------------------------------------- extraction
 
