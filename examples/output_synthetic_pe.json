@@ -1,6 +1,6 @@
 {
-  "case_id": "c5de4535d2b44b37a00427c4315efc95",
-  "created_at": "2026-10-01T21:42:36.119270Z",
+  "case_id": "2628e75c2cd347ca8b62eb3d0a04798c",
+  "created_at": "2026-10-01T21:54:45.896066Z",
   "status": "evaluated",
   "input_fingerprint": "3a48f6a71b34e0d061fbb2262f6ce59e559429017bd44b05392fa0691699e2b3",
   "confirmed_claim": {
@@ -29,7 +29,7 @@
       "field_sources": {}
     },
     "fingerprint": "3a48f6a71b34e0d061fbb2262f6ce59e559429017bd44b05392fa0691699e2b3",
-    "confirmed_at": "2026-10-01T21:42:36.119245Z",
+    "confirmed_at": "2026-10-01T21:54:45.896041Z",
     "value_provenance": {
       "claim_text": "user_input",
       "ticker": "user_input",
@@ -162,7 +162,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/synt-20260804.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/0009999901-26-000013-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -182,7 +182,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/synt-20260630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/0009999901-26-000012-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -202,7 +202,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/synt-20260331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/0009999901-26-000010-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -222,7 +222,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/synt-20251231a.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/0009999901-26-000009-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -242,7 +242,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/synt-20251231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/0009999901-26-000008-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -262,7 +262,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/synt-20260114.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/0009999901-26-000007-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -282,7 +282,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/synt-20250930.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/0009999901-25-000006-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -302,7 +302,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/synt-20250630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/0009999901-25-000005-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -322,7 +322,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/synt-20250331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/0009999901-25-000004-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -342,7 +342,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/synt-20241231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/0009999901-25-000003-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -362,7 +362,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/synt-20231231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/0009999901-24-000001-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T21:42:36.119927Z",
+      "retrieved_at": "2026-10-01T21:54:45.896761Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -578,7 +578,7 @@
       }
     ],
     "source_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0009999901.json",
-    "retrieved_at": "2026-10-01T21:42:36.120248Z",
+    "retrieved_at": "2026-10-01T21:54:45.897082Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "notes": []
@@ -1644,7 +1644,7 @@
       }
     ],
     "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/SYNT?range=5y&interval=1d",
-    "retrieved_at": "2026-10-01T21:42:36.120911Z",
+    "retrieved_at": "2026-10-01T21:54:45.897705Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "note": "Unofficial public quote endpoint; no service guarantee. Prices are as published by the source."
@@ -2660,7 +2660,7 @@
   },
   "options": {
     "source_url": "https://query2.finance.yahoo.com/v7/finance/options/SYNT?date=1860451200",
-    "retrieved_at": "2026-10-01T21:42:36.125453Z",
+    "retrieved_at": "2026-10-01T21:54:45.902092Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "provider_id": "yahoo_finance_options",
@@ -2906,7 +2906,7 @@
   },
   "price_base_rate": {
     "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/SYNT?range=max&interval=1mo",
-    "retrieved_at": "2026-10-01T21:42:36.128899Z",
+    "retrieved_at": "2026-10-01T21:54:45.905454Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "symbol": "SYNT",
@@ -2986,7 +2986,7 @@
   },
   "prediction_markets": {
     "source_url": "https://gamma-api.polymarket.com/public-search?q=SYNT",
-    "retrieved_at": "2026-10-01T21:42:36.136116Z",
+    "retrieved_at": "2026-10-01T21:54:45.912583Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "query": "SYNT",
@@ -2994,7 +2994,7 @@
   },
   "sentiment": {
     "source_url": "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
-    "retrieved_at": "2026-10-01T21:42:36.136286Z",
+    "retrieved_at": "2026-10-01T21:54:45.912754Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "score": 50.0,
@@ -3204,6 +3204,7 @@
     "prediction_markets": "ok",
     "fear_greed": "ok"
   },
+  "narrative": null,
   "provider_errors": [],
   "validation_issues": [],
   "missing_fields": [],

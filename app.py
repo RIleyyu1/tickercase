@@ -103,6 +103,21 @@ S = {
     "tabs": (["简明报告", "概率与验证", "结论与依据", "证据", "计算", "公开数据", "概率参考（模型）", "运行记录"],
              ["Plain report", "Probability & checks", "Verdict details", "Evidence", "Calculations", "Public data", "Probability (model)", "Run log"]),
     "pipeline": ("拉取数据", "Fetching data"),
+    "ai_setup": ("Claude API（AI 叙述）", "Claude API (AI narrative)"),
+    "ai_missing": ("填写 Anthropic API key 后可生成 AI 叙述。key 只保存在本机 .env。", "Enter an Anthropic API key to generate the AI narrative. It is stored only in the local .env."),
+    "ai_ok": ("Claude API key 已设置", "Claude API key is set"),
+    "ai_key": ("API key", "API key"), "ai_save": ("保存 key", "Save key"),
+    "ai_title": ("AI 叙述（已逐句核对出处）", "AI narrative (checked sentence by sentence)"),
+    "ai_button": ("生成 AI 叙述", "Write AI narrative"),
+    "ai_button_help": ("调用一次 Claude（claude-opus-5-5），按用量计费，通常每次约 $0.1–0.5。叙述只能使用本案例的事实表，每个数字都会被核对。",
+                       "One Claude call (claude-opus-5-5), billed by usage, usually about $0.10–0.50. The narrative may only use this case's fact table; every number is checked."),
+    "ai_spinner": ("Claude 正在撰写，随后逐句核对……", "Claude is writing; every sentence is checked afterwards…"),
+    "ai_summary": ("{ok}/{total} 句通过核对 · {bad} 句含无出处数字 · {model} · 约 ${cost:.3f}", "{ok}/{total} sentences pass · {bad} with unsourced numbers · {model} · about ${cost:.3f}"),
+    "ai_failed": ("AI 叙述未生成：", "AI narrative not written: "),
+    "ai_facts": ("事实表与核对明细", "Fact table and check details"),
+    "ai_legend": ("✔ 数字与引用的事实一致 · ○ 无数字的解释 · ⚠ 数字存在但引用了别的事实 · ✖ 数字找不到出处",
+                  "✔ numbers match the cited facts · ○ no numbers · ⚠ number exists but another fact is cited · ✖ number has no source"),
+    "ai_retry": ("重新生成", "Write again"),
     "steps_summary": ("{ok} 项成功 · {failed} 项失败", "{ok} succeeded · {failed} failed"),
     "prob_title": ("概率约 {lo}–{hi} · {tier}", "Probability about {lo}–{hi} · {tier}"),
     "prob_sub": ("{when} 前后股价 ≥ {target} · 证据截至 {asof} · 多种独立方法交叉验证，每个数字可追溯", "Price ≥ {target} around {when} · evidence as of {asof} · independent methods cross-checked; every number traceable"),
@@ -325,6 +340,8 @@ def _init_state() -> None:
                 "extract_msg", "extraction"):
         st.session_state.setdefault(key, None)
     st.session_state.setdefault("prefill_sources", {})
+    st.session_state.setdefault("history_selected", None)
+    st.session_state.setdefault("ai_msg", None)
 
 
 def _reset_confirmation() -> None:
@@ -539,6 +556,23 @@ def _share_rate_value() -> Optional[str]:
         return format(Decimal(text) / 100, "f")
     except Exception:
         return text
+
+
+def _save_ai_key() -> None:
+    key = st.session_state.get("ai_key_input", "").strip()
+    if not key.startswith("sk-ant-") or len(key) < 20 or " " in key:
+        st.session_state["ai_msg"] = ("error", ("key 格式不对（应以 sk-ant- 开头）。", "The key should start with sk-ant-."))
+        return
+    write_env_value("ANTHROPIC_API_KEY", key)
+    get_service.clear()
+    st.session_state["ai_msg"] = ("success", ("已保存。", "Saved."))
+
+
+def _narrate(key_suffix: str) -> None:
+    result = st.session_state["history_selected"] if key_suffix != "current" else st.session_state["result"]
+    if result is None:
+        return
+    get_service().narrate(result)
 
 
 def current_draft() -> ClaimDraft:
@@ -1047,6 +1081,44 @@ def _md_table(cols, rows) -> str:
     return head + "\n" + "\n".join("| " + " | ".join(_cell(c) for c in r) + " |" for r in rows)
 
 
+NARR_BADGE = {"verified": "✔", "qualitative": "○", "cited_elsewhere": "⚠", "unsupported": "✖"}
+NARR_TITLES = {"logic_chain": ("核心逻辑链", "Core logic"), "resonance": ("共振信号", "Signals that agree"), "divergences": ("关键分歧", "Key divergences"),
+               "conclusion": ("结论", "Conclusion"), "upside": ("上行风险", "Upside risks"), "downside": ("下行风险", "Downside risks")}
+
+
+def render_narrative(result: CaseResult, key_suffix: str) -> None:
+    n = result.narrative
+    st.markdown(f"#### {t('ai_title')}")
+    if n is None or n.status != "ok":
+        if n is not None:
+            st.warning(t("ai_failed") + (n.error or n.status))
+        st.button(t("ai_button") if n is None else t("ai_retry"), key=f"btn_narrate_{key_suffix}", help=t("ai_button_help"),
+                  on_click=_narrate, args=(key_suffix,), type="primary")
+        return
+    zh = lang() == "zh"
+    cost = n.usage.get("input_tokens", 0) * 4 / 1e6 + n.usage.get("output_tokens", 0) * 20 / 1e6
+    st.caption(t("ai_summary", ok=n.verified, total=n.total, bad=n.unsupported, model=n.model, cost=cost))
+    for key in ("logic_chain", "resonance", "divergences", "conclusion", "upside", "downside"):
+        sentences = n.sections.get(key) or []
+        if not sentences:
+            continue
+        st.markdown(f"**{NARR_TITLES[key][0 if zh else 1]}**")
+        lines = []
+        for x in sentences:
+            refs = " ".join(x.fact_ids)
+            text = x.zh if zh else x.en
+            lines.append(f"- {NARR_BADGE[x.status]} {text} <span style='opacity:0.55;font-size:0.8rem'>[{refs}]</span>")
+        st.markdown("\n".join(lines), unsafe_allow_html=True)
+    st.caption(t("ai_legend"))
+    with st.expander(t("ai_facts")):
+        flagged = [(k, x) for k, v in n.sections.items() for x in v if x.problems]
+        for k, x in flagged:
+            st.markdown(f"- {NARR_BADGE[x.status]} **{NARR_TITLES[k][0 if zh else 1]}**：{'；'.join(x.problems)}")
+        st.dataframe([{"id": f.id, "label": f.label_zh if zh else f.label_en, "value": f.value, "unit": f.unit, "source": f.source} for f in n.facts],
+                     hide_index=True, use_container_width=True)
+    st.button(t("ai_retry"), key=f"btn_narrate_{key_suffix}", on_click=_narrate, args=(key_suffix,), help=t("ai_button_help"))
+
+
 def render_report(report: Optional[PlainReport]) -> None:
     if report is None:
         st.caption(t("r_none"))
@@ -1114,6 +1186,7 @@ def render_result(result: CaseResult, key_suffix: str = "current") -> None:
     with tabs[0]:
         if result.oracle is not None:
             render_methods_table(result)
+            render_narrative(result, key_suffix)
         render_report(result.report)
     with tabs[1]:
         tab_oracle(result)
@@ -1159,6 +1232,17 @@ def sidebar() -> None:
             msg = st.session_state["sec_msg"]
             if msg:
                 (st.success if msg[0] == "success" else st.error)(msg[1][0 if lang() == "zh" else 1])
+        with st.container(border=True):
+            st.markdown(f"**{t('ai_setup')}**")
+            if get_service().settings.anthropic_api_key:
+                st.caption("✔ " + t("ai_ok"))
+            else:
+                st.caption(t("ai_missing"))
+                st.text_input(t("ai_key"), key="ai_key_input", type="password", placeholder="sk-ant-...")
+                st.button(t("ai_save"), key="btn_ai_save", on_click=_save_ai_key)
+            msg = st.session_state.get("ai_msg")
+            if msg:
+                (st.success if msg[0] == "success" else st.error)(msg[1][0 if lang() == "zh" else 1])
         st.markdown(f"**{t('examples')}**")
         st.button(t("ex_ps"), on_click=_load_example, args=("ps",), key="btn_example_ps", use_container_width=True)
         st.button(t("ex_pe"), on_click=_load_example, args=("pe",), key="btn_example_pe", use_container_width=True)
@@ -1197,6 +1281,7 @@ def view_history() -> None:
     event = st.dataframe(rows, hide_index=True, use_container_width=True, on_select="rerun", selection_mode="multi-row", key="history_table")
     selected = [cases[i] for i in (event.selection.rows if event and event.selection else [])]
     if len(selected) == 1:
+        st.session_state["history_selected"] = selected[0]
         render_result(selected[0], key_suffix=selected[0].case_id)
     elif len(selected) >= 2:
         st.markdown(f"### {t('compare')}")

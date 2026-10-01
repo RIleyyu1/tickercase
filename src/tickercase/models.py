@@ -636,6 +636,40 @@ class OracleSummary(BaseModel):
     risk_free_rate: Optional[DecimalStr] = None
 
 
+class Fact(BaseModel):
+    """One numbered fact handed to the narrative writer; every value comes from a fetch or a computation."""
+
+    id: str
+    label_en: str
+    label_zh: str
+    value: str
+    unit: str = ""
+    source: str = ""
+
+
+class NarrativeSentence(BaseModel):
+    zh: str
+    en: str
+    fact_ids: list[str] = Field(default_factory=list)
+    status: Literal["verified", "qualitative", "cited_elsewhere", "unsupported"] = "qualitative"
+    problems: list[str] = Field(default_factory=list)
+
+
+class Narrative(BaseModel):
+    """AI-written narrative, checked number by number against the fact table."""
+
+    status: Literal["ok", "refused", "error", "not_configured"]
+    model: str
+    created_at: datetime
+    sections: dict[str, list[NarrativeSentence]] = Field(default_factory=dict)
+    facts: list[Fact] = Field(default_factory=list)
+    total: int = 0
+    verified: int = 0
+    unsupported: int = 0
+    usage: dict[str, int] = Field(default_factory=dict)
+    error: Optional[str] = None
+
+
 class ReferenceSuggestion(BaseModel):
     value: str
     source: str
@@ -692,6 +726,7 @@ class CaseResult(BaseModel):
     sentiment: Optional[SentimentSnapshot] = None
     oracle: Optional[OracleSummary] = None
     data_steps: dict[str, str] = Field(default_factory=dict)  # step -> "ok" | "failed"
+    narrative: Optional[Narrative] = None
     provider_errors: list[ProviderErrorRecord] = Field(default_factory=list)
     validation_issues: list[ValidationIssue] = Field(default_factory=list)
     missing_fields: list[MissingField] = Field(default_factory=list)

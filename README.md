@@ -13,6 +13,12 @@
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## AI narrative with number checking (v0.6)
+
+On the result page, "生成 AI 叙述" (Write AI narrative) makes one call to Claude (`claude-opus-5-5`, effort `high`, structured JSON output, server-side refusal fallback `fallbacks: "default"`). Claude receives only a numbered fact table built from the case (every value fetched or computed, with its source) and returns six sections (core logic, agreeing signals, divergences, conclusion, upside, downside), each sentence in Chinese and English with the fact ids it uses. `narrative.verify` then checks every number in every sentence against the cited facts, allowing unit changes and rounding (%, 亿, 万亿, B, M): ✔ matches, ○ no numbers, ⚠ the number exists but under another fact, ✖ the number has no source. The counts and the token cost are shown with the narrative and stored in the case.
+
+Setup: put `ANTHROPIC_API_KEY` in `.env` (the sidebar form does this), or log in with `ant auth login`. The call is billed per token (Claude Opus 5.5: $4 / $20 per million input / output tokens); one narrative typically uses a few thousand input and output tokens. The narrative is only written when the button is pressed. Without a key the page reports "not configured" and everything else works.
+
 TickerCase turns a stock claim ("SYNT will be $100 in five years") into an inspectable investment case: explicit assumptions, reproducible numbers, dated public evidence, an evidence-as-of verdict and the conditions that should trigger a new review. It follows UC.1 *Evaluate a Stock Claim* from the Team 12 operational concept.
 
 It does **not** trade, manage portfolios, predict prices or give investment advice. The verdict describes the state of the evidence on a date. An optional probability section shows a model output under your assumptions; it never feeds the verdict.
@@ -190,6 +196,8 @@ src/tickercase/analysis.py          evidence checks, verdict rules, recheck cond
 src/tickercase/probability.py       optional lognormal probability reference
 src/tickercase/extract.py           rule-based ticker / target / horizon extraction from the claim sentence
 src/tickercase/report.py            layered plain-language report
+src/tickercase/oracle.py            probability methods and cross-check
+src/tickercase/narrative.py         Claude narrative and number verifier
 src/tickercase/http_client.py       live / record / replay / fake network boundary
 src/tickercase/providers/sec.py     SEC submissions adapter
 src/tickercase/providers/sec_facts.py SEC XBRL company facts adapter

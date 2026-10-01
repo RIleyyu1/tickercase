@@ -31,6 +31,7 @@ from .models import (
     ProviderErrorRecord,
     BenchmarkReturn,
     ClaimExtraction,
+    Narrative,
     PriceBaseRate,
     ReferenceSnapshot,
     ReferenceSuggestion,
@@ -385,6 +386,24 @@ class CaseService:
             out.append(BenchmarkReturn(symbol=symbol, label=label, start=d0, end=d1, total_return=total.quantize(Decimal("0.0001")),
                                        annual_return=annual.quantize(Decimal("0.0001")), data_mode=fetched.data_mode))
         return out
+
+    # ---------------------------------------------------------------- AI narrative
+
+    def narrate(self, result: CaseResult, *, client=None) -> CaseResult:
+        """Add a Claude-written, number-checked narrative to a finished case (one paid API call) and store it."""
+        from .narrative import MODEL, write_narrative
+
+        if client is None:
+            try:
+                import anthropic
+
+                client = anthropic.Anthropic(api_key=self.settings.anthropic_api_key) if self.settings.anthropic_api_key else anthropic.Anthropic()
+            except Exception as exc:  # no SDK or no credentials
+                result.narrative = Narrative(status="not_configured", model=MODEL, created_at=self.now(),
+                                             error=f"Claude API is not configured: {type(exc).__name__}: {exc}")
+                return self._finish(result)
+        result.narrative = write_narrative(result, client=client, now=self.now)
+        return self._finish(result)
 
     # ---------------------------------------------------------------- extraction
 

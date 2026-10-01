@@ -1,0 +1,306 @@
+"""AI-written narrative with deterministic number checking.
+
+1. ``build_facts`` turns a CaseResult into a numbered fact table (F01, F02, ...);
+   every value was fetched or computed by TickerCase and carries its source.
+2. ``write_narrative`` asks Claude for a bilingual narrative as structured JSON:
+   sections of sentences, each listing the fact ids it relies on.
+3. ``verify`` checks every number in every sentence against the facts it cites
+   (allowing the unit changes a writer makes: %, 亿, 万亿, B, M, x). A number
+   with no matching fact marks the sentence "unsupported"; the page shows it.
+
+The model only phrases and connects the facts. It may not introduce numbers,
+and the verifier makes any it does introduce visible.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
+from typing import Any, Callable, Optional
+
+from pydantic import BaseModel, Field, ValidationError
+
+from .models import CaseResult, Fact, Narrative, NarrativeSentence
+
+MODEL = "claude-opus-5-5"
+SECTIONS = ("logic_chain", "resonance", "divergences", "conclusion", "upside", "downside")
+SECTION_TITLES = {
+    "logic_chain": ("Core logic", "核心逻辑链"), "resonance": ("Signals that agree", "共振信号"),
+    "divergences": ("Key divergences", "关键分歧"), "conclusion": ("Conclusion", "结论"),
+    "upside": ("Upside risks", "上行风险"), "downside": ("Downside risks", "下行风险"),
+}
+
+SYSTEM_PROMPT = """You write the narrative part of a stock-claim research report for readers without a finance background.
+You receive a table of facts. Each fact has an id, a label, a value and a source; every value was fetched from a public source or computed by deterministic code.
+
+Rules:
+- Use only numbers that appear in the fact table. You may convert units (0.052 -> 5.2%, 42160000000 -> 421.6亿 / 42.16B) and round, but do not compute new numbers, estimate, or bring in outside knowledge (no news, no company plans, no history not in the table).
+- Every sentence lists in fact_ids the ids of every fact whose number or claim it uses. A sentence with no number may list the facts it interprets.
+- The probability statements must be the computed ones (range, methods). Do not give your own probability.
+- Explain what each signal means in plain words, where signals agree, where they disagree and why (they often measure different things), and what would change the picture.
+- Write each sentence twice: natural Chinese (zh) and natural English (en) with the same content.
+- Keep it tight: logic_chain 3-5 sentences, the other sections 2-4 sentences each.
+- This is research, not investment advice; do not tell the reader to buy or sell."""
+
+
+class _OutSentence(BaseModel):
+    zh: str
+    en: str
+    fact_ids: list[str]
+
+
+class _Out(BaseModel):
+    logic_chain: list[_OutSentence]
+    resonance: list[_OutSentence]
+    divergences: list[_OutSentence]
+    conclusion: list[_OutSentence]
+    upside: list[_OutSentence]
+    downside: list[_OutSentence]
+
+
+def _schema() -> dict:
+    sentence = {"type": "object", "properties": {"zh": {"type": "string"}, "en": {"type": "string"},
+                                                 "fact_ids": {"type": "array", "items": {"type": "string"}}},
+                "required": ["zh", "en", "fact_ids"], "additionalProperties": False}
+    return {"type": "object", "properties": {s: {"type": "array", "items": sentence} for s in SECTIONS},
+            "required": list(SECTIONS), "additionalProperties": False}
+
+
+# ------------------------------------------------------------------ facts
+
+
+class _Facts:
+    def __init__(self) -> None:
+        self.items: list[Fact] = []
+
+    def add(self, label_en: str, label_zh: str, value: Any, unit: str = "", source: str = "") -> None:
+        if value is None:
+            return
+        text = format(value, "f") if isinstance(value, Decimal) else (f"{value:.6g}" if isinstance(value, float) else str(value))
+        self.items.append(Fact(id=f"F{len(self.items) + 1:02d}", label_en=label_en, label_zh=label_zh, value=text, unit=unit, source=source))
+
+
+def build_facts(r: CaseResult) -> list[Fact]:
+    f = _Facts()
+    c = r.confirmed_claim.values if r.confirmed_claim else None
+    if c is None:
+        return []
+    f.add("claim", "观点原文", c.claim_text, source="user input")
+    f.add("ticker", "股票代码", c.ticker, source="user input")
+    f.add("target price", "目标价", c.target_price, c.currency, "claim")
+    f.add("horizon", "时间范围", c.horizon_years, "years", "claim")
+    if r.oracle:
+        o = r.oracle
+        f.add("target date", "目标日期", o.target_date.isoformat(), source="reference date + horizon")
+        f.add("probability range low", "概率区间下限", o.low, "probability 0-1", "TickerCase cross-check of methods")
+        f.add("probability range high", "概率区间上限", o.high, "probability 0-1", "TickerCase cross-check of methods")
+        f.add("probability tier", "概率等级", o.tier_label.en, source="TickerCase")
+        f.add("risk-free rate", "无风险利率", o.risk_free_rate, "rate 0-1", "10-year Treasury yield (^TNX)")
+        for m in o.methods:
+            if m.status != "ok":
+                continue
+            f.add(f"{m.id} {m.name.en}: P(end >= target)", f"{m.id} {m.name.zh}：到期 ≥ 目标的概率", m.probability, "probability 0-1", m.detail.en)
+            if m.touch_probability is not None:
+                f.add(f"{m.id} {m.name.en}: P(touch target before date)", f"{m.id} {m.name.zh}：期间触及概率", m.touch_probability, "probability 0-1", m.detail.en)
+        for row in o.ladder:
+            if row.options_p is not None:
+                f.add(f"option-implied P(end >= {row.level}) ({row.label.en})", f"期权隐含 到期 ≥ {row.level}（{row.label.zh}）的概率", row.options_p, "probability 0-1", "option chain")
+    if r.market:
+        m = r.market
+        f.add("latest close", "最新收盘价", m.last_close, m.currency or "", f"{m.provider_id} {m.last_date}")
+        f.add("historical volatility", "历史年化波动率", m.annualized_volatility, "rate 0-1", m.volatility_window)
+    for name in ("required_return", "annualized_price_return", "target_market_cap", "required_annual_revenue", "required_annual_net_income", "target_assumed_shares"):
+        item = next((x for x in r.calculations if x.name == name and x.status == "ok"), None)
+        if item is not None:
+            f.add(name.replace("_", " "), name, item.value, item.unit, f"formula: {item.formula}")
+    for e in r.evidence_items:
+        for key in ("required_cagr_from_reported", "reported_cagr", "current_multiple", "current_market_cap", "reported_annual_change", "implied_annual_change", "past_annualized_price_change"):
+            if key in e.measured:
+                f.add(f"{e.id} {key.replace('_', ' ')}", f"{e.id} {e.title_zh} · {key}", Decimal(e.measured[key]), "", e.title)
+    # two ratios writers use; computed here so they have a source
+    cap_t = next((x.value for x in r.calculations if x.name == "target_market_cap" and x.status == "ok"), None)
+    e2 = next((e for e in r.evidence_items if e.id == "E2" and "current_market_cap" in e.measured), None)
+    if cap_t is not None and e2 is not None and Decimal(e2.measured["current_market_cap"]) > 0:
+        f.add("target market cap / current market cap", "目标市值 ÷ 当前市值", (cap_t / Decimal(e2.measured["current_market_cap"])).quantize(Decimal("0.01")), "times", "computed")
+    req = next((x.value for x in r.calculations if x.name in ("required_annual_revenue", "required_annual_net_income") and x.status == "ok"), None)
+    e1 = next((e for e in r.evidence_items if e.id == "E1"), None)
+    latest_key = next((k for k in (e1.measured if e1 else {}) if k.startswith("latest_reported_")), None)
+    if req is not None and latest_key and Decimal(e1.measured[latest_key]) > 0:
+        f.add("required annual metric / latest reported", "所需年度指标 ÷ 最近披露值", (req / Decimal(e1.measured[latest_key])).quantize(Decimal("0.01")), "times", "computed")
+    facts = r.reported_facts
+    if facts:
+        for label_en, label_zh, pts in (("annual revenue", "年营收", facts.revenue), ("annual net income", "年净利润", facts.net_income)):
+            for p in pts[-3:]:
+                f.add(f"{label_en} FY ending {p.period_end}", f"{label_zh}（截至 {p.period_end}）", p.value, "USD", f"SEC XBRL {p.concept}, {p.form} filed {p.filed}")
+        if facts.shares_outstanding:
+            s = facts.shares_outstanding[-1]
+            f.add(f"shares outstanding as of {s.period_end}", f"已披露股份数（{s.period_end}）", s.value, "shares", f"SEC XBRL, {s.form} filed {s.filed}")
+    if r.options:
+        o = r.options
+        f.add("option expiry used", "使用的期权到期日", o.expiry.isoformat(), source="Yahoo option chain")
+        f.add("at-the-money implied volatility", "平值隐含波动率", o.atm_iv, "rate 0-1", "Yahoo option chain")
+        f.add("implied volatility at target strike", "目标行权价隐含波动率", o.target_iv, "rate 0-1", "Yahoo option chain" + (" (extrapolated)" if o.target_iv_extrapolated else ""))
+        f.add("highest listed strike", "最高行权价", o.max_strike, "", "Yahoo option chain")
+        f.add("call open interest at or above target", "目标价及以上的看涨未平仓合约", o.oi_at_or_above_target, "contracts", "Yahoo option chain")
+    if r.base_rate and r.base_rate.companies:
+        b = r.base_rate
+        f.add("base-rate companies compared", "基准率比较公司数", b.companies, "companies", f"SEC frames {b.start_year}-{b.end_year}")
+        f.add("base-rate companies reaching required growth", "达到所需增速的公司数", b.achieved, "companies", f"SEC frames {b.start_year}-{b.end_year}")
+        f.add("base-rate median growth", "同规模公司增速中位数", b.median_cagr, "rate 0-1 per year", "SEC frames")
+        f.add("base-rate start year", "基准率起始年", b.start_year, source="SEC frames")
+        f.add("base-rate end year", "基准率结束年", b.end_year, source="SEC frames")
+    if r.price_base_rate and r.price_base_rate.windows:
+        p = r.price_base_rate
+        f.add("own-history windows", "本股历史窗口数", p.windows, "windows", p.source_url)
+        f.add("own-history windows reaching the required rise", "达到所需涨幅的窗口数", p.hits, "windows", p.source_url)
+        f.add("own-history best window return", "本股历史最好窗口涨幅", p.best_return, "rate", p.source_url)
+    for bm in r.benchmarks:
+        f.add(f"{bm.label} return {bm.start} to {bm.end}", f"{bm.label} 涨幅（{bm.start} 至 {bm.end}）", bm.total_return, "rate", "Yahoo monthly closes")
+    if r.insiders:
+        i = r.insiders
+        f.add("insider open-market purchases (12 months)", "内部人公开市场买入笔数（12 个月）", i.purchases, "transactions", "SEC Form 4")
+        f.add("insider open-market purchase value", "内部人买入金额", i.purchase_value, "USD", "SEC Form 4")
+        f.add("insider open-market sales (12 months)", "内部人公开市场卖出笔数（12 个月）", i.sales, "transactions", "SEC Form 4")
+        f.add("insider open-market sale value", "内部人卖出金额", i.sale_value, "USD", "SEC Form 4")
+        f.add("insider sales under 10b5-1 plans (value)", "10b5-1 计划内卖出金额", i.plan_sale_value, "USD", "SEC Form 4")
+        f.add("insider grants (count)", "授予记录数", i.grants, "entries", "SEC Form 4")
+    if r.sentiment:
+        f.add("CNN Fear & Greed score", "CNN 恐惧贪婪指数", r.sentiment.score, "0-100", "CNN")
+        f.add("CNN Fear & Greed a month ago", "一个月前的恐惧贪婪指数", r.sentiment.previous_month, "0-100", "CNN")
+    if r.prediction_markets:
+        for mk in r.prediction_markets.markets[:3]:
+            f.add(f"Polymarket: {mk.question}", f"Polymarket：{mk.question}", mk.probability_yes, "probability 0-1", mk.url)
+    if r.verdict:
+        f.add("evidence-as-of verdict (rules-v1)", "证据结论（rules-v1）", r.verdict.display, source="TickerCase rules-v1")
+    return f.items
+
+
+# ------------------------------------------------------------------ verification
+
+NUM_RE = re.compile(r"(?<![A-Za-z0-9_])[-+−]?\d[\d,]*(?:\.\d+)?\s*(万亿|亿|万|[KkMBT](?![a-zA-Z])|%|x|倍)?")
+SCALES = {"万亿": Decimal("1e12"), "亿": Decimal("1e8"), "万": Decimal("1e4"), "K": Decimal("1e3"), "k": Decimal("1e3"),
+          "M": Decimal("1e6"), "B": Decimal("1e9"), "T": Decimal("1e12")}
+
+
+def numbers_in(text: str) -> list[tuple[str, Decimal, str]]:
+    out = []
+    for m in NUM_RE.finditer(text):
+        raw = m.group(0).strip()
+        unit = m.group(1) or ""
+        digits = raw[: len(raw) - len(unit)].strip().replace(",", "").replace("−", "-").replace("+", "")
+        try:
+            out.append((raw, Decimal(digits), unit))
+        except InvalidOperation:
+            continue
+    return out
+
+
+def _fact_numbers(fact: Fact) -> list[Decimal]:
+    values = []
+    for raw, value, unit in numbers_in(fact.value):
+        values.append(value * SCALES.get(unit, Decimal(1)))
+    try:
+        values.append(Decimal(fact.value))
+    except InvalidOperation:
+        pass
+    return values
+
+
+def _matches(value: Decimal, unit: str, candidates: list[Decimal]) -> bool:
+    if unit in SCALES:
+        forms = [value * SCALES[unit]]
+    elif unit == "%":
+        forms = [value / 100, value]
+    else:
+        forms = [value, value / 100]
+    for v in forms:
+        for c in candidates:
+            if c == 0 and v == 0:
+                return True
+            if c != 0:
+                rel = abs(v - c) / abs(c)
+                # writers round: allow 1.5% relative, or half a unit of the last shown digit
+                if rel <= Decimal("0.015") or abs(v - c) <= Decimal("0.0006"):
+                    return True
+            for scale in (Decimal(1), Decimal(100)):  # percentages may be rounded to whole numbers
+                if c != 0 and abs(v - c * scale) <= Decimal("0.51") * (1 if scale == 100 else 0) + Decimal("0.0006"):
+                    return True
+    return False
+
+
+def verify(sentences: list[NarrativeSentence], facts: list[Fact]) -> None:
+    by_id = {f.id: f for f in facts}
+    all_numbers = [n for f in facts for n in _fact_numbers(f)]
+    for s in sentences:
+        problems: list[str] = []
+        bad_ids = [i for i in s.fact_ids if i not in by_id]
+        if bad_ids:
+            problems.append(f"cites unknown fact ids: {', '.join(bad_ids)}")
+        cited = [n for i in s.fact_ids if i in by_id for n in _fact_numbers(by_id[i])]
+        found_any = False
+        elsewhere = False
+        for text in (s.zh, s.en):
+            for raw, value, unit in numbers_in(text):
+                found_any = True
+                if _matches(value, unit, cited):
+                    continue
+                if _matches(value, unit, all_numbers):
+                    elsewhere = True
+                    problems.append(f"{raw}: matches a fact the sentence does not cite")
+                else:
+                    problems.append(f"{raw}: no matching fact")
+        s.problems = problems
+        if bad_ids or any(p.endswith("no matching fact") for p in problems):
+            s.status = "unsupported"
+        elif elsewhere:
+            s.status = "cited_elsewhere"
+        elif found_any:
+            s.status = "verified"
+        else:
+            s.status = "qualitative"
+
+
+# ------------------------------------------------------------------ Claude call
+
+
+def write_narrative(result: CaseResult, *, client: Any, now: Callable[[], datetime], model: str = MODEL) -> Narrative:
+    """Ask Claude for the narrative, then verify it. Errors and refusals come back as a Narrative with a status."""
+    facts = build_facts(result)
+    base = dict(model=model, created_at=now(), facts=facts)
+    if not facts:
+        return Narrative(status="error", error="no confirmed case to describe", **base)
+    table = [{"id": f.id, "label": f.label_en, "label_zh": f.label_zh, "value": f.value, "unit": f.unit, "source": f.source} for f in facts]
+    user = ("Fact table (JSON):\n" + json.dumps(table, ensure_ascii=False, indent=1) +
+            "\n\nWrite the narrative sections for this claim using only these facts.")
+    try:
+        response = client.beta.messages.create(
+            model=model,
+            max_tokens=16000,
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+            output_config={"effort": "high", "format": {"type": "json_schema", "schema": _schema()}},
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user}],
+        )
+    except Exception as exc:  # typed SDK errors are reported as text; the case itself is unaffected
+        return Narrative(status="error", error=f"{type(exc).__name__}: {getattr(exc, 'message', exc)}", **base)
+    usage = getattr(response, "usage", None)
+    usage_d = {k: int(getattr(usage, k) or 0) for k in ("input_tokens", "output_tokens") if usage is not None and hasattr(usage, k)}
+    base["usage"] = usage_d
+    base["model"] = getattr(response, "model", model) or model
+    if getattr(response, "stop_reason", None) == "refusal":
+        return Narrative(status="refused", error="the model declined to write this narrative", **base)
+    text = next((b.text for b in response.content if getattr(b, "type", None) == "text"), "")
+    try:
+        parsed = _Out.model_validate_json(text)
+    except ValidationError as exc:
+        return Narrative(status="error", error=f"response did not match the schema: {exc.errors()[:1]}", **base)
+    sections = {name: [NarrativeSentence(zh=s.zh, en=s.en, fact_ids=s.fact_ids) for s in getattr(parsed, name)] for name in SECTIONS}
+    for sentences in sections.values():
+        verify(sentences, facts)
+    flat = [s for v in sections.values() for s in v]
+    return Narrative(status="ok", sections=sections, total=len(flat),
+                     verified=sum(1 for s in flat if s.status in ("verified", "qualitative")),
+                     unsupported=sum(1 for s in flat if s.status == "unsupported"), **base)
