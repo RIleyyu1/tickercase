@@ -17,7 +17,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Callable, Optional, TypeVar
 
-from .analysis import RULES_VERSION, analyze
+from .analysis import RULES_VERSION, analyze, share_trend
 from .calculations import calculate
 from .config import SEC_MODES, Settings, load_settings
 from .http_client import FetchError, JsonFetcher, LiveHttpClient, RecordingHttpClient, ReplayHttpClient, utcnow
@@ -57,6 +57,8 @@ USER_INPUT_PROVENANCE = {
     "base_metric_currency": "user_input",
     "base_metric_period": "user_input",
     "filings_since": "user_input",
+    "share_change_rate": "user_input:assumption",
+    "share_change_mode": "user_input",
     "probability_drift": "user_input:assumption",
     "probability_volatility": "user_input:assumption",
 }
@@ -188,6 +190,8 @@ class CaseService:
         provenance = {k: v for k, v in USER_INPUT_PROVENANCE.items() if getattr(claim, k, None) is not None}
         for name, source in claim.field_sources.items():
             provenance[name] = source if source.startswith(DEFAULT_PREFIX) else f"public_data:{source}"
+        if claim.target_shares_derived:
+            provenance["target_assumed_shares"] = "derived:current_shares * (1 + share_change_rate) ** horizon_years"
         confirmed = ConfirmedClaim(values=claim, fingerprint=current_fp, confirmed_at=confirmation.confirmed_at, value_provenance=provenance)
         calculations = calculate(claim)
 
@@ -308,6 +312,15 @@ class CaseService:
         snap.assumption_suggestions["target_assumed_shares"] = ReferenceSuggestion(
             value=format(shares.value, "f"),
             source=f"{DEFAULT_PREFIX}no change from reported shares as of {shares.period_end}")
+        trend = share_trend(facts.shares_outstanding)
+        if trend is not None:
+            rate, start, latest = trend
+            snap.assumption_suggestions["share_change_rate"] = ReferenceSuggestion(
+                value=format(rate.quantize(Decimal("0.0001")), "f"),
+                source=f"{DEFAULT_PREFIX}reported share trend {start.period_end} to {latest.period_end} (after any split)")
+        else:
+            snap.assumption_suggestions["share_change_rate"] = ReferenceSuggestion(
+                value="0", source=f"{DEFAULT_PREFIX}no change (not enough share history after the last split)")
         if market is None or (market.currency and market.currency != "USD"):
             return
         cap = market.last_close * shares.value

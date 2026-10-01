@@ -1,8 +1,8 @@
 {
-  "case_id": "542d9248c3bb4bfd93d71aabcfea95c8",
-  "created_at": "2026-10-01T17:42:03.511318Z",
+  "case_id": "9628b536451a4441b81b1128718a75ac",
+  "created_at": "2026-10-01T19:07:17.595487Z",
   "status": "evaluated",
-  "input_fingerprint": "4a65f6d336d49698730ee9ab673d4268ccb7e368b5d713afa0844d52f4cb9788",
+  "input_fingerprint": "ea3bd4f2d7fdd783ba6142647d101f4972886d3f8993d60fc4aa36ecabccee56",
   "confirmed_claim": {
     "values": {
       "claim_text": "SYNT will trade at $100 in five years.",
@@ -23,10 +23,13 @@
       "filings_since": "2024-01-01",
       "probability_drift": "0.07",
       "probability_volatility": null,
+      "share_change_rate": null,
+      "share_change_mode": null,
+      "target_shares_derived": false,
       "field_sources": {}
     },
-    "fingerprint": "4a65f6d336d49698730ee9ab673d4268ccb7e368b5d713afa0844d52f4cb9788",
-    "confirmed_at": "2026-10-01T17:42:03.511290Z",
+    "fingerprint": "ea3bd4f2d7fdd783ba6142647d101f4972886d3f8993d60fc4aa36ecabccee56",
+    "confirmed_at": "2026-10-01T19:07:17.595461Z",
     "value_provenance": {
       "claim_text": "user_input",
       "ticker": "user_input",
@@ -160,7 +163,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/synt-20260804.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/0009999901-26-000013-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -180,7 +183,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/synt-20260630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/0009999901-26-000012-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -200,7 +203,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/synt-20260331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/0009999901-26-000010-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -220,7 +223,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/synt-20251231a.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/0009999901-26-000009-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -240,7 +243,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/synt-20251231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/0009999901-26-000008-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -260,7 +263,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/synt-20260114.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/0009999901-26-000007-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -280,7 +283,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/synt-20250930.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/0009999901-25-000006-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -300,7 +303,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/synt-20250630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/0009999901-25-000005-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -320,7 +323,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/synt-20250331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/0009999901-25-000004-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -340,7 +343,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/synt-20241231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/0009999901-25-000003-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -360,7 +363,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/synt-20231231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/0009999901-24-000001-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T17:42:03.512110Z",
+      "retrieved_at": "2026-10-01T19:07:17.596225Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -576,7 +579,7 @@
       }
     ],
     "source_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0009999901.json",
-    "retrieved_at": "2026-10-01T17:42:03.512493Z",
+    "retrieved_at": "2026-10-01T19:07:17.596582Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "notes": []
@@ -1642,7 +1645,7 @@
       }
     ],
     "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/SYNT?range=5y&interval=1d",
-    "retrieved_at": "2026-10-01T17:42:03.513439Z",
+    "retrieved_at": "2026-10-01T19:07:17.597322Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "note": "Unofficial public quote endpoint; no service guarantee. Prices are as published by the source."

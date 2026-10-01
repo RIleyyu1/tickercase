@@ -65,6 +65,9 @@ class ClaimDraft(BaseModel):
     base_metric_currency: Optional[str] = None
     base_metric_period: Optional[str] = None
     filings_since: Optional[str] = None
+    # share count at the target date: give target_assumed_shares directly, or current_shares plus a yearly change
+    share_change_rate: RawNumber = None  # yearly change, 0.01 = +1% a year
+    share_change_mode: Optional[str] = None  # trend | flat | rate | absolute (how the page chose the value)
     # optional extra: price-probability reference (model output, never the verdict)
     probability_drift: RawNumber = None
     probability_volatility: RawNumber = None
@@ -79,6 +82,7 @@ class ClaimDraft(BaseModel):
         "current_shares",
         "valuation_multiple",
         "base_annual_metric",
+        "share_change_rate",
         "probability_drift",
         "probability_volatility",
         mode="before",
@@ -136,6 +140,9 @@ class ValidatedClaim(BaseModel):
     filings_since: Optional[date] = None
     probability_drift: Optional[DecimalStr] = None
     probability_volatility: Optional[DecimalStr] = None
+    share_change_rate: Optional[DecimalStr] = None
+    share_change_mode: Optional[str] = None
+    target_shares_derived: bool = False  # True when target_assumed_shares = current_shares x (1 + rate) ** horizon
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 

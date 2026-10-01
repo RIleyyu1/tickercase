@@ -14,7 +14,7 @@ import hashlib
 import json
 import re
 from datetime import date, datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation, localcontext
 from typing import Any, Callable, Optional
 
 from .models import (
@@ -39,7 +39,6 @@ CORE_FIELDS: dict[str, str] = {
     "reference_price": "reference price",
     "reference_price_date": "date of the reference price",
     "horizon_years": "time horizon in years",
-    "target_assumed_shares": "assumed share count at the target date",
     "valuation_method": "valuation method (price_to_sales or price_to_earnings)",
     "valuation_multiple": "assumed valuation multiple",
 }
@@ -51,6 +50,9 @@ POSITIVE_NUMBERS = (
     "target_assumed_shares",
     "valuation_multiple",
 )
+SHARE_MODES = ("trend", "flat", "rate", "absolute")
+SHARE_RATE_MIN, SHARE_RATE_MAX = Decimal("-0.5"), Decimal("1")
+SHARE_RATE_WARN_LOW, SHARE_RATE_WARN_HIGH = Decimal("-0.10"), Decimal("0.20")
 
 
 def _clean_text(value: Optional[str]) -> Optional[str]:
@@ -158,6 +160,17 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
     # base metric may be zero or negative (e.g. a net loss); growth rate handles that case
     numbers["base_annual_metric"] = parse_decimal("base_annual_metric", norm["base_annual_metric"], issues, positive=False)
 
+    share_rate = parse_decimal("share_change_rate", norm["share_change_rate"], issues, positive=False)
+    if share_rate is not None and not SHARE_RATE_MIN <= share_rate <= SHARE_RATE_MAX:
+        issues.append(ValidationIssue(field="share_change_rate", code="out_of_range",
+                                      message="share_change_rate is a yearly change between -0.5 and 1 (0.01 = +1% a year)"))
+        share_rate = None
+    share_mode = norm["share_change_mode"]
+    if share_mode is not None and share_mode not in SHARE_MODES:
+        issues.append(ValidationIssue(field="share_change_mode", code="unsupported_mode", message=f"share_change_mode must be one of {SHARE_MODES}"))
+        share_mode = None
+    target_shares, shares_derived = _target_shares(numbers, share_rate, share_mode, norm, missing, warnings)
+
     drift = parse_decimal("probability_drift", norm["probability_drift"], issues, positive=False)
     prob_vol = parse_decimal("probability_volatility", norm["probability_volatility"], issues, positive=True)
     if drift is not None and not Decimal("-1") <= drift <= Decimal("1"):
@@ -242,7 +255,7 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
         reference_price_date=ref_date,
         reference_price_source=norm["reference_price_source"],
         horizon_years=numbers["horizon_years"],
-        target_assumed_shares=numbers["target_assumed_shares"],
+        target_assumed_shares=target_shares,
         current_shares=numbers["current_shares"],
         valuation_method=method,
         valuation_multiple=numbers["valuation_multiple"],
@@ -251,10 +264,48 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
         base_metric_period=norm["base_metric_period"],
         filings_since=since,
         probability_drift=drift,
+        share_change_rate=share_rate,
+        share_change_mode=share_mode,
+        target_shares_derived=shares_derived,
         probability_volatility=prob_vol,
         field_sources={k: v.strip() for k, v in sources.items() if isinstance(v, str) and v.strip() and norm.get(k) is not None},
     )
     return ValidationResult(ok=True, claim=claim, issues=[], missing_fields=missing, warnings=warn_en, warnings_zh=warn_zh, fingerprint=fp)
+
+
+def _target_shares(numbers, rate, mode, norm, missing, warnings) -> tuple[Optional[Decimal], bool]:
+    """Target-date share count: entered directly, or current shares grown at a yearly rate over the horizon.
+
+    Returns (target shares, derived?). Invalid numbers were already reported as issues by the caller.
+    """
+    direct, current, years = numbers.get("target_assumed_shares"), numbers.get("current_shares"), numbers.get("horizon_years")
+    use_rate = rate is not None and mode != "absolute"
+    ctx = Context(prec=34, rounding=ROUND_HALF_EVEN)
+    if use_rate:
+        if current is None or years is None:
+            if norm["current_shares"] is None:
+                missing.append(MissingField(field="current_shares", blocking=True, required_for="target share count",
+                                            message="missing current share count, needed to apply the yearly share change"))
+            return None, False
+        with localcontext(ctx):
+            target = (current * ((1 + rate).ln() * years).exp()).quantize(Decimal(1))
+        derived = True
+    elif direct is not None:
+        target, derived = direct, False
+        if current is not None and years is not None:
+            with localcontext(ctx):
+                rate = ((direct / current).ln() / years).exp() - 1
+    else:
+        if norm["target_assumed_shares"] is None:
+            missing.append(MissingField(field="target_assumed_shares", blocking=True, required_for="all calculations",
+                                        message="missing share count at the target date (target shares, or current shares plus a yearly change)"))
+        return None, False
+    if rate is not None and not SHARE_RATE_WARN_LOW <= rate <= SHARE_RATE_WARN_HIGH:
+        warnings.append((
+            f"the share count changes {rate * 100:.1f}% a year to reach {target:,.0f} shares; check that the share inputs belong to this company",
+            f"股份数每年变化 {rate * 100:.1f}%，才能到 {target:,.0f} 股；请确认股份数输入属于这家公司",
+        ))
+    return target, derived
 
 
 def _claim_year_warnings(text: Optional[str], horizon: Optional[Decimal], today: date) -> list[tuple[str, str]]:

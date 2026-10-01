@@ -93,6 +93,20 @@ def calculate(claim: ValidatedClaim) -> list[CalculationItem]:
         )
     )
 
+    if claim.target_shares_derived and claim.current_shares is not None and claim.share_change_rate is not None:
+        items.append(
+            CalculationItem(
+                name="target_assumed_shares",
+                status="ok",
+                value=claim.target_assumed_shares,
+                unit="shares",
+                formula="current_shares * (1 + share_change_rate) ** horizon_years, rounded to whole shares",
+                inputs={"current_shares": _s(claim.current_shares), "share_change_rate": _s(claim.share_change_rate),
+                        "horizon_years": _s(claim.horizon_years)},
+                assumptions=[f"share_change_rate is a user assumption ({claim.share_change_mode or 'rate'})"],
+            )
+        )
+
     cap = market_cap(claim.target_price, claim.target_assumed_shares)
     items.append(
         CalculationItem(

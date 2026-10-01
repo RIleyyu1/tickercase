@@ -55,7 +55,9 @@ python -m tickercase.cli run examples/synthetic_claim_ps.json --sec-mode synthet
 | `target_price` | required, > 0 | the claim |
 | `reference_price`, `reference_price_date` | required, > 0 | reference value; typed or prefilled from the quote source |
 | `horizon_years` | required, > 0 | assumption, fractional allowed |
-| `target_assumed_shares` | required, > 0 | assumption for the target date, kept separate from `current_shares` |
+| `target_assumed_shares` | required unless derived, > 0 | share count at the target date; give it directly, or give `current_shares` + `share_change_rate` |
+| `share_change_rate` | optional assumption | yearly share change between -0.5 and 1 (0.01 = +1% a year); target shares = current x (1 + rate) ^ horizon |
+| `share_change_mode` | optional | `trend`, `flat`, `rate` or `absolute`; records how the page chose the share count |
 | `valuation_method` | required | `price_to_sales` or `price_to_earnings` |
 | `valuation_multiple` | required, > 0 | assumption |
 | `current_shares` | optional | reference value; adds `implied_share_count_change` |
@@ -65,7 +67,9 @@ python -m tickercase.cli run examples/synthetic_claim_ps.json --sec-mode synthet
 | `probability_volatility` | optional extra | yearly volatility, > 0 and <= 3; defaults to historical volatility |
 | `field_sources` | set by prefill | field -> public source, or `default_assumption:...` for a default; recorded as provenance while the value is unchanged |
 
-Which inputs matter most: the claim gives the ticker, target price and horizon. Reference price, current shares and base metric are facts the page fills from public data. The valuation multiple and the target share count are assumptions the claim usually leaves open, and they drive the result: the required revenue or net income scales with 1 / multiple and with the share count. The defaults (today's multiple, today's share count) mean "no re-rating, no dilution"; the sensitivity table shows how the requirement moves when they change.
+Which inputs matter most: the claim gives the ticker, target price and horizon. Reference price, current shares and base metric are facts the page fills from public data. The valuation multiple and the target share count are assumptions the claim usually leaves open, and they drive the result: the required revenue or net income scales with 1 / multiple and with the share count. The defaults are today's multiple ("no re-rating") and the reported share trend; the sensitivity table shows how the requirement moves when the multiple changes.
+
+Target share count: few people can estimate it directly, so the page asks how the share count should change instead: recent trend (default), flat, a custom yearly %, or an absolute count. The trend is the yearly change of SEC cover-page share counts over up to 3 years, using only reports after the last jump of more than 40% between neighbouring reports (a stock split). E3 uses the same split rule. A yearly change outside -10%..+20% produces a warning before confirmation. Values loaded from an example are replaced when "Fill in the rest" runs, so they cannot carry over to another company.
 
 A year in the claim text that is already past, or that disagrees with the horizon by more than a year, produces a warning.
 
@@ -171,7 +175,7 @@ tests/                              pytest suite (offline); tests/fixtures/READM
 
 `scripts/live_smoke.py --ticker AAPL` performs one recorded live run of all three sources and writes a summary to `data/smoke/`. The opt-in test `TICKERCASE_RUN_LIVE=1 pytest -m live` checks SEC filings without recording.
 
-Status (2026-10-01, Windows, home network): `www.sec.gov` and `data.sec.gov` (submissions and company facts) and the Yahoo chart endpoint answered HTTP 200. A full live case run through TickerCase with `SEC_USER_AGENT` set has not been recorded yet.
+Status (2026-10-02, Windows, home network): a full live case ran through the page (TSLA, target 1000 by 2030) with SEC filings, XBRL facts and Yahoo prices all returning data; live reference snapshots for TSLA and NVDA returned split-aware share trends. No live run has been recorded as replayable snapshots yet.
 
 ## Next batch (not implemented)
 

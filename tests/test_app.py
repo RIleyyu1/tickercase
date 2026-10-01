@@ -1,5 +1,7 @@
 """Page-level tests with Streamlit's AppTest (no browser, no network)."""
 
+from decimal import Decimal
+
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -97,8 +99,9 @@ def test_prefill_fills_reference_values_with_sources(app_env):
     assert at.session_state["f_reference_price"] == "50"
     assert at.session_state["f_current_shares"] == "95000000"
     assert at.session_state["f_base_annual_metric"] == "200000000"  # P/S -> revenue
-    # empty assumptions get visible defaults: today's share count and today's multiple
-    assert at.session_state["f_target_assumed_shares"] == "95000000"
+    # empty assumptions get visible defaults: the reported share trend and today's multiple
+    assert at.session_state["f_share_mode"] == "trend"
+    assert at.session_state["f_share_rate_pct"] == "1.04"  # 92.1M (2023-07-28) -> 95.0M (2026-07-24)
     assert at.session_state["f_valuation_multiple"] == "23.75"  # 50 x 95M / 200M
     at.selectbox(key="f_valuation_method").set_value("price_to_earnings")
     run(at)
@@ -199,3 +202,29 @@ def test_invalid_input_cannot_be_confirmed(app_env):
     run(at)
     assert "未确认" in texts(at)
     assert button(at, "btn_run").disabled
+
+
+def test_example_values_are_replaced_by_prefill_and_custom_choices_are_kept(app_env):
+    at = run(AppTest.from_file(APP))
+    button(at, "btn_example_pe").click()  # loads an absolute target share count of 100M
+    run(at)
+    assert at.session_state["f_share_mode"] == "absolute"
+    button(at, "btn_prefill").click()
+    run(at)
+    assert at.session_state["f_share_mode"] == "trend" and at.session_state["f_target_assumed_shares"] == ""
+    assert at.session_state["f_share_rate_pct"] == "1.04"
+    # a choice the user made stays
+    at.selectbox(key="f_share_mode").set_value("rate")
+    run(at)
+    at.text_input(key="f_share_rate_pct").set_value("-2")
+    run(at)
+    button(at, "btn_prefill").click()
+    run(at)
+    assert at.session_state["f_share_mode"] == "rate" and at.session_state["f_share_rate_pct"] == "-2"
+    button(at, "btn_confirm").click()
+    run(at)
+    button(at, "btn_run").click()
+    run(at)
+    claim = at.session_state["result"].confirmed_claim
+    assert claim.values.share_change_rate == Decimal("-0.02") and claim.values.target_shares_derived
+    assert claim.value_provenance["target_assumed_shares"].startswith("derived:")

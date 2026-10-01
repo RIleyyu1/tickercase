@@ -182,3 +182,17 @@ def test_sensitivity_falls_back_to_user_base_and_is_absent_without_one():
     out = run(ps_draft())  # no public data, user base 200M
     assert out.sensitivity is not None and out.sensitivity.base_label.startswith("your base value")
     assert run(ps_draft(base_annual_metric=None)).sensitivity is None
+
+
+def test_share_trend_ignores_history_before_a_split():
+    from tickercase.analysis import after_last_split, share_trend
+
+    pts = [shares(date(2022, 7, 29), 2_500_000_000), shares(date(2023, 7, 28), 24_700_000_000),  # 10-for-1 split
+           shares(date(2024, 7, 26), 24_500_000_000), shares(date(2025, 7, 25), 24_400_000_000), shares(date(2026, 7, 24), 24_300_000_000)]
+    assert after_last_split(pts)[0].period_end == date(2023, 7, 28)
+    rate, start, latest = share_trend(pts)
+    assert start.period_end == date(2023, 7, 28) and rate < 0  # buybacks after the split, not +100% a year
+    out = run(ps_draft(current_shares="24300000000", target_assumed_shares="24000000000"),
+              facts([annual(2022, 140_000_000), annual(2025, 200_000_000)], share_points=pts), market())
+    e3 = next(i for i in out.items if i.id == "E3")
+    assert e3.measured["reported_window"].startswith("2023-07-28")

@@ -66,6 +66,12 @@ S = {
     "method": ("估值方法", "Valuation method"), "method_help": ("假设：目标日期用哪种倍数估值。", "Assumption: which multiple values the company at the target date."),
     "missing_core": ("缺少核心输入：", "Missing core inputs: "), "optional_missing": ("可选项未填：", "Optional inputs empty: "),
     "s3": ("3. 确认并运行", "3. Confirm and run"),
+    "share_mode": ("目标期股份数怎么定", "Target-date share count"),
+    "share_mode_help": ("大多数人无法直接估计几年后的股数。默认按 SEC 披露的近年股数变化趋势推算（已排除拆股）；也可以选择不变、自定义年变化率，或直接填目标股数。",
+                        "Few people can estimate a future share count directly. The default extends the recent SEC-reported trend (stock splits excluded); you can also keep it flat, set a yearly %, or enter a target count."),
+    "shares_result": ("目标期股份数 ≈ {n} 股（当前 {c} × (1 {sign} {r}%)^{y} 年）", "Target-date shares ≈ {n} (current {c} × (1 {sign} {r}%)^{y} years)"),
+    "shares_need_current": ("需要当前股份数才能推算目标期股份数。", "Current shares are needed to work out the target-date count."),
+    "flat_note": ("每年变化 0%：目标期股份数等于当前股份数。", "0% a year: target-date shares equal current shares."),
     "confirm": ("确认以上输入", "Confirm inputs"), "run": ("运行评估", "Run case"),
     "confirmed": ("已确认（{t} UTC）。确认绑定当前全部输入，修改任何一项都需要重新确认。",
                   "Confirmed ({t} UTC). The confirmation covers every current input; any edit needs a new confirmation."),
@@ -117,7 +123,9 @@ FIELD_META = {
     "reference_price_date": ("参考价日期", "Reference date", "YYYY-MM-DD", "参考价对应的交易日。", "Trading day of the reference price."),
     "reference_price_source": ("参考价来源", "Reference source", "", "记录参考价从哪里来。", "Where the reference price came from."),
     "current_shares": ("当前股份数（可选）", "Current shares (optional)", "95000000", "参考值：最近一次披露的流通股数。", "Reference value: latest reported shares."),
-    "target_assumed_shares": ("目标期股份数", "Target-date shares", "100000000", "假设：目标日期的股份数。默认等于当前股份数。", "Assumption: share count at the target date. Default: current shares."),
+    "target_assumed_shares": ("目标期股份数", "Target-date shares", "100000000", "假设：目标日期的总股数。只在选择「直接填股数」时使用。", "Assumption: total shares at the target date. Used only with “absolute”."),
+    "share_rate_pct": ("股份数年变化（%）", "Yearly share change (%)", "1.0", "假设：每年股数增减的百分比。正数是增发稀释，负数是回购。默认取近年趋势。",
+                       "Assumption: yearly % change in share count. Positive = dilution, negative = buybacks. Default: recent trend."),
     "valuation_multiple": ("估值倍数", "Valuation multiple", "25", "假设：目标日期的 P/S 或 P/E。默认等于当前倍数。", "Assumption: P/S or P/E at the target date. Default: today's multiple."),
     "base_annual_metric": ("基期年度指标（可选）", "Base annual metric (optional)", "200000000", "参考值：P/S 填年营收，P/E 填年净利润。", "Reference value: annual revenue for P/S, net income for P/E."),
     "base_metric_currency": ("基期指标币种（可选）", "Base metric currency (optional)", "USD", "须与价格币种一致。", "Must match the price currency."),
@@ -127,6 +135,10 @@ FIELD_META = {
     "probability_volatility": ("年化波动率 σ（可选）", "Yearly volatility σ (optional)", "", "附加项：留空时使用历史波动率。", "Extra: empty uses historical volatility."),
 }
 TEXT_FIELDS = list(FIELD_META)
+DRAFT_FIELDS = [n for n in TEXT_FIELDS if n != "share_rate_pct"]  # the page's % field maps to share_change_rate
+FIELD_ALIASES = {"share_change_rate": "share_rate_pct", "share_change_mode": "share_rate_pct"}
+# one label for both languages keeps the widget stable when the language changes
+SHARE_MODES = {"trend": "近年趋势 · trend", "flat": "不变 · flat", "rate": "自定义 % · custom %", "absolute": "直接填股数 · absolute"}
 CLAIM_FIELDS = ("claim_text", "ticker", "target_price", "horizon_years")
 # one label for both languages keeps the widget stable when the language changes
 METHODS = {"price_to_sales": "P/S · 市销率 price-to-sales", "price_to_earnings": "P/E · 市盈率 price-to-earnings"}
@@ -154,6 +166,7 @@ CALC = {
     "annualized_price_return": ("所需年化收益", "Required yearly return"),
     "target_market_cap": ("目标市值", "Target market cap"),
     "implied_share_count_change": ("股份数变化", "Share count change"),
+    "target_assumed_shares": ("目标期股份数（推算）", "Target-date shares (derived)"),
     "required_annual_revenue": ("所需年营收", "Required annual revenue"),
     "required_annual_net_income": ("所需年净利润", "Required annual net income"),
     "required_metric_cagr": ("所需指标年增速（相对你填写的基期）", "Required metric growth (from your base)"),
@@ -163,7 +176,7 @@ ISSUE_ZH = {
     "must_be_positive": "{f}：必须大于 0", "invalid_date": "{f}：日期格式应为 YYYY-MM-DD", "date_in_future": "{f}：日期不能晚于今天",
     "invalid_ticker": "{f}：格式不正确", "invalid_currency": "{f}：须为 3 位字母代码",
     "currency_mismatch": "{f}：与价格币种不一致，不做汇率换算", "unsupported_method": "{f}：只能是 P/S 或 P/E",
-    "out_of_range": "{f}：超出允许范围", "unknown_field": "{f}：包含未知字段",
+    "out_of_range": "{f}：超出允许范围", "unknown_field": "{f}：包含未知字段", "unsupported_mode": "{f}：选项无效",
 }
 MISSING_ZH = {
     "base_annual_metric": "未填基期指标，不计算相对基期的增速",
@@ -203,7 +216,7 @@ def pick(en: str, zh: str) -> str:
 
 
 def label_of(name: str) -> str:
-    meta = FIELD_META.get(name)
+    meta = FIELD_META.get(FIELD_ALIASES.get(name, name))
     if meta is None:
         return name
     return meta[0] if lang() == "zh" else meta[1]
@@ -267,6 +280,8 @@ def _init_state() -> None:
     for name in TEXT_FIELDS:
         st.session_state.setdefault(f"f_{name}", "")
     st.session_state.setdefault("f_valuation_method", "price_to_sales")
+    st.session_state.setdefault("f_share_mode", "trend")
+    st.session_state.setdefault("example_values", {})
     st.session_state.setdefault("sec_mode", "live")
     st.session_state.setdefault("lang", "zh")
     st.session_state.setdefault("view", "new")
@@ -285,6 +300,9 @@ def _load_example(key: str) -> None:
     for name in TEXT_FIELDS:
         st.session_state[f"f_{name}"] = str(draft.get(name) or "")
     st.session_state["f_valuation_method"] = draft["valuation_method"]
+    st.session_state["f_share_mode"] = "absolute" if draft.get("target_assumed_shares") else "trend"
+    # example values count as untouched, so "Fill in the rest" for another ticker replaces them
+    st.session_state["example_values"] = {name: st.session_state[f"f_{name}"] for name in TEXT_FIELDS} | {"share_mode": st.session_state["f_share_mode"]}
     st.session_state["sec_mode"] = "synthetic"
     st.session_state["view"] = "new"
     st.session_state["prefill_sources"] = {}
@@ -296,6 +314,8 @@ def _clear_form() -> None:
     for name in TEXT_FIELDS:
         st.session_state[f"f_{name}"] = ""
     st.session_state["f_valuation_method"] = "price_to_sales"
+    st.session_state["f_share_mode"] = "trend"
+    st.session_state["example_values"] = {}
     st.session_state["prefill_sources"] = {}
     st.session_state["prefill_msg"] = None
     st.session_state["prefill_snapshot"] = None
@@ -311,10 +331,16 @@ def _multiple_suggestion(snap: ReferenceSnapshot, method: str):
 
 
 def _is_untouched(name: str) -> bool:
-    """Empty, or still holding the value the prefill put there."""
+    """Empty, or still holding the value the prefill or a loaded example put there."""
     current = st.session_state.get(f"f_{name}", "")
     src = st.session_state["prefill_sources"].get(name)
-    return not current.strip() or (src is not None and current == src[0])
+    example = st.session_state["example_values"].get(name)
+    return not current.strip() or (src is not None and current == src[0]) or (example is not None and current == example)
+
+
+def _pct_text(rate: str) -> str:
+    """'0.0104' -> '1.04'"""
+    return format((Decimal(rate) * 100).quantize(Decimal("0.01")).normalize(), "f")
 
 
 def _apply(name: str, sug, sources: dict) -> None:
@@ -344,13 +370,22 @@ def _prefill() -> None:
         _apply("base_metric_period", snap.period_suggestion, sources)
     st.session_state["prefill_sources"] = sources
     defaults = []
-    for name, sug in (("target_assumed_shares", snap.assumption_suggestions.get("target_assumed_shares")),
-                      ("valuation_multiple", _multiple_suggestion(snap, method)),
+    for name, sug in (("valuation_multiple", _multiple_suggestion(snap, method)),
                       ("filings_since", snap.assumption_suggestions.get("filings_since"))):
-        if sug is not None and _is_untouched(name):  # assumptions only fill empty fields
+        if sug is not None and _is_untouched(name):  # assumptions only fill empty or untouched fields
             _apply(name, sug, sources)
             if name != "filings_since":
                 defaults.append((name, sug.value))
+    rate = snap.assumption_suggestions.get("share_change_rate")
+    mode_untouched = st.session_state["f_share_mode"] == "trend" or _is_untouched("share_mode")
+    if rate is not None and mode_untouched and (st.session_state["f_share_mode"] != "trend" or _is_untouched("share_rate_pct")):
+        st.session_state["f_share_mode"] = "trend"
+        st.session_state["f_target_assumed_shares"] = ""
+        pct = _pct_text(rate.value)
+        st.session_state["f_share_rate_pct"] = pct
+        sources["share_rate_pct"] = (pct, rate.source)
+        defaults.append(("share_rate_pct", pct + "%"))
+    st.session_state["example_values"] = {}
     st.session_state["prefill_snapshot"] = snap
     errors = "; ".join(f"{e.provider_id}: {e.code}" for e in snap.provider_errors)
     n = len(sources)
@@ -403,11 +438,35 @@ def _save_sec_contact() -> None:
     st.session_state["sec_msg"] = ("success", S["sec_saved"])
 
 
+def _share_rate_value() -> Optional[str]:
+    """The page takes a percent; the draft takes a yearly rate (1.5 -> 0.015). Unparseable text passes through for validation."""
+    mode = st.session_state["f_share_mode"]
+    if mode == "absolute":
+        return None
+    if mode == "flat":
+        return "0"
+    text = st.session_state["f_share_rate_pct"].strip().rstrip("%").strip()
+    if not text:
+        return None
+    try:
+        return format(Decimal(text) / 100, "f")
+    except Exception:
+        return text
+
+
 def current_draft() -> ClaimDraft:
-    values = {name: (st.session_state[f"f_{name}"] or None) for name in TEXT_FIELDS}
+    values = {name: (st.session_state[f"f_{name}"] or None) for name in DRAFT_FIELDS}
     values["valuation_method"] = st.session_state["f_valuation_method"]
+    mode = st.session_state["f_share_mode"]
+    values["share_change_mode"] = mode
+    values["share_change_rate"] = _share_rate_value()
+    if mode != "absolute":
+        values["target_assumed_shares"] = None
     # a source label only applies while the field still holds the value it filled in
-    sources = {name: src for name, (val, src) in st.session_state["prefill_sources"].items() if st.session_state.get(f"f_{name}") == val}
+    sources = {("share_change_rate" if name == "share_rate_pct" else name): src
+               for name, (val, src) in st.session_state["prefill_sources"].items() if st.session_state.get(f"f_{name}") == val}
+    if mode != "trend":
+        sources.pop("share_change_rate", None)
     values["field_sources"] = sources or None
     return ClaimDraft(**values)
 
@@ -449,6 +508,28 @@ def render_claim_box() -> None:
             {"success": b2.success, "warning": b2.warning, "error": b2.error}[kind](zh if lang() == "zh" else en)
 
 
+def render_share_input() -> None:
+    mode = st.session_state["f_share_mode"]
+    if mode == "absolute":
+        field("target_assumed_shares")
+        return
+    if mode == "flat":
+        st.caption(t("flat_note"))
+    else:
+        field("share_rate_pct")
+    rate = _share_rate_value()
+    current, years = st.session_state["f_current_shares"].strip(), st.session_state["f_horizon_years"].strip()
+    if not current:
+        st.caption(t("shares_need_current"))
+        return
+    try:
+        r, c, y = Decimal(rate or "0"), Decimal(current.replace(",", "")), Decimal(years)
+        n = c * ((1 + r).ln() * y).exp()
+    except Exception:
+        return
+    st.caption(t("shares_result", n=f"{n:,.0f}", c=f"{c:,.0f}", sign="+" if r >= 0 else "−", r=f"{abs(r) * 100:.2f}", y=format(y.normalize(), "f")))
+
+
 def render_rest(expanded: bool) -> None:
     with st.expander(t("rest"), expanded=expanded):
         left, right = st.columns(2)
@@ -461,7 +542,8 @@ def render_rest(expanded: bool) -> None:
             field("reference_price_source")
             c = st.columns(2)
             field("current_shares", c[0])
-            field("target_assumed_shares", c[1])
+            c[1].selectbox(t("share_mode"), options=list(SHARE_MODES), format_func=SHARE_MODES.get, key="f_share_mode", help=t("share_mode_help"))
+            render_share_input()
         with right.container(border=True):
             st.markdown(f"**{t('val_box')}**")
             c = st.columns(2)
@@ -908,6 +990,7 @@ def view_new() -> None:
     if result_current:
         v = result.confirmed_claim.values
         st.caption(f"**{v.ticker}** · {v.claim_text} · {('目标价' if lang() == 'zh' else 'target')} {v.target_price} · "
+                   f"{('目标期股数' if lang() == 'zh' else 'target shares')} {fmt_amount(v.target_assumed_shares)} · "
                    f"{v.horizon_years} {('年' if lang() == 'zh' else 'y')} · "
                    f"{'P/S' if v.valuation_method.value == 'price_to_sales' else 'P/E'} {v.valuation_multiple}")
         holder = st.expander(t("edit_inputs"), expanded=False)

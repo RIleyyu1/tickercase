@@ -152,6 +152,31 @@ def _history_start(series: list[MetricPoint]) -> Optional[MetricPoint]:
     return window[0] if window else None
 
 
+SPLIT_JUMP = Decimal("1.4")
+
+
+def after_last_split(series: list[MetricPoint]) -> list[MetricPoint]:
+    """Share counts after the last jump of more than 40% between neighbouring reports (a split or reverse split)."""
+    start = 0
+    for i in range(1, len(series)):
+        ratio = series[i].value / series[i - 1].value
+        if ratio > SPLIT_JUMP or ratio < 1 / SPLIT_JUMP:
+            start = i
+    return series[start:]
+
+
+def share_trend(series: list[MetricPoint]) -> Optional[tuple[Decimal, MetricPoint, MetricPoint]]:
+    """Yearly change of reported shares over up to 3 years, ignoring history before the last split."""
+    clean = after_last_split(series)
+    if len(clean) < 2:
+        return None
+    start = _history_start(clean)
+    if start is None:
+        return None
+    latest = clean[-1]
+    return annualized_rate(latest.value, start.value, _years(start.period_end, latest.period_end)), start, latest
+
+
 def _calc(calculations: list[CalculationItem], name: str) -> Optional[Decimal]:
     for c in calculations:
         if c.name == name and c.status == "ok":
@@ -339,13 +364,14 @@ class _Checks:
         measured = {"reported_shares": _s(latest.value), "reported_as_of": latest.period_end.isoformat(),
                     "target_assumed_shares": _s(self.claim.target_assumed_shares), "implied_annual_change": _s(self.implied_share_rate),
                     "years_to_target": _s(years.quantize(Decimal("0.0001")))}
-        start = _history_start(series)
-        if start is None:
+        trend = share_trend(series)
+        if trend is None:
             return _item("E3", "share_count", "missing", title, Bilingual(
-                f"implied share change is {_pct(self.implied_share_rate)} per year; no earlier share count about 1.5–3 years back to compare",
-                f"隐含股份年变化为 {_pct(self.implied_share_rate)}；缺少约 1.5–3 年前的股份数用于比较"),
+                f"implied share change is {_pct(self.implied_share_rate)} per year; no earlier share count about 1.5–3 years back "
+                "(after any stock split) to compare",
+                f"隐含股份年变化为 {_pct(self.implied_share_rate)}；缺少约 1.5–3 年前（拆股之后）的股份数用于比较"),
                 rule, measured=measured, sources=sources, as_of=latest.filed)
-        hist = annualized_rate(latest.value, start.value, _years(start.period_end, latest.period_end))
+        hist, start, _ = trend
         with localcontext(_ctx()):
             diff = self.implied_share_rate - hist
         sources.append(_fact_source(self.facts, start, "earlier shares outstanding"))

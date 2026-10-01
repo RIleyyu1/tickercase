@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import datetime, timezone
 
 import pytest
@@ -79,3 +80,29 @@ def test_confirmation_invalidated_by_any_edit():
 
 def test_fingerprint_ignores_whitespace_and_ticker_case():
     assert fingerprint(ps_draft(ticker=" synt ")) == fingerprint(ps_draft(ticker="SYNT"))
+
+
+def test_target_shares_derived_from_yearly_change():
+    r = validate_draft(ps_draft(target_assumed_shares=None, current_shares="95000000", share_change_rate="0.01", share_change_mode="trend"),
+                       today=FIXED_TODAY)
+    assert r.ok and r.claim.target_shares_derived
+    assert r.claim.target_assumed_shares == Decimal("99845955")  # 95M x 1.01^5 = 99,845,954.76, whole shares
+    from tickercase.calculations import calculate
+    names = [c.name for c in calculate(r.claim)]
+    assert names.index("target_assumed_shares") == names.index("target_market_cap") - 1
+
+
+def test_absolute_mode_uses_the_entered_count_and_rate_needs_current_shares():
+    r = validate_draft(ps_draft(target_assumed_shares="100000000", share_change_rate="0.05", share_change_mode="absolute"), today=FIXED_TODAY)
+    assert r.ok and not r.claim.target_shares_derived and r.claim.target_assumed_shares == Decimal("100000000")
+    r = validate_draft(ps_draft(target_assumed_shares=None, current_shares=None, share_change_rate="0.01"), today=FIXED_TODAY)
+    assert not r.ok and any(m.field == "current_shares" and m.blocking for m in r.missing_fields)
+
+
+def test_extreme_share_change_warns_before_confirmation():
+    # the screenshot case: 3.95B current shares, 100M target shares left over from an example
+    r = validate_draft(ps_draft(current_shares="3949547394", target_assumed_shares="100000000"), today=FIXED_TODAY)
+    assert r.ok and any("check that the share inputs belong to this company" in w for w in r.warnings)
+    assert any("股份数每年变化" in w for w in r.warnings_zh)
+    issues = {(i.field, i.code) for i in validate_draft(ps_draft(share_change_rate="2"), today=FIXED_TODAY).issues}
+    assert ("share_change_rate", "out_of_range") in issues
