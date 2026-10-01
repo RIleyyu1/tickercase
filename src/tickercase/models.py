@@ -146,6 +146,7 @@ class ValidationResult(BaseModel):
     missing_fields: list[MissingField] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     fingerprint: str
+    warnings_zh: list[str] = Field(default_factory=list)
 
 
 class Confirmation(BaseModel):
@@ -202,6 +203,7 @@ class CoverageInfo(BaseModel):
     coverage_gap: bool = False
     older_files: list[dict[str, Any]] = Field(default_factory=list)
     message: str
+    message_zh: str = ""
 
 
 class ProviderErrorRecord(BaseModel):
@@ -290,8 +292,11 @@ class EvidenceItem(BaseModel):
     stance: Stance
     title: str
     detail: str
+    title_zh: str = ""
+    detail_zh: str = ""
     measured: dict[str, str] = Field(default_factory=dict)
     rule: Optional[str] = None
+    rule_zh: Optional[str] = None
     sources: list[SourceRef] = Field(default_factory=list)
     as_of: Optional[date] = None
 
@@ -304,6 +309,12 @@ VERDICT_DISPLAY = {
     "not_supported_today": "Not Supported Today",
     "insufficiently_specified": "Insufficiently Specified",
 }
+VERDICT_DISPLAY_ZH = {
+    "supported_today": "目前证据支持",
+    "partially_supported": "部分支持",
+    "not_supported_today": "目前证据不支持",
+    "insufficiently_specified": "信息不足，无法判断",
+}
 
 
 class Verdict(BaseModel):
@@ -314,6 +325,9 @@ class Verdict(BaseModel):
     as_of: date
     rationale: list[str]
     limitations: list[str]
+    display_zh: str = ""
+    rationale_zh: list[str] = Field(default_factory=list)
+    limitations_zh: list[str] = Field(default_factory=list)
     basis: list[str]  # evidence item ids
     rules_version: str
 
@@ -324,6 +338,8 @@ class RecheckCondition(BaseModel):
     id: str
     trigger: str
     watch: str
+    trigger_zh: str = ""
+    watch_zh: str = ""
     threshold: Optional[str] = None
     linked_to: list[str] = Field(default_factory=list)  # evidence ids or input field names
 
@@ -355,6 +371,23 @@ class ProbabilityReference(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     reason: Optional[str] = None
+    assumptions_zh: list[str] = Field(default_factory=list)
+    limitations_zh: list[str] = Field(default_factory=list)
+    reason_zh: Optional[str] = None
+
+
+class Sensitivity(BaseModel):
+    """Required yearly growth of the valuation metric for alternative multiples (rows) and horizons (columns)."""
+
+    metric: str
+    base_value: DecimalStr
+    base_label: str
+    multiples: list[str]
+    horizons: list[str]
+    required_cagr: list[list[Optional[str]]]
+    assumed_multiple: str
+    assumed_horizon: str
+    reported_cagr: Optional[str] = None
 
 
 class ReferenceSuggestion(BaseModel):
@@ -371,6 +404,10 @@ class ReferenceSnapshot(BaseModel):
     revenue_suggestion: Optional[ReferenceSuggestion] = None
     net_income_suggestion: Optional[ReferenceSuggestion] = None
     period_suggestion: Optional[ReferenceSuggestion] = None
+    # default assumptions offered when the user leaves them empty; shown and confirmed like any input
+    assumption_suggestions: dict[str, ReferenceSuggestion] = Field(default_factory=dict)
+    current_ps: Optional[DecimalStr] = None
+    current_pe: Optional[DecimalStr] = None
     provider_errors: list[ProviderErrorRecord] = Field(default_factory=list)
     data_modes: dict[str, str] = Field(default_factory=dict)
 
@@ -398,13 +435,16 @@ class CaseResult(BaseModel):
     verdict: Optional[Verdict] = None
     recheck_conditions: list[RecheckCondition] = Field(default_factory=list)
     probability: Optional[ProbabilityReference] = None
+    sensitivity: Optional[Sensitivity] = None
     provider_errors: list[ProviderErrorRecord] = Field(default_factory=list)
     validation_issues: list[ValidationIssue] = Field(default_factory=list)
     missing_fields: list[MissingField] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    warnings_zh: list[str] = Field(default_factory=list)
     data_modes: dict[str, str] = Field(default_factory=dict)
     mixed_sources: bool = False
-    analysis_status: Literal["not_run", "deterministic_rules"] = "not_run"
+    # "not_implemented" is kept so cases saved by v0.1 still load
+    analysis_status: Literal["not_run", "deterministic_rules", "not_implemented"] = "not_run"
     disclaimer: str = (
         "TickerCase checks what a claim requires under the user's assumptions against dated public data. "
         "The verdict describes the evidence as of a date; it is not a price prediction, a guarantee or investment advice. "

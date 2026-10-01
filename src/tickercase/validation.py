@@ -28,6 +28,7 @@ from .models import (
 )
 
 TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
+YEAR_RE = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|21\d{2})(?!\d)")
 CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 
 CORE_FIELDS: dict[str, str] = {
@@ -123,7 +124,7 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
     norm = normalized_draft(draft)
     issues: list[ValidationIssue] = []
     missing: list[MissingField] = []
-    warnings: list[str] = []
+    warnings: list[tuple[str, str]] = []  # (English, Chinese)
 
     for name, label in CORE_FIELDS.items():
         if norm[name] is None:
@@ -166,7 +167,8 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
         issues.append(ValidationIssue(field="probability_volatility", code="out_of_range", message="probability_volatility is a yearly rate at most 3 (0.35 = 35%)"))
         prob_vol = None
     if prob_vol is not None and norm["probability_drift"] is None:
-        warnings.append("probability_volatility is set but probability_drift is empty; the probability reference is only computed when a drift is given")
+        warnings.append(("probability_volatility is set but probability_drift is empty; the probability reference is only computed when a drift is given",
+                         "填了波动率但没有填漂移率；只有填写漂移率才会计算概率参考"))
 
     sources = draft.field_sources or {}
     unknown = sorted(k for k in sources if k not in ClaimDraft.model_fields or k == "field_sources")
@@ -208,7 +210,7 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
             )
         )
     if norm["base_annual_metric"] is not None and norm["base_metric_period"] is None:
-        warnings.append("base_metric_period is empty; record which fiscal year the base metric covers")
+        warnings.append(("base_metric_period is empty; record which fiscal year the base metric covers", "基期期间为空；请注明基期指标对应的财年"))
     if norm["filings_since"] is None:
         missing.append(
             MissingField(
@@ -219,14 +221,17 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
             )
         )
     if norm["reference_price_source"] is None and norm["reference_price"] is not None:
-        warnings.append("reference_price_source is empty; the reference price is a manual value with no recorded source")
+        warnings.append(("reference_price_source is empty; the reference price is a manual value with no recorded source", "参考价来源为空；参考价是没有记录来源的手动值"))
     if currency is not None and currency != "USD" and CURRENCY_RE.match(currency):
-        warnings.append("SEC XBRL amounts are compared in USD only; with another currency the evidence checks report missing data")
+        warnings.append(("SEC XBRL amounts are compared in USD only; with another currency the evidence checks report missing data",
+                         "SEC XBRL 金额只按美元比较；其他币种下证据检查会显示缺失"))
+    warnings.extend(_claim_year_warnings(norm["claim_text"], numbers.get("horizon_years"), today))
 
     fp = fingerprint(draft)
     blocking_missing = any(m.blocking for m in missing)
+    warn_en, warn_zh = [w[0] for w in warnings], [w[1] for w in warnings]
     if issues or blocking_missing:
-        return ValidationResult(ok=False, issues=issues, missing_fields=missing, warnings=warnings, fingerprint=fp)
+        return ValidationResult(ok=False, issues=issues, missing_fields=missing, warnings=warn_en, warnings_zh=warn_zh, fingerprint=fp)
 
     claim = ValidatedClaim(
         claim_text=norm["claim_text"],
@@ -249,7 +254,25 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
         probability_volatility=prob_vol,
         field_sources={k: v.strip() for k, v in sources.items() if isinstance(v, str) and v.strip() and norm.get(k) is not None},
     )
-    return ValidationResult(ok=True, claim=claim, issues=[], missing_fields=missing, warnings=warnings, fingerprint=fp)
+    return ValidationResult(ok=True, claim=claim, issues=[], missing_fields=missing, warnings=warn_en, warnings_zh=warn_zh, fingerprint=fp)
+
+
+def _claim_year_warnings(text: Optional[str], horizon: Optional[Decimal], today: date) -> list[tuple[str, str]]:
+    """Flag a year in the claim text that is already past or does not match the horizon."""
+    if not text:
+        return []
+    years = [int(y) for y in YEAR_RE.findall(text)]
+    if not years:
+        return []
+    year = max(years)
+    if year <= today.year:
+        return [(f"the claim text mentions {year}, which is not in the future; TickerCase checks claims about a future date",
+                 f"观点原文提到 {year} 年，这个时间已经不在未来；TickerCase 用来核验关于未来某个时间的观点")]
+    ahead = Decimal(year - today.year)
+    if horizon is not None and abs(horizon - ahead) > 1:
+        return [(f"the claim text mentions {year} (about {ahead} years ahead) but the horizon is {horizon} years",
+                 f"观点原文提到 {year} 年（约 {ahead} 年后），但时间范围填的是 {horizon} 年")]
+    return []
 
 
 class ConfirmationError(ValueError):

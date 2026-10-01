@@ -280,11 +280,13 @@ class SecFilingProvider(Provider):
                 }
             )
         span = f"{earliest} to {latest}" if earliest else "no dated rows"
+        span_zh = f"{earliest} 至 {latest}" if earliest else "没有带日期的记录"
         if since is None:
             return CoverageInfo(
                 requested_since=None, recent_earliest_filing_date=earliest, recent_latest_filing_date=latest,
                 recent_row_count=len(dates), coverage_gap=False, older_files=older,
                 message=f"No requested start date, so coverage was not checked. Parsed recent block: {span}.",
+                message_zh=f"未填写检索起始日，未检查覆盖范围。已解析的近期记录：{span_zh}。",
             )
         before_recent = earliest is None or since < earliest
         if before_recent and older:
@@ -297,6 +299,10 @@ class SecFilingProvider(Provider):
                     f"SEC lists {len(older)} older submission file(s) that were not fetched, so filings before "
                     f"{earliest or 'the recent block'} were not checked."
                 ),
+                message_zh=(
+                    f"覆盖缺口：检索起始日为 {since}，但已解析的近期记录只覆盖 {span_zh}。SEC 另列有 {len(older)} 个更早的申报文件未读取，"
+                    f"因此 {earliest or '近期记录'} 之前的申报没有检查。"
+                ),
             )
         if before_recent:
             return CoverageInfo(
@@ -306,9 +312,11 @@ class SecFilingProvider(Provider):
                     f"The requested window starts {since}; the SEC response covers {span} and lists no older "
                     f"submission files. Nothing earlier was returned by this source."
                 ),
+                message_zh=f"检索起始日为 {since}；SEC 返回的记录覆盖 {span_zh}，且没有列出更早的申报文件。",
             )
         return CoverageInfo(
             requested_since=since, recent_earliest_filing_date=earliest, recent_latest_filing_date=latest,
             recent_row_count=len(dates), coverage_gap=False, older_files=older,
             message=f"The requested window from {since} lies inside the parsed recent block ({span}).",
+            message_zh=f"从 {since} 开始的检索范围在已解析的近期记录内（{span_zh}）。",
         )

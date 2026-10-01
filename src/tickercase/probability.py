@@ -32,6 +32,15 @@ LIMITATIONS = [
 ]
 
 
+LIMITATIONS_ZH = [
+    "漂移率和波动率恒定；真实价格会跳空、有厚尾，波动率也会变化。",
+    "历史波动率只描述过去的区间，不是预测。",
+    "漂移率是你的假设，结果对它非常敏感。",
+    "不是市场隐含概率：没有使用期权价格或预测市场价格。",
+    "作为参考放在案例旁边，不改变结论，也不是价格预测。",
+]
+
+
 def prob_at_or_above(spot: float, level: float, drift: float, vol: float, years: float) -> float:
     if level <= 0:
         return 1.0
@@ -62,7 +71,9 @@ def probability_reference(claim: ValidatedClaim, market: Optional[MarketSnapshot
             drift=claim.probability_drift,
             horizon_years=claim.horizon_years,
             reason="no volatility: enter one, or run with a data mode that returns price history",
+            reason_zh="没有波动率：请填写波动率，或使用能返回历史价格的数据模式",
             limitations=LIMITATIONS,
+            limitations_zh=LIMITATIONS_ZH,
         )
 
     spot, drift, vol, years = float(claim.reference_price), float(claim.probability_drift), float(vol_dec), float(claim.horizon_years)
@@ -88,4 +99,11 @@ def probability_reference(claim: ValidatedClaim, market: Optional[MarketSnapshot
             f"T = {claim.horizon_years} years (confirmed horizon)",
         ],
         limitations=LIMITATIONS,
+        assumptions_zh=[
+            f"S_0 = 已确认参考价 {claim.reference_price}（{claim.reference_price_date}）",
+            f"漂移率 μ = 每年 {claim.probability_drift}（你的假设）",
+            f"波动率 σ = 每年 {vol_dec}（{'你的假设' if vol_source == 'user assumption' else '历史波动率'}）",
+            f"T = {claim.horizon_years} 年（已确认的时间范围）",
+        ],
+        limitations_zh=LIMITATIONS_ZH,
     )

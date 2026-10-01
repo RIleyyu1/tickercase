@@ -6,7 +6,7 @@ It does **not** trade, manage portfolios, predict prices or give investment advi
 
 ## Flow (UC.1)
 
-1. Enter the claim and structured assumptions (page form, API or JSON file). The page can prefill reference values (latest close, reported shares, latest annual revenue / net income) from public data; you still review them. (OA.1, OA.4)
+1. Enter the claim: text, ticker, target price, horizon. On the page, "Fill in the rest" adds reference values from public data (latest close, reported shares, latest annual revenue / net income) and default assumptions for empty fields (target shares = current shares, multiple = today's multiple). Every filled value is visible and labelled with its source. (OA.1, OA.4)
 2. Confirm. The confirmation is bound to a SHA-256 fingerprint of the exact inputs; any edit makes it stale. (OA.5)
 3. Deterministic calculation (`Decimal`, no network). (OA.8)
 4. Public evidence: SEC filings, SEC XBRL financial facts, daily prices. (OA.6, OA.7, OA.9)
@@ -30,7 +30,9 @@ Page:
 streamlit run app.py
 ```
 
-In the sidebar click "合成示例 · P/S" (or P/E), then "确认以上输入", then "运行评估". The examples use the fictional company `SYNT` and synthetic data. For a real company choose `live`, enter a ticker, click "带入公开数据", check the values and assumptions, confirm and run.
+The page is in Chinese and English (switch in the sidebar). In the sidebar click "合成示例 · P/S" (or P/E), then "确认以上输入", then "运行评估". The examples use the fictional company `SYNT` and synthetic data.
+
+For a real company choose `live`. If no SEC contact is configured, the sidebar asks for an email and saves `SEC_USER_AGENT` to the local `.env`. Fill in the claim box, click "补全其余项" (Fill in the rest), check the values and default assumptions, confirm and run. After a run the inputs collapse into a one-line summary above the case. Past cases are listed under "历史 · History", where two or more can be compared side by side.
 
 API:
 
@@ -61,7 +63,11 @@ python -m tickercase.cli run examples/synthetic_claim_ps.json --sec-mode synthet
 | `filings_since` | optional | start of the filing window; enables the coverage check |
 | `probability_drift` | optional extra | yearly drift assumption, between -1 and 1; enables the probability section |
 | `probability_volatility` | optional extra | yearly volatility, > 0 and <= 3; defaults to historical volatility |
-| `field_sources` | set by prefill | field -> public source; recorded as provenance while the value is unchanged |
+| `field_sources` | set by prefill | field -> public source, or `default_assumption:...` for a default; recorded as provenance while the value is unchanged |
+
+Which inputs matter most: the claim gives the ticker, target price and horizon. Reference price, current shares and base metric are facts the page fills from public data. The valuation multiple and the target share count are assumptions the claim usually leaves open, and they drive the result: the required revenue or net income scales with 1 / multiple and with the share count. The defaults (today's multiple, today's share count) mean "no re-rating, no dilution"; the sensitivity table shows how the requirement moves when they change.
+
+A year in the claim text that is already past, or that disagrees with the horizon by more than a year, produces a warning.
 
 Rejected: missing core fields, non-numbers, NaN, Infinity, non-positive prices/multiples/shares/horizon, future dates, and a base-metric currency different from the price currency (no FX conversion is applied). Nothing is filled in silently: prefilled values are visible, labelled with their source and confirmed like any other input.
 
@@ -121,6 +127,10 @@ Verdict:
 - **Supported Today** – E1 supporting and no check contrary.
 - **Partially Supported** – every other case.
 
+Time base: required growth runs from the end of the latest reported fiscal year to the target date (reference date + horizon), so the months already passed since that fiscal year end are counted. Share-count changes use the same rule.
+
+Sensitivity: the result includes the required yearly growth of the valuation metric for multiples at 0.5x–2x the assumed one and horizons from h-2 to h+5 years, marked against the reported growth with the E1 thresholds.
+
 Recheck conditions link to the check or input they come from: next annual metric below the required path (R1), share count above the assumed path (R2), today's multiple falling far below the assumption (R3), the next 10-Q / 10-K (R4), each missing item (R-Ex), and any change to a confirmed assumption (R9).
 
 The thresholds are provisional engineering choices. The Business or Mission Analysis leaves quantitative verdict thresholds to team validation; change them in `src/tickercase/analysis.py` and its docstring together. Synthetic examples: the P/S example gives Partially Supported, the P/E example Not Supported Today.
@@ -131,7 +141,7 @@ With `probability_drift` set, the result includes P(price at the horizon >= leve
 
 ## Result shape (`CaseResult`)
 
-`case_id`, `created_at`, `status`, `input_fingerprint`, `confirmed_claim` (values, fingerprint, `confirmed_at`, per-field provenance), `calculations[]`, `evidence_records[]` (filings), `coverage`, `reported_facts`, `market`, `evidence_items[]`, `verdict` (label, display, as_of, rationale, limitations, basis, rules_version), `recheck_conditions[]`, `probability`, `provider_errors[]`, `validation_issues[]`, `missing_fields[]`, `warnings[]`, `data_modes`, `mixed_sources`, `analysis_status`, `disclaimer`. Example outputs: `examples/output_synthetic_ps.json`, `examples/output_synthetic_pe.json`.
+`case_id`, `created_at`, `status`, `input_fingerprint`, `confirmed_claim` (values, fingerprint, `confirmed_at`, per-field provenance), `calculations[]`, `evidence_records[]` (filings), `coverage`, `reported_facts`, `market`, `evidence_items[]`, `verdict` (label, display, as_of, rationale, limitations, basis, rules_version), `recheck_conditions[]`, `probability`, `sensitivity`, `provider_errors[]`, `validation_issues[]`, `missing_fields[]`, `warnings[]`, `warnings_zh[]`, `data_modes`, `mixed_sources`, `analysis_status`, `disclaimer`. Evidence items, verdict, recheck conditions, coverage and probability texts carry a `_zh` Chinese counterpart next to each English field. Example outputs: `examples/output_synthetic_ps.json`, `examples/output_synthetic_pe.json`.
 
 Statuses: `evaluated`, `evaluated_with_provider_errors`, `blocked_invalid_input` (HTTP 422), `blocked_unconfirmed` and `blocked_confirmation_stale` (HTTP 409). Cases are stored as JSON in `TICKERCASE_CASE_DIR` (default `data/cases`, git-ignored).
 

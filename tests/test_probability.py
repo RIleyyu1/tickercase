@@ -59,3 +59,27 @@ def test_field_sources_validated_and_part_of_fingerprint():
     assert fingerprint(a) != fingerprint(b)
     ok = validate_draft(a, today=FIXED_TODAY)
     assert ok.claim.field_sources == {"reference_price": "src A"}
+
+
+def test_claim_year_warnings():
+    past = validate_draft(ps_draft(claim_text="TSLA 在2020年股价达到1000一股", horizon_years="4"), today=FIXED_TODAY)
+    assert any("2020" in w and "not in the future" in w for w in past.warnings)
+    assert any("2020" in w for w in past.warnings_zh)
+    mismatch = validate_draft(ps_draft(claim_text="SYNT hits $100 by 2035", horizon_years="5"), today=FIXED_TODAY)
+    assert any("2035" in w and "horizon" in w for w in mismatch.warnings)
+    ok = validate_draft(ps_draft(claim_text="SYNT hits $100 by 2031", horizon_years="5"), today=FIXED_TODAY)
+    assert not any("2031" in w for w in ok.warnings)
+
+
+def test_write_env_value_updates_one_line(tmp_path):
+    from tickercase.config import read_dotenv, write_env_value
+
+    env = tmp_path / ".env"
+    env.write_text("# comment\nSEC_USER_AGENT=old\nOTHER=1\n", encoding="utf-8")
+    write_env_value("SEC_USER_AGENT", "TickerCase/0.2 me@example.org", path=env)
+    values = read_dotenv(env)
+    assert values == {"SEC_USER_AGENT": "TickerCase/0.2 me@example.org", "OTHER": "1"}
+    assert env.read_text(encoding="utf-8").startswith("# comment\n")
+    import pytest
+    with pytest.raises(ValueError):
+        write_env_value("SEC_USER_AGENT", "bad\nvalue", path=env)

@@ -1,6 +1,7 @@
-"""TickerCase Streamlit page (UC.1): claim and assumptions -> confirm -> investment case.
+"""TickerCase Streamlit page (UC.1): claim -> public data and default assumptions -> confirm -> investment case.
 
 Run: streamlit run app.py
+Chinese and English; the language switch is in the sidebar.
 """
 
 from __future__ import annotations
@@ -14,69 +15,160 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from tickercase.config import REPO_ROOT, load_settings
-from tickercase.models import CaseResult, ClaimDraft, Confirmation, EvidenceItem, ReferenceSnapshot
-from tickercase.service import CaseService
+from tickercase.config import REPO_ROOT, load_settings, write_env_value
+from tickercase.http_client import validate_user_agent
+from tickercase.models import VERDICT_DISPLAY_ZH, CaseResult, ClaimDraft, Confirmation, EvidenceItem, ReferenceSnapshot
+from tickercase.service import DEFAULT_PREFIX, CaseService
 from tickercase.storage import CaseStore
 from tickercase.validation import ConfirmationError, confirm, confirmation_state, fingerprint, validate_draft
 
-# ------------------------------------------------------------------ field layout
+# ------------------------------------------------------------------ text
 
-# name -> (label, placeholder, help)
+S = {
+    "tagline": ("把一句股票观点变成可检查的投资案例：明确假设、可复算数字、带日期的公开证据、结论和重新评估条件。",
+                "Turn a stock claim into an inspectable investment case: explicit assumptions, reproducible numbers, dated public evidence, a verdict and recheck conditions."),
+    "view": ("视图", "View"), "view_new": ("新建案例", "New case"), "view_history": ("历史案例", "Case history"),
+    "mode": ("数据模式", "Data mode"),
+    "mode_help": ("live 请求 SEC 与行情接口；synthetic 使用虚构公司 SYNT 的示例数据。", "live calls SEC and the quote source; synthetic uses the fictional company SYNT."),
+    "examples": ("示例", "Examples"), "ex_ps": ("合成示例 · P/S", "Synthetic example · P/S"), "ex_pe": ("合成示例 · P/E", "Synthetic example · P/E"),
+    "clear": ("清空", "Clear"), "no_advice": ("不执行交易，不构成投资建议。", "No trading. Not investment advice."),
+    "verdict_kinds": ("结论的四种结果", "The four verdicts"),
+    "verdict_kinds_body": (
+        "- **✔ 目前证据支持**：所需增长不高于已披露增长，且没有反对证据\n- **◐ 部分支持**：有支持，也有差距或反对项\n"
+        "- **✖ 目前证据不支持**：所需增长远高于已披露增长，或还有其他反对项\n- **? 信息不足**：核心检查缺数据，无法判断\n\n规则为 rules-v1，阈值待团队验证。",
+        "- **✔ Supported Today**: required growth is at or below reported growth and nothing is contrary\n"
+        "- **◐ Partially Supported**: some support, with gaps or contrary items\n"
+        "- **✖ Not Supported Today**: required growth far above reported growth, or other contrary items\n"
+        "- **? Insufficiently Specified**: the core check lacks data\n\nRules are rules-v1; thresholds await team validation."),
+    "sec_setup": ("SEC 联系方式", "SEC contact"),
+    "sec_missing": ("live 模式读取 SEC 数据需要联系邮箱（SEC 规定，只发送给 SEC）。填写后保存到本机 .env。",
+                    "Live SEC requests need a contact email (SEC rule; sent only to SEC). It is saved to the local .env file."),
+    "sec_email": ("你的邮箱", "Your email"), "sec_save": ("保存", "Save"),
+    "sec_saved": ("已保存。", "Saved."), "sec_ok": ("SEC 联系方式已设置", "SEC contact is set"),
+    "sec_bad": ("请输入有效邮箱。", "Enter a valid email."),
+    "s1": ("1. 观点", "1. Claim"),
+    "s1_hint": ("只需填写这一栏，然后点「补全其余项」。其余输入会用公开数据和默认假设补全，你核对后确认即可。",
+                "Fill in this box only, then click “Fill in the rest”. The other inputs are filled from public data and default assumptions for you to check."),
+    "prefill": ("补全其余项", "Fill in the rest"),
+    "prefill_help": ("按股票代码读取收盘价、SEC 披露的股份数和年度营收/净利润；空着的假设用默认值（目标期股份数 = 当前股份数，估值倍数 = 当前倍数）。",
+                     "Reads the latest close, SEC-reported shares and annual revenue / net income; empty assumptions get defaults (target shares = current shares, multiple = today's multiple)."),
+    "need_ticker": ("先填写股票代码。", "Enter a ticker first."),
+    "filled": ("已补全 {n} 项。", "Filled {n} fields."),
+    "defaults_used": ("默认假设：{items}。它们对结果影响很大，可在下方修改，并参考「计算」页的敏感性表。",
+                      "Default assumptions: {items}. They drive the result; change them below and see the sensitivity table on the Calculations tab."),
+    "not_fetched": ("未取到：{errors}", "Not fetched: {errors}"),
+    "nothing_fetched": ("没有取到公开数据。{errors}", "No public data fetched. {errors}"),
+    "rest": ("2. 其余输入（价格、股本、估值假设）", "2. Other inputs (price, shares, valuation assumptions)"),
+    "price_box": ("价格与股本", "Price and shares"), "val_box": ("估值", "Valuation"),
+    "extra_box": ("证据范围与附加项", "Evidence window and extras"),
+    "prob_note": ("价格概率参考是附加内容：在你设定的漂移率和波动率下，用对数正态模型估算到期价格高于各价位的概率。它不参与结论。",
+                  "The price probability is an extra: a lognormal model estimate of the price ending above each level, under your drift and volatility. It does not feed the verdict."),
+    "method": ("估值方法", "Valuation method"), "method_help": ("假设：目标日期用哪种倍数估值。", "Assumption: which multiple values the company at the target date."),
+    "missing_core": ("缺少核心输入：", "Missing core inputs: "), "optional_missing": ("可选项未填：", "Optional inputs empty: "),
+    "s3": ("3. 确认并运行", "3. Confirm and run"),
+    "confirm": ("确认以上输入", "Confirm inputs"), "run": ("运行评估", "Run case"),
+    "confirmed": ("已确认（{t} UTC）。确认绑定当前全部输入，修改任何一项都需要重新确认。",
+                  "Confirmed ({t} UTC). The confirmation covers every current input; any edit needs a new confirmation."),
+    "stale": ("确认后输入已修改，原确认失效，请重新确认。", "Inputs changed after confirmation; confirm again."),
+    "unconfirmed": ("尚未确认。请核对输入，尤其是标为假设的项目。", "Not confirmed yet. Check the inputs, especially the assumptions."),
+    "invalid_confirm": ("输入无效或缺少核心字段，未确认。", "Inputs are invalid or incomplete; not confirmed."),
+    "spinner": ("正在读取公开数据并评估……", "Reading public data and evaluating…"),
+    "run_failed": ("运行失败：", "Run failed: "),
+    "hidden": ("已有结果对应修改前的输入或数据模式，已隐藏。请重新确认并运行。", "The previous result belongs to older inputs or another data mode and is hidden. Confirm and run again."),
+    "edit_inputs": ("修改输入", "Edit inputs"),
+    "case": ("投资案例", "Investment case"),
+    "as_of": ("证据截至 {d} · {r} · 描述当日的证据状态，不是价格预测", "Evidence as of {d} · {r} · describes the evidence on that date; not a price prediction"),
+    "notes": ("提示（{n}）", "Notes ({n})"),
+    "tabs": (["结论与依据", "证据", "计算", "公开数据", "概率参考（附加）", "运行记录"],
+             ["Verdict", "Evidence", "Calculations", "Public data", "Probability (extra)", "Run log"]),
+    "rationale": ("判断依据", "Rationale"), "rechecks": ("何时需要重新评估", "When to review again"),
+    "watch": ("观察：", "Watch: "), "threshold": ("阈值：", "Threshold: "), "linked": ("关联：", "Linked to: "),
+    "limits": ("这个结论的限制", "Limits of this verdict"),
+    "rule": ("规则：", "Rule: "), "sources": ("来源与数值", "Sources and values"),
+    "calc_note": ("全部基于你确认的输入与假设，Decimal 精确计算，与网络数据无关。", "Based only on your confirmed inputs and assumptions; exact Decimal arithmetic, no network data."),
+    "provenance": ("输入值来源", "Where each input came from"),
+    "sens": ("敏感性：不同估值倍数和时间范围下的所需年增速", "Sensitivity: required yearly growth for other multiples and horizons"),
+    "sens_note": ("行是估值倍数，列是时间范围（年）。基数：{b}。符号对比已披露增速 {h}：✔ 不高于，◐ 高出不超过 5 个百分点，✖ 高出更多。加粗为你的假设。",
+                  "Rows are multiples, columns are horizons (years). Base: {b}. Symbols compare with reported growth {h}: ✔ at or below, ◐ up to 5 pp above, ✖ more. Bold marks your assumption."),
+    "sens_none": ("没有可用的基期数值，无法计算敏感性。", "No base value available, so no sensitivity table."),
+    "facts_title": ("SEC 已披露财务数据", "SEC reported financials"), "data_table": ("数据表", "Data table"),
+    "price_title": ("股价历史", "Price history"), "filings_title": ("SEC 申报记录", "SEC filings"),
+    "filings_note": ("申报记录只有元数据，本版本不读取正文。", "Filing records are metadata only; documents are not read in this version."),
+    "no_public": ("本次没有取到公开数据，见「运行记录」中的数据错误。", "No public data in this run; see data errors in the run log."),
+    "prob_extra": ("附加内容：模型输出，不参与结论，也不是价格预测。", "Extra: a model output; not part of the verdict and not a price prediction."),
+    "prob_off": ("未计算。在「证据范围与附加项」里填写年化漂移率 μ（例如 0.07），确认后重新运行即可。",
+                 "Not computed. Enter a yearly drift μ (e.g. 0.07) under “Evidence window and extras”, confirm and run again."),
+    "prob_na": ("无法计算：", "Not computable: "),
+    "assumptions": ("假设", "Assumptions"), "limitations": ("限制", "Limitations"),
+    "data_errors": ("数据错误", "Data errors"), "missing_items": ("缺失项", "Missing inputs"),
+    "download": ("下载结果 JSON", "Download result JSON"),
+    "history_empty": ("还没有保存的案例。", "No saved cases yet."),
+    "history_hint": ("选一行查看完整案例；选两行或更多进行对比。", "Select one row to open a case; select two or more to compare."),
+    "compare": ("对比", "Comparison"),
+}
 FIELD_META = {
-    "claim_text": ("观点原文", "例如：SYNT 五年后股价达到 100 美元", "要核验的原始说法，原样记录。"),
-    "ticker": ("股票代码", "AAPL", "美股代码；SEC 和行情数据都按此代码查询。"),
-    "currency": ("币种", "USD", "3 位 ISO 代码。SEC 财务数据按 USD 比较。"),
-    "target_price": ("目标价", "100", "观点给出的目标价格。"),
-    "horizon_years": ("时间范围（年）", "5", "假设：观点在多少年后兑现，可填小数。"),
-    "reference_price": ("参考价", "50", "参考值：当前或某日的股价。可用「带入公开数据」获取。"),
-    "reference_price_date": ("参考价日期", "YYYY-MM-DD", "参考价对应的交易日。"),
-    "reference_price_source": ("参考价来源", "例如：收盘价截图", "记录参考价从哪里来。"),
-    "current_shares": ("当前股份数（可选）", "95000000", "参考值：最近一次披露的流通股数。"),
-    "target_assumed_shares": ("目标期股份数", "100000000", "假设：目标日期的股份数，与当前股份数分开填写。"),
-    "valuation_multiple": ("估值倍数", "25", "假设：目标日期的 P/S 或 P/E 倍数。"),
-    "base_annual_metric": ("基期年度指标（可选）", "200000000", "参考值：P/S 填年营收，P/E 填年净利润。"),
-    "base_metric_currency": ("基期指标币种（可选）", "USD", "须与价格币种一致，不做汇率换算。"),
-    "base_metric_period": ("基期期间（可选）", "FY2025", "基期指标对应的财年。"),
-    "filings_since": ("申报检索起始日（可选）", "YYYY-MM-DD", "检查 SEC 申报覆盖范围的起点。"),
-    "probability_drift": ("年化漂移率 μ（假设）", "0.07", "附加项：年化预期收益假设，0.07 = 7%。留空则不计算概率参考。"),
-    "probability_volatility": ("年化波动率 σ（可选）", "留空则用历史波动率", "附加项：留空时使用行情数据计算的历史波动率。"),
+    # name: (zh label, en label, placeholder, zh help, en help)
+    "claim_text": ("观点原文", "Claim", "例如：SYNT 五年后股价达到 100 美元", "要核验的原始说法，原样记录。", "The claim as stated, recorded verbatim."),
+    "ticker": ("股票代码", "Ticker", "AAPL", "美股代码。", "US ticker."),
+    "target_price": ("目标价", "Target price", "100", "观点给出的目标价格。", "The price the claim names."),
+    "horizon_years": ("时间范围（年）", "Horizon (years)", "5", "假设：观点在多少年后兑现，可填小数。", "Assumption: years until the claim should hold; decimals allowed."),
+    "currency": ("币种", "Currency", "USD", "3 位 ISO 代码。SEC 财务数据按 USD 比较。", "3-letter ISO code. SEC amounts are compared in USD."),
+    "reference_price": ("参考价", "Reference price", "50", "参考值：当前或某日的股价。", "Reference value: the price on a date."),
+    "reference_price_date": ("参考价日期", "Reference date", "YYYY-MM-DD", "参考价对应的交易日。", "Trading day of the reference price."),
+    "reference_price_source": ("参考价来源", "Reference source", "", "记录参考价从哪里来。", "Where the reference price came from."),
+    "current_shares": ("当前股份数（可选）", "Current shares (optional)", "95000000", "参考值：最近一次披露的流通股数。", "Reference value: latest reported shares."),
+    "target_assumed_shares": ("目标期股份数", "Target-date shares", "100000000", "假设：目标日期的股份数。默认等于当前股份数。", "Assumption: share count at the target date. Default: current shares."),
+    "valuation_multiple": ("估值倍数", "Valuation multiple", "25", "假设：目标日期的 P/S 或 P/E。默认等于当前倍数。", "Assumption: P/S or P/E at the target date. Default: today's multiple."),
+    "base_annual_metric": ("基期年度指标（可选）", "Base annual metric (optional)", "200000000", "参考值：P/S 填年营收，P/E 填年净利润。", "Reference value: annual revenue for P/S, net income for P/E."),
+    "base_metric_currency": ("基期指标币种（可选）", "Base metric currency (optional)", "USD", "须与价格币种一致。", "Must match the price currency."),
+    "base_metric_period": ("基期期间（可选）", "Base period (optional)", "FY2025", "基期指标对应的财年。", "Fiscal year of the base metric."),
+    "filings_since": ("申报检索起始日（可选）", "Filings since (optional)", "YYYY-MM-DD", "检查 SEC 申报覆盖范围的起点。", "Start of the SEC filing window."),
+    "probability_drift": ("年化漂移率 μ（假设）", "Yearly drift μ (assumption)", "0.07", "附加项：0.07 = 7%。留空则不计算概率参考。", "Extra: 0.07 = 7%. Leave empty to skip the probability section."),
+    "probability_volatility": ("年化波动率 σ（可选）", "Yearly volatility σ (optional)", "", "附加项：留空时使用历史波动率。", "Extra: empty uses historical volatility."),
 }
 TEXT_FIELDS = list(FIELD_META)
-METHODS = {"price_to_sales": "P/S 市销率", "price_to_earnings": "P/E 市盈率"}
+CLAIM_FIELDS = ("claim_text", "ticker", "target_price", "horizon_years")
+# one label for both languages keeps the widget stable when the language changes
+METHODS = {"price_to_sales": "P/S · 市销率 price-to-sales", "price_to_earnings": "P/E · 市盈率 price-to-earnings"}
 MODE_LABELS = {
-    "live": "live：实时请求公开数据",
-    "record": "record：实时请求并录制快照",
-    "replay": "replay：只读录制快照，不联网",
-    "synthetic": "synthetic：合成示例数据",
+    "live": ("live：实时请求公开数据", "live: request public data"),
+    "record": ("record：实时请求并录制快照", "record: request and save snapshots"),
+    "replay": ("replay：只读录制快照，不联网", "replay: recorded snapshots only, offline"),
+    "synthetic": ("synthetic：合成示例数据", "synthetic: example data"),
 }
-EXAMPLES = {
-    "ps": REPO_ROOT / "examples" / "synthetic_claim_ps.json",
-    "pe": REPO_ROOT / "examples" / "synthetic_claim_pe.json",
+VIEW_LABELS = {"new": "新建 · New", "history": "历史 · History"}
+EXAMPLES = {"ps": REPO_ROOT / "examples" / "synthetic_claim_ps.json", "pe": REPO_ROOT / "examples" / "synthetic_claim_pe.json"}
+VERDICT_STYLE = {"supported_today": ("✔", "good"), "partially_supported": ("◐", "warning"),
+                 "not_supported_today": ("✖", "critical"), "insufficiently_specified": ("?", "neutral")}
+STANCE = {"supporting": ("✔", "支持", "Supporting"), "contrary": ("✖", "反对", "Contrary"),
+          "missing": ("…", "缺失", "Missing"), "neutral": ("·", "背景", "Context")}
+STATUS = {
+    "evaluated": ("已评估", "Evaluated"),
+    "evaluated_with_provider_errors": ("已评估（部分数据源失败）", "Evaluated (some sources failed)"),
+    "blocked_invalid_input": ("输入无效", "Invalid input"),
+    "blocked_unconfirmed": ("未确认", "Not confirmed"),
+    "blocked_confirmation_stale": ("确认已失效", "Confirmation stale"),
 }
-VERDICT_CN = {
-    "supported_today": ("目前证据支持", "✔", "good"),
-    "partially_supported": ("部分支持", "◐", "warning"),
-    "not_supported_today": ("目前证据不支持", "✖", "critical"),
-    "insufficiently_specified": ("信息不足，无法判断", "?", "neutral"),
+CALC = {
+    "required_return": ("所需总收益", "Required total return"),
+    "annualized_price_return": ("所需年化收益", "Required yearly return"),
+    "target_market_cap": ("目标市值", "Target market cap"),
+    "implied_share_count_change": ("股份数变化", "Share count change"),
+    "required_annual_revenue": ("所需年营收", "Required annual revenue"),
+    "required_annual_net_income": ("所需年净利润", "Required annual net income"),
+    "required_metric_cagr": ("所需指标年增速（相对你填写的基期）", "Required metric growth (from your base)"),
 }
-STANCE_CN = {"supporting": "支持", "contrary": "反对", "missing": "缺失", "neutral": "背景"}
-STANCE_ICON = {"supporting": "✔", "contrary": "✖", "missing": "…", "neutral": "·"}
-STATUS_CN = {
-    "evaluated": "已评估",
-    "evaluated_with_provider_errors": "已评估（部分数据源失败）",
-    "blocked_invalid_input": "输入无效",
-    "blocked_unconfirmed": "未确认",
-    "blocked_confirmation_stale": "确认已失效",
+ISSUE_ZH = {
+    "not_a_number": "{f}：不是数字", "nan_not_allowed": "{f}：不能是 NaN", "infinity_not_allowed": "{f}：不能是无穷大",
+    "must_be_positive": "{f}：必须大于 0", "invalid_date": "{f}：日期格式应为 YYYY-MM-DD", "date_in_future": "{f}：日期不能晚于今天",
+    "invalid_ticker": "{f}：格式不正确", "invalid_currency": "{f}：须为 3 位字母代码",
+    "currency_mismatch": "{f}：与价格币种不一致，不做汇率换算", "unsupported_method": "{f}：只能是 P/S 或 P/E",
+    "out_of_range": "{f}：超出允许范围", "unknown_field": "{f}：包含未知字段",
 }
-CALC_CN = {
-    "required_return": "所需总收益",
-    "annualized_price_return": "所需年化收益",
-    "target_market_cap": "目标市值",
-    "implied_share_count_change": "股份数变化",
-    "required_annual_revenue": "所需年营收",
-    "required_annual_net_income": "所需年净利润",
-    "required_metric_cagr": "所需指标年增速（相对你填写的基期）",
+MISSING_ZH = {
+    "base_annual_metric": "未填基期指标，不计算相对基期的增速",
+    "base_metric_currency": "未填基期币种，不计算相对基期的增速",
+    "filings_since": "未填检索起始日，不检查申报覆盖范围",
 }
 
 CSS = """
@@ -94,6 +186,27 @@ CSS = """
 .tc-step.now {opacity: 1; border-color: #2a78d6; font-weight: 600;}
 </style>
 """
+
+
+def lang() -> str:
+    return st.session_state.get("lang", "zh")
+
+
+def t(key: str, **kw) -> str:
+    zh, en = S[key]
+    text = zh if lang() == "zh" else en
+    return text.format(**kw) if kw else text
+
+
+def pick(en: str, zh: str) -> str:
+    return zh if lang() == "zh" and zh else en
+
+
+def label_of(name: str) -> str:
+    meta = FIELD_META.get(name)
+    if meta is None:
+        return name
+    return meta[0] if lang() == "zh" else meta[1]
 
 
 def series_color() -> str:
@@ -123,10 +236,22 @@ def fmt_pct(value: Optional[Decimal]) -> str:
 
 def fmt_calc(item) -> str:
     if item.value is None:
-        return "无法计算"
+        return "无法计算" if lang() == "zh" else "not computable"
     if item.unit.startswith("ratio"):
         return fmt_pct(item.value)
     return fmt_amount(item.value, item.unit.split(" ")[0])
+
+
+def issue_text(issue) -> str:
+    if lang() == "zh" and issue.code in ISSUE_ZH:
+        return ISSUE_ZH[issue.code].format(f=label_of(issue.field))
+    return f"`{issue.field}` {issue.code}: {issue.message}"
+
+
+def missing_text(m) -> str:
+    if lang() == "zh":
+        return f"{label_of(m.field)}（{MISSING_ZH.get(m.field, m.message)}）"
+    return f"{label_of(m.field)} ({m.message})"
 
 
 # ------------------------------------------------------------------ state
@@ -143,7 +268,9 @@ def _init_state() -> None:
         st.session_state.setdefault(f"f_{name}", "")
     st.session_state.setdefault("f_valuation_method", "price_to_sales")
     st.session_state.setdefault("sec_mode", "live")
-    for key in ("confirmation", "confirm_feedback", "result", "result_mode", "run_error", "prefill_msg", "prefill_snapshot"):
+    st.session_state.setdefault("lang", "zh")
+    st.session_state.setdefault("view", "new")
+    for key in ("confirmation", "confirm_feedback", "result", "result_mode", "run_error", "prefill_msg", "prefill_snapshot", "sec_msg"):
         st.session_state.setdefault(key, None)
     st.session_state.setdefault("prefill_sources", {})
 
@@ -159,6 +286,7 @@ def _load_example(key: str) -> None:
         st.session_state[f"f_{name}"] = str(draft.get(name) or "")
     st.session_state["f_valuation_method"] = draft["valuation_method"]
     st.session_state["sec_mode"] = "synthetic"
+    st.session_state["view"] = "new"
     st.session_state["prefill_sources"] = {}
     st.session_state["prefill_msg"] = None
     _reset_confirmation()
@@ -178,56 +306,101 @@ def _metric_suggestion(snap: ReferenceSnapshot, method: str):
     return snap.revenue_suggestion if method == "price_to_sales" else snap.net_income_suggestion
 
 
+def _multiple_suggestion(snap: ReferenceSnapshot, method: str):
+    return snap.assumption_suggestions.get("valuation_multiple_ps" if method == "price_to_sales" else "valuation_multiple_pe")
+
+
+def _is_untouched(name: str) -> bool:
+    """Empty, or still holding the value the prefill put there."""
+    current = st.session_state.get(f"f_{name}", "")
+    src = st.session_state["prefill_sources"].get(name)
+    return not current.strip() or (src is not None and current == src[0])
+
+
+def _apply(name: str, sug, sources: dict) -> None:
+    st.session_state[f"f_{name}"] = sug.value
+    sources[name] = (sug.value, sug.source)
+
+
 def _prefill() -> None:
     ticker = st.session_state["f_ticker"].strip()
     if not ticker:
-        st.session_state["prefill_msg"] = ("error", "先填写股票代码。")
+        st.session_state["prefill_msg"] = ("error", S["need_ticker"])
         return
     try:
         snap = get_service().reference_snapshot(ticker, mode=st.session_state["sec_mode"])
     except ValueError as exc:
-        st.session_state["prefill_msg"] = ("error", str(exc))
+        st.session_state["prefill_msg"] = ("error", (str(exc), str(exc)))
         return
-    sources: dict[str, tuple[str, str]] = {}
-    for name, sug in snap.suggestions.items():
+    sources: dict[str, tuple[str, str]] = dict(st.session_state["prefill_sources"])
+    method = st.session_state["f_valuation_method"]
+    for name, sug in snap.suggestions.items():  # public reference values are refreshed
         if f"f_{name}" in st.session_state:
-            st.session_state[f"f_{name}"] = sug.value
-            sources[name] = (sug.value, sug.source)
-    metric = _metric_suggestion(snap, st.session_state["f_valuation_method"])
+            _apply(name, sug, sources)
+    metric = _metric_suggestion(snap, method)
     if metric is not None:
-        st.session_state["f_base_annual_metric"] = metric.value
-        sources["base_annual_metric"] = (metric.value, metric.source)
+        _apply("base_annual_metric", metric, sources)
     if snap.period_suggestion is not None:
-        st.session_state["f_base_metric_period"] = snap.period_suggestion.value
-        sources["base_metric_period"] = (snap.period_suggestion.value, snap.period_suggestion.source)
+        _apply("base_metric_period", snap.period_suggestion, sources)
     st.session_state["prefill_sources"] = sources
+    defaults = []
+    for name, sug in (("target_assumed_shares", snap.assumption_suggestions.get("target_assumed_shares")),
+                      ("valuation_multiple", _multiple_suggestion(snap, method)),
+                      ("filings_since", snap.assumption_suggestions.get("filings_since"))):
+        if sug is not None and _is_untouched(name):  # assumptions only fill empty fields
+            _apply(name, sug, sources)
+            if name != "filings_since":
+                defaults.append((name, sug.value))
     st.session_state["prefill_snapshot"] = snap
-    names = "、".join(FIELD_META[n][0] for n in sources if n in FIELD_META)
-    errors = "；".join(f"{e.provider_id}: {e.code}" for e in snap.provider_errors)
-    if sources:
-        msg = f"已带入 {len(sources)} 项（{names}）。这些是参考值，请核对后再确认。"
-        st.session_state["prefill_msg"] = ("warning" if errors else "success", msg + (f" 未取到：{errors}" if errors else ""))
+    errors = "; ".join(f"{e.provider_id}: {e.code}" for e in snap.provider_errors)
+    n = len(sources)
+    if not sources:
+        st.session_state["prefill_msg"] = ("error", (S["nothing_fetched"][0].format(errors=errors), S["nothing_fetched"][1].format(errors=errors)))
     else:
-        st.session_state["prefill_msg"] = ("error", f"没有取到公开数据。{errors}")
+        zh = S["filled"][0].format(n=n)
+        en = S["filled"][1].format(n=n)
+        if defaults:
+            items_zh = "；".join(f"{FIELD_META[k][0]} = {v}" for k, v in defaults)
+            items_en = "; ".join(f"{FIELD_META[k][1]} = {v}" for k, v in defaults)
+            zh += " " + S["defaults_used"][0].format(items=items_zh)
+            en += " " + S["defaults_used"][1].format(items=items_en)
+        if errors:
+            zh += " " + S["not_fetched"][0].format(errors=errors)
+            en += " " + S["not_fetched"][1].format(errors=errors)
+        st.session_state["prefill_msg"] = ("warning" if errors else "success", (zh, en))
     _reset_confirmation()
 
 
 def _method_changed() -> None:
-    """Keep a prefilled base metric consistent with the valuation method."""
+    """Keep the prefilled base metric and default multiple consistent with the valuation method."""
     snap: Optional[ReferenceSnapshot] = st.session_state.get("prefill_snapshot")
     sources = st.session_state["prefill_sources"]
-    if snap is None or "base_annual_metric" not in sources:
+    if snap is None:
         return
-    old_value, _ = sources["base_annual_metric"]
-    if st.session_state["f_base_annual_metric"] != old_value:
-        return  # user edited it; leave it alone
-    metric = _metric_suggestion(snap, st.session_state["f_valuation_method"])
-    if metric is None:
-        st.session_state["f_base_annual_metric"] = ""
-        sources.pop("base_annual_metric")
-    else:
-        st.session_state["f_base_annual_metric"] = metric.value
-        sources["base_annual_metric"] = (metric.value, metric.source)
+    method = st.session_state["f_valuation_method"]
+    for name, sug in (("base_annual_metric", _metric_suggestion(snap, method)), ("valuation_multiple", _multiple_suggestion(snap, method))):
+        if name not in sources or st.session_state[f"f_{name}"] != sources[name][0]:
+            continue  # empty or edited by the user; leave it alone
+        if sug is None:
+            st.session_state[f"f_{name}"] = ""
+            sources.pop(name)
+        else:
+            _apply(name, sug, sources)
+
+
+def _save_sec_contact() -> None:
+    email = st.session_state.get("sec_email_input", "").strip()
+    ua = f"TickerCase/0.2 {email}"
+    if not email or validate_user_agent(ua):
+        st.session_state["sec_msg"] = ("error", S["sec_bad"])
+        return
+    try:
+        write_env_value("SEC_USER_AGENT", ua)
+    except ValueError:
+        st.session_state["sec_msg"] = ("error", S["sec_bad"])
+        return
+    get_service.clear()
+    st.session_state["sec_msg"] = ("success", S["sec_saved"])
 
 
 def current_draft() -> ClaimDraft:
@@ -243,75 +416,86 @@ def current_draft() -> ClaimDraft:
 
 
 def field(name: str, container=None) -> None:
-    label, placeholder, help_text = FIELD_META[name]
+    zh, en, placeholder, help_zh, help_en = FIELD_META[name]
+    label, help_text = (zh, help_zh) if lang() == "zh" else (en, help_en)
     target = container or st
-    sources = st.session_state["prefill_sources"]
-    if name in sources and st.session_state.get(f"f_{name}") == sources[name][0]:
-        help_text = f"{help_text}\n\n已从公开数据带入：{sources[name][1]}"
-        label = f"{label} ⓘ"
+    src = st.session_state["prefill_sources"].get(name)
+    if src and st.session_state.get(f"f_{name}") == src[0]:
+        is_default = src[1].startswith(DEFAULT_PREFIX)
+        mark = "◇" if is_default else "ⓘ"
+        kind = ("默认假设" if lang() == "zh" else "Default assumption") if is_default else ("来自公开数据" if lang() == "zh" else "From public data")
+        label = f"{label} {mark}"
+        help_text = f"{help_text}\n\n{kind}：{src[1].removeprefix(DEFAULT_PREFIX)}"
     if name == "claim_text":
         target.text_area(label, key=f"f_{name}", placeholder=placeholder, help=help_text, height=80)
     else:
         target.text_input(label, key=f"f_{name}", placeholder=placeholder, help=help_text)
 
 
-def render_inputs() -> None:
+def render_claim_box() -> None:
     with st.container(border=True):
-        st.markdown("**观点**")
+        st.markdown(f"**{t('s1')}**")
+        st.caption(t("s1_hint"))
         field("claim_text")
-        c = st.columns([1.2, 0.8, 1, 1])
+        c = st.columns([1.2, 1, 1])
         field("ticker", c[0])
-        field("currency", c[1])
-        field("target_price", c[2])
-        field("horizon_years", c[3])
+        field("target_price", c[1])
+        field("horizon_years", c[2])
         b1, b2 = st.columns([1, 3])
-        b1.button("带入公开数据", key="btn_prefill", on_click=_prefill, help="按股票代码读取最新收盘价、SEC 披露的股份数和最近年度营收/净利润，填入下方参考值。")
+        b1.button(t("prefill"), key="btn_prefill", on_click=_prefill, help=t("prefill_help"), type="primary", use_container_width=True)
         msg = st.session_state["prefill_msg"]
         if msg:
-            {"success": b2.success, "warning": b2.warning, "error": b2.error}[msg[0]](msg[1])
+            kind, (zh, en) = msg
+            {"success": b2.success, "warning": b2.warning, "error": b2.error}[kind](zh if lang() == "zh" else en)
 
-    left, right = st.columns(2)
-    with left.container(border=True):
-        st.markdown("**价格与股本**")
-        c = st.columns(2)
-        field("reference_price", c[0])
-        field("reference_price_date", c[1])
-        field("reference_price_source")
-        c = st.columns(2)
-        field("current_shares", c[0])
-        field("target_assumed_shares", c[1])
-    with right.container(border=True):
-        st.markdown("**估值**")
-        c = st.columns(2)
-        c[0].selectbox("估值方法", options=list(METHODS), format_func=METHODS.get, key="f_valuation_method",
-                       on_change=_method_changed, help="假设：目标日期用哪种倍数估值。")
-        field("valuation_multiple", c[1])
-        field("base_annual_metric")
-        c = st.columns(2)
-        field("base_metric_currency", c[0])
-        field("base_metric_period", c[1])
 
-    with st.expander("证据范围与附加项"):
-        c = st.columns(3)
-        field("filings_since", c[0])
-        field("probability_drift", c[1])
-        field("probability_volatility", c[2])
-        st.caption("价格概率参考是附加内容：在你设定的漂移率和波动率下，用对数正态模型估算到期价格高于各价位的概率。它不参与结论。")
+def render_rest(expanded: bool) -> None:
+    with st.expander(t("rest"), expanded=expanded):
+        left, right = st.columns(2)
+        with left.container(border=True):
+            st.markdown(f"**{t('price_box')}**")
+            c = st.columns(3)
+            field("reference_price", c[0])
+            field("reference_price_date", c[1])
+            field("currency", c[2])
+            field("reference_price_source")
+            c = st.columns(2)
+            field("current_shares", c[0])
+            field("target_assumed_shares", c[1])
+        with right.container(border=True):
+            st.markdown(f"**{t('val_box')}**")
+            c = st.columns(2)
+            c[0].selectbox(t("method"), options=list(METHODS), format_func=METHODS.get,
+                           key="f_valuation_method", on_change=_method_changed, help=t("method_help"))
+            field("valuation_multiple", c[1])
+            field("base_annual_metric")
+            c = st.columns(2)
+            field("base_metric_currency", c[0])
+            field("base_metric_period", c[1])
+        with st.container(border=True):
+            st.markdown(f"**{t('extra_box')}**")
+            c = st.columns(3)
+            field("filings_since", c[0])
+            field("probability_drift", c[1])
+            field("probability_volatility", c[2])
+            st.caption(t("prob_note"))
 
 
 # ------------------------------------------------------------------ results
 
 
-def stepper(inputs_ok: bool, state: str, has_result: bool) -> None:
+def stepper(claim_ok: bool, inputs_ok: bool, state: str, has_result: bool) -> None:
     if has_result:
-        classes = ("done", "done", "done")
+        classes = ("done", "done", "done", "done")
     elif state == "confirmed":
-        classes = ("done", "done", "now")
+        classes = ("done", "done", "done", "now")
     elif inputs_ok:
-        classes = ("done", "now", "")
+        classes = ("done", "done", "now", "")
+    elif claim_ok:
+        classes = ("done", "now", "", "")
     else:
-        classes = ("now", "", "")
-    labels = ("① 填写观点与假设", "② 确认输入", "③ 查看投资案例")
+        classes = ("now", "", "", "")
+    labels = ("① 填写观点", "② 补全并核对", "③ 确认", "④ 查看案例") if lang() == "zh" else ("① Claim", "② Fill in and check", "③ Confirm", "④ Case")
     html = "".join(f'<span class="tc-step {cls}">{label}</span>' for label, cls in zip(labels, classes))
     st.markdown(f'<div class="tc-steps">{html}</div>', unsafe_allow_html=True)
 
@@ -320,10 +504,12 @@ def render_verdict(result: CaseResult) -> None:
     v = result.verdict
     if v is None:
         return
-    cn, icon, tone = VERDICT_CN[v.label]
+    icon, tone = VERDICT_STYLE[v.label]
+    zh = v.display_zh or VERDICT_DISPLAY_ZH[v.label]
+    title = f"{icon} {zh} · {v.display}" if lang() == "zh" else f"{icon} {v.display} · {zh}"
     st.markdown(
-        f'<div class="tc-verdict tc-{tone}"><div class="tc-label">{icon} {cn} · {v.display}</div>'
-        f'<div class="tc-sub">证据截至 {v.as_of} · {v.rules_version} · 描述当日的证据状态，不是价格预测</div></div>',
+        f'<div class="tc-verdict tc-{tone}"><div class="tc-label">{title}</div>'
+        f'<div class="tc-sub">{t("as_of", d=v.as_of, r=v.rules_version)}</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -333,215 +519,278 @@ def render_key_numbers(result: CaseResult) -> None:
     claim = result.confirmed_claim.values
     metric = "required_annual_revenue" if claim.valuation_method.value == "price_to_sales" else "required_annual_net_income"
     growth = next((i for i in result.evidence_items if i.id == "E1"), None)
-    req_from_reported = Decimal(growth.measured["required_cagr_from_reported"]) if growth and "required_cagr_from_reported" in growth.measured else None
+    req = Decimal(growth.measured["required_cagr_from_reported"]) if growth and "required_cagr_from_reported" in growth.measured else None
     hist = Decimal(growth.measured["reported_cagr"]) if growth and "reported_cagr" in growth.measured else None
+    i = 0 if lang() == "zh" else 1
     cols = st.columns(4)
-    cols[0].metric("所需总收益", fmt_calc(calc["required_return"]), help=calc["required_return"].formula)
-    cols[1].metric("所需年化收益", fmt_calc(calc["annualized_price_return"]), help=calc["annualized_price_return"].formula)
-    cols[2].metric("目标市值", fmt_calc(calc["target_market_cap"]), help=calc["target_market_cap"].formula)
-    cols[3].metric(CALC_CN[metric], fmt_calc(calc[metric]), help=calc[metric].formula)
-    if req_from_reported is not None:
+    for col, name in zip(cols, ("required_return", "annualized_price_return", "target_market_cap", metric)):
+        col.metric(CALC[name][i], fmt_calc(calc[name]), help=calc[name].formula)
+    if req is not None:
         cols = st.columns(4)
-        cols[0].metric("所需指标年增速（相对已披露）", fmt_pct(req_from_reported))
-        cols[1].metric("近年已披露增速", fmt_pct(hist), delta=None if hist is None else f"差距 {fmt_pct(req_from_reported - hist)}", delta_color="off")
-
-
-def render_sources(item: EvidenceItem) -> None:
-    for s in item.sources:
-        text = f"{s.label}" + (f" · {s.data_mode.value}" if s.data_mode else "")
-        st.markdown(f"- [{text}]({s.url})" if s.url else f"- {text}")
+        cols[0].metric("所需指标年增速（相对已披露）" if i == 0 else "Required metric growth (from reported)", fmt_pct(req))
+        if hist is not None:
+            cols[1].metric("近年已披露增速" if i == 0 else "Reported growth", fmt_pct(hist))
+            cols[2].metric("差距（百分点）" if i == 0 else "Gap (pp)", f"{(req - hist) * 100:+.2f}")
 
 
 def tab_conclusion(result: CaseResult) -> None:
     v = result.verdict
-    st.markdown("#### 判断依据")
-    for line in v.rationale:
+    st.markdown(f"#### {t('rationale')}")
+    for line in (v.rationale_zh if lang() == "zh" and v.rationale_zh else v.rationale):
         st.markdown(f"- {line}")
-    st.markdown("#### 何时需要重新评估")
-    rows = [{"编号": r.id, "触发条件": r.trigger, "观察对象": r.watch, "阈值": r.threshold or "", "关联": ", ".join(r.linked_to)}
-            for r in result.recheck_conditions]
-    st.dataframe(rows, hide_index=True, use_container_width=True)
-    with st.expander("这个结论的限制", expanded=False):
-        for line in v.limitations:
+    st.markdown(f"#### {t('rechecks')}")
+    cols = st.columns(2)
+    for idx, r in enumerate(result.recheck_conditions):
+        with cols[idx % 2].container(border=True):
+            st.markdown(f"**{r.id}** · {pick(r.trigger, r.trigger_zh)}")
+            st.caption(t("watch") + pick(r.watch, r.watch_zh))
+            extra = []
+            if r.threshold:
+                extra.append(t("threshold") + r.threshold)
+            if r.linked_to:
+                extra.append(t("linked") + ", ".join(r.linked_to))
+            if extra:
+                st.caption(" · ".join(extra))
+    with st.expander(t("limits")):
+        for line in (v.limitations_zh if lang() == "zh" and v.limitations_zh else v.limitations):
             st.markdown(f"- {line}")
 
 
 def tab_evidence(result: CaseResult) -> None:
-    counts = {s: sum(1 for i in result.evidence_items if i.stance == s) for s in STANCE_CN}
+    i = 1 if lang() == "zh" else 2
     cols = st.columns(4)
-    for col, s in zip(cols, STANCE_CN):
-        col.metric(f"{STANCE_ICON[s]} {STANCE_CN[s]}", counts[s])
+    for col, s in zip(cols, STANCE):
+        col.metric(f"{STANCE[s][0]} {STANCE[s][i]}", sum(1 for x in result.evidence_items if x.stance == s))
     order = {"contrary": 0, "supporting": 1, "missing": 2, "neutral": 3}
-    for item in sorted(result.evidence_items, key=lambda i: (order[i.stance], i.id)):
+    for item in sorted(result.evidence_items, key=lambda x: (order[x.stance], x.id)):
         with st.container(border=True):
-            st.markdown(f"**{STANCE_ICON[item.stance]} {STANCE_CN[item.stance]} · {item.id} {item.title}**")
-            st.write(item.detail)
+            st.markdown(f"**{STANCE[item.stance][0]} {STANCE[item.stance][i]} · {item.id} {pick(item.title, item.title_zh)}**")
+            st.write(pick(item.detail, item.detail_zh))
             if item.rule:
-                st.caption(f"规则：{item.rule}")
+                st.caption(t("rule") + pick(item.rule, item.rule_zh or ""))
             if item.sources:
-                with st.expander("来源与数值"):
-                    render_sources(item)
+                with st.expander(t("sources")):
+                    for s in item.sources:
+                        text = s.label + (f" · {s.data_mode.value}" if s.data_mode else "")
+                        st.markdown(f"- [{text}]({s.url})" if s.url else f"- {text}")
                     if item.measured:
                         st.json(item.measured, expanded=False)
 
 
+def render_sensitivity(result: CaseResult) -> None:
+    st.markdown(f"#### {t('sens')}")
+    sens = result.sensitivity
+    if sens is None:
+        st.caption(t("sens_none"))
+        return
+    hist = Decimal(sens.reported_cagr) if sens.reported_cagr else None
+
+    def cell(v: Optional[str]) -> str:
+        if v is None:
+            return "—"
+        d = Decimal(v)
+        mark = "" if hist is None else (" ✔" if d <= hist else " ◐" if d - hist <= Decimal("0.05") else " ✖")
+        return f"{d * 100:.1f}%{mark}"
+
+    unit = "年" if lang() == "zh" else "y"
+    cols = [f"{h} {unit}" for h in sens.horizons]
+    rows = [f"{('倍数' if lang() == 'zh' else 'multiple')} {m}" for m in sens.multiples]
+    df = pd.DataFrame([[cell(v) for v in row] for row in sens.required_cagr], index=rows, columns=cols)
+    a_row = sens.multiples.index(sens.assumed_multiple) if sens.assumed_multiple in sens.multiples else None
+    a_col = sens.horizons.index(sens.assumed_horizon) if sens.assumed_horizon in sens.horizons else None
+    tone = {"✔": "rgba(12,163,12,0.12)", "◐": "rgba(250,178,25,0.18)", "✖": "rgba(208,59,59,0.12)"}
+
+    def style(frame: pd.DataFrame) -> pd.DataFrame:
+        out = pd.DataFrame("", index=frame.index, columns=frame.columns)
+        for r in range(frame.shape[0]):
+            for c in range(frame.shape[1]):
+                css = next((f"background-color: {col}" for sym, col in tone.items() if frame.iat[r, c].endswith(sym)), "")
+                if r == a_row and c == a_col:
+                    css += "; font-weight: 700; border: 2px solid #2a78d6"
+                elif r == a_row or c == a_col:
+                    css += "; font-weight: 600"
+                out.iat[r, c] = css
+        return out
+
+    st.dataframe(df.style.apply(style, axis=None), use_container_width=True)
+    base = f"{fmt_amount(sens.base_value)} ({sens.base_label})"
+    st.caption(t("sens_note", b=base, h=fmt_pct(hist) if hist is not None else "—"))
+
+
 def tab_calculations(result: CaseResult) -> None:
-    st.caption("全部基于你确认的输入与假设，Decimal 精确计算，与网络数据无关。")
+    st.caption(t("calc_note"))
+    i = 0 if lang() == "zh" else 1
+    zh = lang() == "zh"
     rows = [
         {
-            "项目": CALC_CN.get(c.name, c.name),
-            "数值": fmt_calc(c),
-            "原始值": "" if c.value is None else format(c.value, "f"),
-            "公式": c.formula,
-            "输入": json.dumps(c.inputs, ensure_ascii=False),
-            "假设/说明": "; ".join(c.assumptions + ([c.reason] if c.reason else [])),
+            ("项目" if zh else "Item"): CALC.get(c.name, (c.name, c.name))[i],
+            ("数值" if zh else "Value"): fmt_calc(c),
+            ("原始值" if zh else "Exact value"): "" if c.value is None else format(c.value, "f"),
+            ("公式" if zh else "Formula"): c.formula,
+            ("输入" if zh else "Inputs"): json.dumps(c.inputs, ensure_ascii=False),
+            ("假设/说明" if zh else "Assumptions / notes"): "; ".join(c.assumptions + ([c.reason] if c.reason else [])),
         }
         for c in result.calculations
     ]
     st.dataframe(rows, use_container_width=True, hide_index=True)
-    with st.expander("输入值来源"):
-        prov = result.confirmed_claim.value_provenance
-        st.dataframe([{"字段": k, "来源": v} for k, v in prov.items()], hide_index=True, use_container_width=True)
+    render_sensitivity(result)
+    with st.expander(t("provenance")):
+        st.dataframe([{("字段" if zh else "Field"): label_of(k), ("来源" if zh else "Source"): v}
+                      for k, v in result.confirmed_claim.value_provenance.items()], hide_index=True, use_container_width=True)
 
 
-def _bar_chart(points, required: Optional[Decimal], label: str, color: str) -> alt.Chart:
-    df = pd.DataFrame({"财年": [f"FY{p.period_end.year}" for p in points], "数值": [float(p.value) for p in points],
-                       "期末": [p.period_end.isoformat() for p in points], "申报": [f"{p.form} {p.filed}" for p in points]})
-    bars = alt.Chart(df).mark_bar(size=24, color=color, cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
-        x=alt.X("财年:N", title=None, sort=None, axis=alt.Axis(labelAngle=0)),
-        y=alt.Y("数值:Q", title=f"{label}（USD）", axis=alt.Axis(format="~s")),
-        tooltip=[alt.Tooltip("财年:N"), alt.Tooltip("数值:Q", format=",.0f"), alt.Tooltip("期末:N"), alt.Tooltip("申报:N")],
-    )
-    if required is not None and points and float(required) <= 5 * max(float(p.value) for p in points):
-        rule_df = pd.DataFrame({"y": [float(required)], "t": [f"观点所需 {fmt_amount(required)}"]})
-        rule = alt.Chart(rule_df).mark_rule(strokeWidth=1, strokeDash=[4, 3], color="#898781").encode(y="y:Q")
-        text = alt.Chart(rule_df).mark_text(align="left", dx=4, dy=-6, color="#898781").encode(y="y:Q", text="t:N", x=alt.value(0))
-        return (bars + rule + text).properties(height=260)
-    return bars.properties(height=260)
+def _rule(value: float, text: str, axis: str = "y") -> alt.Chart:
+    df = pd.DataFrame({"v": [value], "t": [text]})
+    enc = alt.Y("v:Q") if axis == "y" else alt.X("v:Q")
+    rule = alt.Chart(df).mark_rule(strokeWidth=1, strokeDash=[4, 3], color="#898781").encode(**{axis: enc})
+    if axis == "y":
+        label = alt.Chart(df).mark_text(align="left", dx=4, dy=-6, color="#898781").encode(y="v:Q", text="t:N", x=alt.value(0))
+    else:
+        label = alt.Chart(df).mark_text(align="left", dx=4, y=8, color="#898781").encode(x="v:Q", text="t:N")
+    return rule + label
 
 
 def tab_public_data(result: CaseResult) -> None:
     color = series_color()
+    zh = lang() == "zh"
     facts, market = result.reported_facts, result.market
     claim = result.confirmed_claim.values
     if facts is not None:
-        st.markdown(f"#### SEC 已披露财务数据 · {facts.company_name or facts.ticker}（{facts.data_mode.value}）")
+        st.markdown(f"#### {t('facts_title')} · {facts.company_name or facts.ticker}（{facts.data_mode.value}）")
         is_ps = claim.valuation_method.value == "price_to_sales"
-        series = facts.revenue if is_ps else facts.net_income
+        series = (facts.revenue if is_ps else facts.net_income)[-6:]
         required = next((c.value for c in result.calculations if c.name in ("required_annual_revenue", "required_annual_net_income")), None)
         if series:
-            st.altair_chart(_bar_chart(series[-6:], required, "年营收" if is_ps else "年净利润", color), use_container_width=True)
-            if required is not None and float(required) > 5 * max(float(p.value) for p in series[-6:]):
-                st.caption(f"观点所需 {fmt_amount(required)}，超过图中最大值 5 倍，未画参考线。")
+            label = ("年营收" if is_ps else "年净利润") if zh else ("Annual revenue" if is_ps else "Annual net income")
+            df = pd.DataFrame({"FY": [f"FY{p.period_end.year}" for p in series], "v": [float(p.value) for p in series],
+                               "end": [p.period_end.isoformat() for p in series], "filed": [f"{p.form} {p.filed}" for p in series]})
+            chart = alt.Chart(df).mark_bar(size=24, color=color, cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+                x=alt.X("FY:N", title=None, sort=None, axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("v:Q", title=f"{label} (USD)", axis=alt.Axis(format="~s")),
+                tooltip=[alt.Tooltip("FY:N"), alt.Tooltip("v:Q", format=",.0f"), alt.Tooltip("end:N"), alt.Tooltip("filed:N")],
+            )
+            peak = max(float(p.value) for p in series)
+            if required is not None and float(required) <= 5 * peak:
+                chart = chart + _rule(float(required), ("观点所需 " if zh else "Claim needs ") + fmt_amount(required))
+            st.altair_chart(chart.properties(height=260), use_container_width=True)
+            if required is not None and float(required) > 5 * peak:
+                st.caption((f"观点所需 {fmt_amount(required)}，超过图中最大值 5 倍，未画参考线。") if zh
+                           else f"The claim needs {fmt_amount(required)}, more than 5x the chart's maximum; no line drawn.")
         rows = []
-        for kind, pts in (("营收", facts.revenue), ("净利润", facts.net_income), ("股份数", facts.shares_outstanding)):
+        kinds = (("营收", "Revenue", facts.revenue), ("净利润", "Net income", facts.net_income), ("股份数", "Shares", facts.shares_outstanding))
+        for kzh, ken, pts in kinds:
             for p in pts[-5:]:
-                rows.append({"指标": kind, "期末": p.period_end.isoformat(), "数值": fmt_amount(p.value), "XBRL 概念": p.concept,
-                             "表格": p.form, "申报日": p.filed.isoformat(), "accession": p.accession})
-        with st.expander("数据表"):
+                rows.append({"metric": kzh if zh else ken, "period_end": p.period_end.isoformat(), "value": fmt_amount(p.value),
+                             "concept": p.concept, "form": p.form, "filed": p.filed.isoformat(), "accession": p.accession})
+        with st.expander(t("data_table")):
             st.dataframe(rows, hide_index=True, use_container_width=True)
-            st.caption(f"原始响应：{facts.source_url}")
+            st.caption(facts.source_url)
     if market is not None:
-        st.markdown(f"#### 股价历史 · {market.symbol}（{market.data_mode.value}）")
-        df = pd.DataFrame({"日期": [p.day for p in market.price_series], "收盘价": [float(p.close) for p in market.price_series]})
+        st.markdown(f"#### {t('price_title')} · {market.symbol}（{market.data_mode.value}）")
+        df = pd.DataFrame({"day": [p.day for p in market.price_series], "close": [float(p.close) for p in market.price_series]})
         line = alt.Chart(df).mark_line(strokeWidth=2, color=color).encode(
-            x=alt.X("日期:T", title=None, axis=alt.Axis(format="%Y-%m", labelAngle=0)), y=alt.Y("收盘价:Q", title=f"收盘价（{market.currency or ''}）"),
+            x=alt.X("day:T", title=None, axis=alt.Axis(format="%Y-%m", labelAngle=0)),
+            y=alt.Y("close:Q", title=("收盘价" if zh else "Close") + f" ({market.currency or ''})"),
         )
-        hover = alt.selection_point(fields=["日期"], nearest=True, on="pointerover", empty=False)
+        hover = alt.selection_point(fields=["day"], nearest=True, on="pointerover", empty=False)
         points = alt.Chart(df).mark_point(size=80, filled=True, color=color, stroke="white", strokeWidth=2).encode(
-            x="日期:T", y="收盘价:Q", opacity=alt.condition(hover, alt.value(1), alt.value(0)),
-            tooltip=[alt.Tooltip("日期:T", format="%Y-%m-%d"), alt.Tooltip("收盘价:Q", format=",.2f")],
+            x="day:T", y="close:Q", opacity=alt.condition(hover, alt.value(1), alt.value(0)),
+            tooltip=[alt.Tooltip("day:T", format="%Y-%m-%d"), alt.Tooltip("close:Q", format=",.2f")],
         ).add_params(hover)
-        ref_df = pd.DataFrame({"y": [float(claim.reference_price)], "t": [f"你的参考价 {claim.reference_price}"]})
-        ref = alt.Chart(ref_df).mark_rule(strokeWidth=1, strokeDash=[4, 3], color="#898781").encode(y="y:Q")
-        ref_text = alt.Chart(ref_df).mark_text(align="left", dx=4, dy=-6, color="#898781").encode(y="y:Q", text="t:N", x=alt.value(0))
-        st.altair_chart((line + points + ref + ref_text).properties(height=260), use_container_width=True)
-        vol = f"，历史年化波动率 {fmt_pct(market.annualized_volatility)}" if market.annualized_volatility is not None else ""
-        st.caption(f"最新收盘 {format(market.last_close, 'f')}（{market.last_date}）{vol}。目标价 {claim.target_price} 未画入此图。{market.note}")
+        ref = _rule(float(claim.reference_price), ("你的参考价 " if zh else "Your reference ") + format(claim.reference_price, "f"))
+        st.altair_chart((line + points + ref).properties(height=260), use_container_width=True)
+        vol = fmt_pct(market.annualized_volatility) if market.annualized_volatility is not None else "—"
+        st.caption((f"最新收盘 {format(market.last_close, 'f')}（{market.last_date}），历史年化波动率 {vol}。目标价 {claim.target_price} 未画入此图。"
+                    if zh else f"Latest close {format(market.last_close, 'f')} ({market.last_date}); historical volatility {vol}. "
+                    f"Target {claim.target_price} not drawn.") + " " + market.note)
     if result.coverage is not None:
-        st.markdown("#### SEC 申报记录")
-        (st.warning if result.coverage.coverage_gap else st.caption)(result.coverage.message)
+        st.markdown(f"#### {t('filings_title')}")
+        msg = pick(result.coverage.message, result.coverage.message_zh)
+        (st.warning if result.coverage.coverage_gap else st.caption)(msg)
     if result.evidence_records:
-        rows = [
-            {"表类型": r.form_type, "申报日": r.filing_date.isoformat(), "报告期": r.report_date.isoformat() if r.report_date else "",
-             "原文件": r.document_url or "", "索引页": r.filing_index_url, "data_mode": r.data_mode.value}
-            for r in result.evidence_records
-        ]
+        rows = [{"form": r.form_type, "filed": r.filing_date.isoformat(), "period": r.report_date.isoformat() if r.report_date else "",
+                 "document": r.document_url or "", "index": r.filing_index_url, "data_mode": r.data_mode.value}
+                for r in result.evidence_records]
         st.dataframe(rows, use_container_width=True, hide_index=True,
-                     column_config={"原文件": st.column_config.LinkColumn(), "索引页": st.column_config.LinkColumn()})
-        st.caption("申报记录只有元数据，本版本不读取正文。")
+                     column_config={"document": st.column_config.LinkColumn(), "index": st.column_config.LinkColumn()})
+        st.caption(t("filings_note"))
     if facts is None and market is None and not result.evidence_records:
-        st.info("本次没有取到公开数据，见「运行记录」中的数据错误。")
+        st.info(t("no_public"))
 
 
 def tab_probability(result: CaseResult) -> None:
     p = result.probability
-    st.caption("附加内容：模型输出，不参与结论，也不是价格预测。")
+    zh = lang() == "zh"
+    st.caption(t("prob_extra"))
     if p is None:
-        st.info("未计算。在「证据范围与附加项」里填写年化漂移率 μ（例如 0.07），确认后重新运行即可。")
+        st.info(t("prob_off"))
         return
     if p.status != "ok":
-        st.warning(f"无法计算：{p.reason}")
+        st.warning(t("prob_na") + pick(p.reason or "", p.reason_zh or ""))
         return
     cols = st.columns(4)
-    cols[0].metric(f"到期价 ≥ 目标价 {p.target_price} 的概率", f"{p.target_probability * 100:.1f}%")
-    cols[1].metric("中位数价格", f"{p.median_price:,.2f}")
-    cols[2].metric("10% 分位价格", f"{p.p10_price:,.2f}")
-    cols[3].metric("90% 分位价格", f"{p.p90_price:,.2f}")
+    cols[0].metric((f"到期价 ≥ 目标价 {p.target_price} 的概率" if zh else f"P(price ≥ target {p.target_price})"), f"{p.target_probability * 100:.1f}%")
+    cols[1].metric("中位数价格" if zh else "Median price", f"{p.median_price:,.2f}")
+    cols[2].metric("10% 分位价格" if zh else "10th percentile", f"{p.p10_price:,.2f}")
+    cols[3].metric("90% 分位价格" if zh else "90th percentile", f"{p.p90_price:,.2f}")
     color = series_color()
-    df = pd.DataFrame({"价格": [float(x.price) for x in p.points], "概率": [x.probability_at_or_above for x in p.points]})
+    df = pd.DataFrame({"price": [float(x.price) for x in p.points], "prob": [x.probability_at_or_above for x in p.points]})
     line = alt.Chart(df).mark_line(strokeWidth=2, color=color, point=alt.OverlayMarkDef(size=70, filled=True, color=color, stroke="white", strokeWidth=2)).encode(
-        x=alt.X("价格:Q", title="到期价格水平"),
-        y=alt.Y("概率:Q", title="P(到期价格 ≥ 该水平)", axis=alt.Axis(format="%"), scale=alt.Scale(domain=[0, 1])),
-        tooltip=[alt.Tooltip("价格:Q", format=",.2f"), alt.Tooltip("概率:Q", format=".1%")],
+        x=alt.X("price:Q", title="到期价格水平" if zh else "Price level at the horizon"),
+        y=alt.Y("prob:Q", title="P(到期价格 ≥ 该水平)" if zh else "P(price ≥ level)", axis=alt.Axis(format="%"), scale=alt.Scale(domain=[0, 1])),
+        tooltip=[alt.Tooltip("price:Q", format=",.2f"), alt.Tooltip("prob:Q", format=".1%")],
     )
-    tdf = pd.DataFrame({"x": [float(p.target_price)], "t": [f"目标价 {p.target_price}"]})
-    rule = alt.Chart(tdf).mark_rule(strokeWidth=1, strokeDash=[4, 3], color="#898781").encode(x="x:Q")
-    text = alt.Chart(tdf).mark_text(align="left", dx=4, y=8, color="#898781").encode(x="x:Q", text="t:N")
-    st.altair_chart((line + rule + text).properties(height=280), use_container_width=True)
-    st.dataframe([{"价格水平": f"{x.price:,.2f}", "P(到期价 ≥ 水平)": f"{x.probability_at_or_above * 100:.1f}%"} for x in p.points],
+    target = _rule(float(p.target_price), ("目标价 " if zh else "Target ") + format(p.target_price, "f"), axis="x")
+    st.altair_chart((line + target).properties(height=280), use_container_width=True)
+    st.dataframe([{("价格水平" if zh else "Price level"): f"{x.price:,.2f}",
+                   ("P(到期价 ≥ 水平)" if zh else "P(price ≥ level)"): f"{x.probability_at_or_above * 100:.1f}%"} for x in p.points],
                  hide_index=True, use_container_width=True)
-    st.markdown("**假设**")
-    for a in p.assumptions:
+    st.markdown(f"**{t('assumptions')}**")
+    for a in (p.assumptions_zh if zh and p.assumptions_zh else p.assumptions):
         st.markdown(f"- {a}")
-    st.markdown("**限制**")
-    for line_text in p.limitations:
-        st.markdown(f"- {line_text}")
-    st.caption(f"模型：{p.model}")
+    st.markdown(f"**{t('limitations')}**")
+    for a in (p.limitations_zh if zh and p.limitations_zh else p.limitations):
+        st.markdown(f"- {a}")
+    st.caption(p.model)
 
 
-def tab_run_log(result: CaseResult) -> None:
-    st.caption(f"case_id {result.case_id} · 创建 {result.created_at.isoformat()} · 状态 {STATUS_CN[result.status.value]}")
+def tab_run_log(result: CaseResult, key_suffix: str) -> None:
+    status = STATUS[result.status.value][0 if lang() == "zh" else 1]
+    st.caption(f"case_id {result.case_id} · {result.created_at.isoformat()} · {status}")
     st.json(result.data_modes, expanded=False)
     if result.provider_errors:
-        st.markdown("#### 数据错误")
+        st.markdown(f"#### {t('data_errors')}")
         for e in result.provider_errors:
             st.error(f"[{e.provider_id}] {e.code}" + (f" (HTTP {e.http_status})" if e.http_status else "") + f": {e.message}")
     if result.missing_fields:
-        st.markdown("#### 缺失项")
+        st.markdown(f"#### {t('missing_items')}")
         for m in result.missing_fields:
-            st.write(f"- `{m.field}`（{'阻塞' if m.blocking else '不阻塞'}，影响 {m.required_for}）：{m.message}")
+            st.write("- " + missing_text(m))
     st.info(result.disclaimer)
-    st.download_button("下载结果 JSON", result.model_dump_json(indent=2), file_name=f"tickercase_{result.case_id}.json", mime="application/json")
+    st.download_button(t("download"), result.model_dump_json(indent=2), file_name=f"tickercase_{result.case_id}.json",
+                       mime="application/json", key=f"dl_{key_suffix}")
 
 
-def render_result(result: CaseResult) -> None:
-    st.markdown("### 投资案例")
+def render_result(result: CaseResult, key_suffix: str = "current") -> None:
     if result.validation_issues:
         for i in result.validation_issues:
-            st.error(f"`{i.field}` {i.code}: {i.message}")
+            st.error(issue_text(i))
+        return
+    if result.confirmed_claim is None:
         return
     render_verdict(result)
     for e in result.provider_errors:
         st.error(f"[{e.provider_id}] {e.code}" + (f" (HTTP {e.http_status})" if e.http_status else "") + f": {e.message}")
-    if result.warnings:
-        with st.expander(f"提示（{len(result.warnings)}）", expanded=bool(result.provider_errors)):
-            for w in result.warnings:
+    warnings = result.warnings_zh if lang() == "zh" and len(result.warnings_zh) == len(result.warnings) else result.warnings
+    if warnings:
+        with st.expander(t("notes", n=len(warnings)), expanded=bool(result.provider_errors)):
+            for w in warnings:
                 st.warning(w)
     render_key_numbers(result)
-    tabs = st.tabs(["结论与依据", "证据", "计算", "公开数据", "概率参考（附加）", "运行记录"])
+    tabs = st.tabs(S["tabs"][0 if lang() == "zh" else 1])
     with tabs[0]:
-        tab_conclusion(result)
+        if result.verdict is not None:
+            tab_conclusion(result)
     with tabs[1]:
         tab_evidence(result)
     with tabs[2]:
@@ -551,31 +800,180 @@ def render_result(result: CaseResult) -> None:
     with tabs[4]:
         tab_probability(result)
     with tabs[5]:
-        tab_run_log(result)
+        tab_run_log(result, key_suffix)
 
 
-# ------------------------------------------------------------------ page
+# ------------------------------------------------------------------ views
 
 
 def sidebar() -> None:
     with st.sidebar:
         st.markdown("## TickerCase")
-        st.caption("把一句股票观点变成可检查的投资案例：明确假设、可复算数字、带日期的公开证据、结论和重新评估条件。")
-        st.radio("数据模式", options=list(MODE_LABELS), format_func=MODE_LABELS.get, key="sec_mode",
-                 help="live 请求 SEC 与行情接口；synthetic 使用虚构公司 SYNT 的示例数据。")
-        st.markdown("**示例**")
-        st.button("合成示例 · P/S", on_click=_load_example, args=("ps",), key="btn_example_ps", use_container_width=True)
-        st.button("合成示例 · P/E", on_click=_load_example, args=("pe",), key="btn_example_pe", use_container_width=True)
-        st.button("清空", on_click=_clear_form, key="btn_clear", use_container_width=True)
-        with st.expander("结论的四种结果"):
-            st.markdown(
-                "- **✔ 目前证据支持**：所需增长不高于已披露增长，且没有反对证据\n"
-                "- **◐ 部分支持**：有支持，也有差距或反对项\n"
-                "- **✖ 目前证据不支持**：所需增长远高于已披露增长，或还有其他反对项\n"
-                "- **? 信息不足**：核心检查缺数据，无法判断\n\n"
-                "规则为 rules-v1，阈值待团队验证。"
-            )
-        st.caption("不执行交易，不构成投资建议。")
+        st.radio("语言 / Language", options=["zh", "en"], format_func=lambda x: "中文" if x == "zh" else "English", key="lang", horizontal=True)
+        st.caption(t("tagline"))
+        # radio labels are the same in both languages so switching language keeps the selection
+        st.radio(t("view"), options=["new", "history"], format_func=VIEW_LABELS.get, key="view", horizontal=True)
+        st.radio(t("mode"), options=list(MODE_LABELS), key="sec_mode", horizontal=True, help=t("mode_help"))
+        st.caption(MODE_LABELS[st.session_state["sec_mode"]][0 if lang() == "zh" else 1])
+        if st.session_state["sec_mode"] in ("live", "record"):
+            if validate_user_agent(get_service().settings.sec_user_agent):
+                with st.container(border=True):
+                    st.markdown(f"**{t('sec_setup')}**")
+                    st.caption(t("sec_missing"))
+                    st.text_input(t("sec_email"), key="sec_email_input", placeholder="you@example.org")
+                    st.button(t("sec_save"), key="btn_sec_save", on_click=_save_sec_contact)
+            else:
+                st.caption("✔ " + t("sec_ok"))
+            msg = st.session_state["sec_msg"]
+            if msg:
+                (st.success if msg[0] == "success" else st.error)(msg[1][0 if lang() == "zh" else 1])
+        st.markdown(f"**{t('examples')}**")
+        st.button(t("ex_ps"), on_click=_load_example, args=("ps",), key="btn_example_ps", use_container_width=True)
+        st.button(t("ex_pe"), on_click=_load_example, args=("pe",), key="btn_example_pe", use_container_width=True)
+        st.button(t("clear"), on_click=_clear_form, key="btn_clear", use_container_width=True)
+        with st.expander(t("verdict_kinds")):
+            st.markdown(t("verdict_kinds_body"))
+        st.caption(t("no_advice"))
+
+
+def view_history() -> None:
+    st.title(t("view_history"))
+    store = get_service().store
+    cases = store.list_cases() if store is not None else []
+    if not cases:
+        st.info(t("history_empty"))
+        return
+    zh = lang() == "zh"
+
+    def verdict_text(c: CaseResult) -> str:
+        if c.verdict is None:
+            return "—"
+        return (c.verdict.display_zh or VERDICT_DISPLAY_ZH[c.verdict.label]) if zh else c.verdict.display
+
+    rows = []
+    for c in cases:
+        v = c.confirmed_claim.values if c.confirmed_claim else None
+        rows.append({
+            ("时间" if zh else "Time"): c.created_at.strftime("%Y-%m-%d %H:%M"),
+            ("代码" if zh else "Ticker"): v.ticker if v else "—",
+            ("观点" if zh else "Claim"): v.claim_text if v else "—",
+            ("结论" if zh else "Verdict"): verdict_text(c),
+            ("数据模式" if zh else "Data mode"): c.data_modes.get("sec_filings", "—"),
+            ("状态" if zh else "Status"): STATUS[c.status.value][0 if zh else 1],
+        })
+    st.caption(t("history_hint"))
+    event = st.dataframe(rows, hide_index=True, use_container_width=True, on_select="rerun", selection_mode="multi-row", key="history_table")
+    selected = [cases[i] for i in (event.selection.rows if event and event.selection else [])]
+    if len(selected) == 1:
+        render_result(selected[0], key_suffix=selected[0].case_id)
+    elif len(selected) >= 2:
+        st.markdown(f"### {t('compare')}")
+        table = {}
+        for c in selected:
+            v = c.confirmed_claim.values if c.confirmed_claim else None
+            calc = {x.name: x for x in c.calculations}
+            e1 = next((i for i in c.evidence_items if i.id == "E1"), None)
+            col = f"{c.created_at:%m-%d %H:%M} {v.ticker if v else ''}"
+            req_metric = calc.get("required_annual_revenue") or calc.get("required_annual_net_income")
+            table[col] = {
+                ("观点" if zh else "Claim"): v.claim_text if v else "—",
+                ("目标价" if zh else "Target"): format(v.target_price, "f") if v else "—",
+                ("参考价" if zh else "Reference"): f"{format(v.reference_price, 'f')} ({v.reference_price_date})" if v else "—",
+                ("时间范围" if zh else "Horizon"): format(v.horizon_years, "f") if v else "—",
+                ("估值" if zh else "Valuation"): f"{'P/S' if v.valuation_method.value == 'price_to_sales' else 'P/E'} {format(v.valuation_multiple, 'f')}" if v else "—",
+                ("目标期股份数" if zh else "Target shares"): fmt_amount(v.target_assumed_shares) if v else "—",
+                ("所需年指标" if zh else "Required annual metric"): fmt_calc(req_metric) if req_metric else "—",
+                ("所需增速" if zh else "Required growth"): fmt_pct(Decimal(e1.measured["required_cagr_from_reported"])) if e1 and "required_cagr_from_reported" in e1.measured else "—",
+                ("已披露增速" if zh else "Reported growth"): fmt_pct(Decimal(e1.measured["reported_cagr"])) if e1 and "reported_cagr" in e1.measured else "—",
+                ("结论" if zh else "Verdict"): verdict_text(c),
+                ("证据截至" if zh else "Evidence as of"): str(c.verdict.as_of) if c.verdict else "—",
+                ("数据模式" if zh else "Data mode"): c.data_modes.get("sec_filings", "—"),
+            }
+        st.dataframe(pd.DataFrame(table), use_container_width=True)
+
+
+def view_new() -> None:
+    draft = current_draft()
+    confirmation: Optional[Confirmation] = st.session_state["confirmation"]
+    state = confirmation_state(draft, confirmation)
+    result: Optional[CaseResult] = st.session_state["result"]
+    result_current = (result is not None and result.input_fingerprint == fingerprint(draft)
+                      and st.session_state["result_mode"] == st.session_state["sec_mode"])
+    validation = validate_draft(draft, today=get_service().today())
+    claim_ok = all(st.session_state[f"f_{n}"].strip() for n in CLAIM_FIELDS)
+
+    st.title("TickerCase")
+    stepper(claim_ok, validation.ok, state, result_current)
+
+    if result_current:
+        v = result.confirmed_claim.values
+        st.caption(f"**{v.ticker}** · {v.claim_text} · {('目标价' if lang() == 'zh' else 'target')} {v.target_price} · "
+                   f"{v.horizon_years} {('年' if lang() == 'zh' else 'y')} · "
+                   f"{'P/S' if v.valuation_method.value == 'price_to_sales' else 'P/E'} {v.valuation_multiple}")
+        holder = st.expander(t("edit_inputs"), expanded=False)
+    else:
+        holder = st.container()
+    with holder:
+        render_claim_box()
+        rest_complete = all(not m.blocking or m.field in CLAIM_FIELDS for m in validation.missing_fields) and not validation.issues
+        render_rest(expanded=not rest_complete or bool(st.session_state["prefill_sources"]))
+
+    draft = current_draft()  # widgets above may have changed the values
+    validation = validate_draft(draft, today=get_service().today())
+    if not result_current:
+        for issue in validation.issues:
+            st.error(issue_text(issue))
+        blocking = [m for m in validation.missing_fields if m.blocking]
+        if blocking:
+            st.warning(t("missing_core") + ("、" if lang() == "zh" else ", ").join(label_of(m.field) for m in blocking))
+        optional = [m for m in validation.missing_fields if not m.blocking]
+        if optional:
+            st.caption(t("optional_missing") + ("；" if lang() == "zh" else "; ").join(missing_text(m) for m in optional))
+        for w in (validation.warnings_zh if lang() == "zh" else validation.warnings):
+            st.caption("⚠ " + w)
+
+    st.markdown(f"### {t('s3')}")
+    c1, c2, c3 = st.columns([1, 1, 3])
+    if c1.button(t("confirm"), key="btn_confirm", use_container_width=True):
+        try:
+            st.session_state["confirmation"] = confirm(draft, now=get_service().now, today=get_service().today())
+            st.session_state["confirm_feedback"] = None
+        except ConfirmationError:
+            st.session_state["confirmation"] = None
+            st.session_state["confirm_feedback"] = "invalid"
+    confirmation = st.session_state["confirmation"]
+    state = confirmation_state(draft, confirmation)
+    run_clicked = c2.button(t("run"), key="btn_run", type="primary", disabled=state != "confirmed", use_container_width=True)
+    with c3:
+        if st.session_state["confirm_feedback"]:
+            st.error(t("invalid_confirm"))
+        if state == "confirmed":
+            st.success(t("confirmed", t=f"{confirmation.confirmed_at:%Y-%m-%d %H:%M:%S}"))
+        elif state == "stale":
+            st.warning(t("stale"))
+        else:
+            st.info(t("unconfirmed"))
+
+    if run_clicked:
+        st.session_state["result"] = None
+        st.session_state["run_error"] = None
+        with st.spinner(t("spinner")):
+            try:
+                st.session_state["result"] = get_service().evaluate(draft, confirmation, sec_mode=st.session_state["sec_mode"])
+                st.session_state["result_mode"] = st.session_state["sec_mode"]
+            except Exception as exc:  # unexpected failure; keep page usable and show it
+                st.session_state["run_error"] = f"{type(exc).__name__}: {exc}"
+        st.rerun()  # redraw with the input form collapsed above the new result
+
+    if st.session_state["run_error"]:
+        st.error(t("run_failed") + st.session_state["run_error"])
+    result = st.session_state["result"]
+    if result is not None:
+        if result.input_fingerprint != fingerprint(draft) or st.session_state["result_mode"] != st.session_state["sec_mode"]:
+            st.warning(t("hidden"))
+        else:
+            st.markdown(f"### {t('case')}")
+            render_result(result)
 
 
 def main() -> None:
@@ -583,70 +981,10 @@ def main() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
     _init_state()
     sidebar()
-
-    draft = current_draft()
-    confirmation: Optional[Confirmation] = st.session_state["confirmation"]
-    state = confirmation_state(draft, confirmation)
-    result: Optional[CaseResult] = st.session_state["result"]
-    result_current = result is not None and result.input_fingerprint == fingerprint(draft) and st.session_state["result_mode"] == st.session_state["sec_mode"]
-
-    st.title("TickerCase")
-    stepper(validate_draft(draft, today=get_service().today()).ok, state, result_current)
-
-    st.markdown("### 1. 观点与假设")
-    render_inputs()
-    draft = current_draft()  # widgets above may have changed the values
-
-    validation = validate_draft(draft, today=get_service().today())
-    for issue in validation.issues:
-        st.error(f"`{issue.field}` {issue.code}: {issue.message}")
-    blocking = [m for m in validation.missing_fields if m.blocking]
-    if blocking:
-        st.warning("缺少核心输入：" + "、".join(FIELD_META.get(m.field, (m.field,))[0] for m in blocking))
-    optional = [m for m in validation.missing_fields if not m.blocking]
-    if optional:
-        st.caption("可选项未填：" + "；".join(f"{FIELD_META.get(m.field, (m.field,))[0]}（{m.message}）" for m in optional))
-
-    st.markdown("### 2. 确认并运行")
-    c1, c2, c3 = st.columns([1, 1, 3])
-    if c1.button("确认以上输入", key="btn_confirm", type="secondary", use_container_width=True):
-        try:
-            st.session_state["confirmation"] = confirm(draft, now=get_service().now, today=get_service().today())
-            st.session_state["confirm_feedback"] = None
-        except ConfirmationError:
-            st.session_state["confirmation"] = None
-            st.session_state["confirm_feedback"] = "输入无效或缺少核心字段，未确认。"
-    confirmation = st.session_state["confirmation"]
-    state = confirmation_state(draft, confirmation)
-    run_clicked = c2.button("运行评估", key="btn_run", type="primary", disabled=state != "confirmed", use_container_width=True)
-    with c3:
-        if st.session_state["confirm_feedback"]:
-            st.error(st.session_state["confirm_feedback"])
-        if state == "confirmed":
-            st.success(f"已确认（{confirmation.confirmed_at:%Y-%m-%d %H:%M:%S} UTC）。确认绑定当前全部输入，修改任何一项都需要重新确认。")
-        elif state == "stale":
-            st.warning("确认后输入已修改，原确认失效，请重新确认。")
-        else:
-            st.info("尚未确认。请核对上方输入，尤其是标为假设的项目。")
-
-    if run_clicked:
-        st.session_state["result"] = None
-        st.session_state["run_error"] = None
-        with st.spinner("正在读取公开数据并评估……"):
-            try:
-                st.session_state["result"] = get_service().evaluate(draft, confirmation, sec_mode=st.session_state["sec_mode"])
-                st.session_state["result_mode"] = st.session_state["sec_mode"]
-            except Exception as exc:  # unexpected failure; keep page usable and show it
-                st.session_state["run_error"] = f"{type(exc).__name__}: {exc}"
-
-    if st.session_state["run_error"]:
-        st.error("运行失败：" + st.session_state["run_error"])
-    result = st.session_state["result"]
-    if result is not None:
-        if result.input_fingerprint != fingerprint(draft) or st.session_state["result_mode"] != st.session_state["sec_mode"]:
-            st.warning("已有结果对应修改前的输入或数据模式，已隐藏。请重新确认并运行。")
-        else:
-            render_result(result)
+    if st.session_state["view"] == "history":
+        view_history()
+    else:
+        view_new()
 
 
 main()

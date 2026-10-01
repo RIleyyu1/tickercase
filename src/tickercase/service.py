@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Callable, Optional, TypeVar
 
 from .analysis import RULES_VERSION, analyze
@@ -60,6 +61,7 @@ USER_INPUT_PROVENANCE = {
     "probability_volatility": "user_input:assumption",
 }
 
+DEFAULT_PREFIX = "default_assumption:"
 SEC_PROVIDER_ID = SecFilingProvider.provider_id
 FACTS_PROVIDER_ID = SecCompanyFactsProvider.provider_id
 MARKET_PROVIDER_ID = YahooChartProvider.provider_id
@@ -165,22 +167,27 @@ class CaseService:
             validation_issues=validation.issues,
             missing_fields=validation.missing_fields,
             warnings=list(validation.warnings),
+            warnings_zh=list(validation.warnings_zh),
         )
+
+        def warn(en: str, zh: str) -> None:
+            base["warnings"].append(en)
+            base["warnings_zh"].append(zh)
 
         if not validation.ok:
             return self._finish(CaseResult(status=CaseStatus.BLOCKED_INVALID_INPUT, **base))
         if confirmation is None:
-            base["warnings"].append("inputs have not been confirmed; evaluation not started")
+            warn("inputs have not been confirmed; evaluation not started", "输入尚未确认，未开始评估")
             return self._finish(CaseResult(status=CaseStatus.BLOCKED_UNCONFIRMED, **base))
         if confirmation.fingerprint != current_fp:
-            base["warnings"].append("inputs changed after confirmation; confirm the current inputs before evaluating")
+            warn("inputs changed after confirmation; confirm the current inputs before evaluating", "确认后输入已修改，请先确认当前输入")
             return self._finish(CaseResult(status=CaseStatus.BLOCKED_CONFIRMATION_STALE, **base))
 
         claim = validation.claim
         assert claim is not None
         provenance = {k: v for k, v in USER_INPUT_PROVENANCE.items() if getattr(claim, k, None) is not None}
         for name, source in claim.field_sources.items():
-            provenance[name] = f"public_data:{source}"
+            provenance[name] = source if source.startswith(DEFAULT_PREFIX) else f"public_data:{source}"
         confirmed = ConfirmedClaim(values=claim, fingerprint=current_fp, confirmed_at=confirmation.confirmed_at, value_provenance=provenance)
         calculations = calculate(claim)
 
@@ -196,17 +203,19 @@ class CaseService:
         market = self._guard(MARKET_PROVIDER_ID, mode, errors, lambda: YahooChartProvider(self._fetcher(mode, "market")).fetch_history(claim.ticker))
 
         records = filings.records if filings else []
-        if filings:
-            warnings.extend(filings.warnings)
-        if facts:
-            warnings.extend(f"SEC XBRL: {n}" for n in facts.notes)
+        for w in filings.warnings if filings else []:
+            warn(w, f"SEC 申报：{w}")
+        for n in facts.notes if facts else []:
+            warn(f"SEC XBRL: {n}", f"SEC XBRL：{n}")
 
         outcome = analyze(claim, calculations, facts=facts, market=market, filings=records, today=self.today())
-        warnings.extend(outcome.warnings)
+        for w in outcome.warnings:
+            warn(w.en, w.zh)
 
         failed = sorted({e.provider_id for e in errors})
         if failed:
-            warnings.append(f"data unavailable for this run from {', '.join(failed)}; affected checks are listed as missing, calculations use only your inputs")
+            warn(f"data unavailable for this run from {', '.join(failed)}; affected checks are listed as missing, calculations use only your inputs",
+                 f"本次未能从 {', '.join(failed)} 取得数据；相关检查显示为缺失，计算只使用你的输入")
 
         def mode_of(present: bool, modes: set[str]) -> str:
             if not present:
@@ -221,7 +230,8 @@ class CaseService:
             "analysis": f"deterministic {RULES_VERSION}",
         }
         if DataMode.SYNTHETIC.value in data_modes.values():
-            warnings.append("synthetic example data is used for public sources in this run, not real SEC or market data")
+            warn("synthetic example data is used for public sources in this run, not real SEC or market data",
+                 "本次公开数据使用合成示例数据，不是真实的 SEC 或市场数据")
 
         result = CaseResult(
             status=CaseStatus.EVALUATED_WITH_PROVIDER_ERRORS if errors else CaseStatus.EVALUATED,
@@ -235,6 +245,7 @@ class CaseService:
             verdict=outcome.verdict,
             recheck_conditions=outcome.rechecks,
             probability=probability_reference(claim, market),
+            sensitivity=outcome.sensitivity,
             provider_errors=errors,
             data_modes=data_modes,
             mixed_sources=bool(records or facts or market),
@@ -283,7 +294,31 @@ class CaseService:
             if latest is not None:
                 snap.period_suggestion = ReferenceSuggestion(value=f"FY ending {latest.period_end}", source="SEC XBRL")
                 snap.suggestions["base_metric_currency"] = ReferenceSuggestion(value="USD", source="SEC XBRL unit")
+            self._default_assumptions(snap, facts, market)
+        snap.assumption_suggestions.setdefault("filings_since", ReferenceSuggestion(
+            value=date(self.today().year - 2, 1, 1).isoformat(), source=f"{DEFAULT_PREFIX}two calendar years of filings"))
         return snap
+
+    @staticmethod
+    def _default_assumptions(snap: ReferenceSnapshot, facts, market) -> None:
+        """Neutral defaults: today's share count and today's multiple. Visible, labelled, confirmed by the user."""
+        if not facts.shares_outstanding:
+            return
+        shares = facts.shares_outstanding[-1]
+        snap.assumption_suggestions["target_assumed_shares"] = ReferenceSuggestion(
+            value=format(shares.value, "f"),
+            source=f"{DEFAULT_PREFIX}no change from reported shares as of {shares.period_end}")
+        if market is None or (market.currency and market.currency != "USD"):
+            return
+        cap = market.last_close * shares.value
+        for attr, series, label in (("current_ps", facts.revenue, "P/S"), ("current_pe", facts.net_income, "P/E")):
+            if series and series[-1].value > 0:
+                current = (cap / series[-1].value).quantize(Decimal("0.01"))
+                setattr(snap, attr, current)
+                key = "valuation_multiple_ps" if label == "P/S" else "valuation_multiple_pe"
+                snap.assumption_suggestions[key] = ReferenceSuggestion(
+                    value=format(current, "f"),
+                    source=f"{DEFAULT_PREFIX}today's {label} (close {market.last_date} x shares / FY ending {series[-1].period_end})")
 
     def _finish(self, result: CaseResult) -> CaseResult:
         if self.store is not None:

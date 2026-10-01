@@ -59,7 +59,11 @@ def test_partially_supported_when_growth_gap_is_small():
     assert s["E1"] == "neutral" and s["E2"] == "neutral" and s["E3"] == "supporting" and s["E4"] == "neutral"
     assert out.verdict.label == "partially_supported"
     e1 = next(i for i in out.items if i.id == "E1")
-    assert Decimal(e1.measured["required_cagr_from_reported"]) == pytest.approx(Decimal("0.148698354997035"), abs=Decimal("1e-12"))
+    # growth runs from FY end 2025-12-31 to the target date 2026-09-30 + 5 years: 5 + 273 / 365.25 years
+    years = Decimal(5) + Decimal(273) / Decimal("365.25")
+    expected = (Decimal(2).ln() / years).exp() - 1
+    assert Decimal(e1.measured["required_cagr_from_reported"]) == pytest.approx(expected, abs=Decimal("1e-12"))
+    assert e1.detail_zh and "营收" in e1.title_zh
     assert e1.measured["reported_window"] == "2022-12-31 to 2025-12-31"
     assert e1.sources[0].url.endswith("-index.htm")
     ids = {r.id for r in out.rechecks}
@@ -132,8 +136,9 @@ def test_input_cross_checks_warn():
     revenue = [annual(2022, 140_000_000), annual(2025, 200_000_000)]
     out = run(ps_draft(reference_price="40", base_annual_metric="250000000", current_shares="80000000"),
               facts(revenue, share_points=SHARES), market())
-    text = " ".join(out.warnings)
+    text = " ".join(w.en for w in out.warnings)
     assert "reference price" in text and "base revenue" in text and "share count" in text
+    assert "参考价" in " ".join(w.zh for w in out.warnings)
 
 
 def test_stale_filings_are_missing_and_synthetic_data_is_disclosed():
@@ -147,3 +152,33 @@ def test_verdict_text_never_claims_impossibility_or_guarantee():
     out = run(pe_draft(), facts(net_income=[annual(2022, 28_000_000), annual(2025, 40_000_000)]), market())
     joined = " ".join(out.verdict.limitations)
     assert "does not mean the target price is impossible" in joined and "not a guarantee" in joined
+
+
+def test_verdict_and_rechecks_are_bilingual():
+    revenue = [annual(2022, 140_000_000), annual(2025, 200_000_000)]
+    out = run(ps_draft(), facts(revenue, share_points=SHARES), market())
+    v = out.verdict
+    assert v.display_zh == "部分支持" and len(v.rationale_zh) == len(v.rationale) and len(v.limitations_zh) == len(v.limitations)
+    assert all(r.trigger_zh and r.watch_zh for r in out.rechecks)
+    assert all(i.title_zh and i.detail_zh for i in out.items)
+
+
+def test_sensitivity_grid_matches_e1_at_the_assumed_point():
+    revenue = [annual(2022, 140_000_000), annual(2025, 200_000_000)]
+    out = run(ps_draft(), facts(revenue, share_points=SHARES), market())
+    sens = out.sensitivity
+    assert sens is not None and "25" in sens.multiples and "5" in sens.horizons
+    cell = sens.required_cagr[sens.multiples.index("25")][sens.horizons.index("5")]
+    e1 = next(i for i in out.items if i.id == "E1")
+    assert abs(Decimal(cell) - Decimal(e1.measured["required_cagr_from_reported"])) < Decimal("1e-12")
+    # a higher multiple needs less growth; a longer horizon needs less growth per year
+    col = sens.horizons.index("5")
+    rates = [Decimal(row[col]) for row in sens.required_cagr]
+    assert rates == sorted(rates, reverse=True)
+    assert sens.reported_cagr is not None
+
+
+def test_sensitivity_falls_back_to_user_base_and_is_absent_without_one():
+    out = run(ps_draft())  # no public data, user base 200M
+    assert out.sensitivity is not None and out.sensitivity.base_label.startswith("your base value")
+    assert run(ps_draft(base_annual_metric=None)).sensitivity is None

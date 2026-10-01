@@ -79,4 +79,8 @@ def test_reference_endpoint(tmp_path):
     assert body["suggestions"]["reference_price"]["value"] == "50"
     assert body["suggestions"]["current_shares"]["value"] == "95000000"
     assert body["revenue_suggestion"]["value"] == "200000000"
+    defaults = body["assumption_suggestions"]
+    assert defaults["target_assumed_shares"]["value"] == "95000000"
+    assert defaults["valuation_multiple_ps"]["value"] == "23.75"  # 50 x 95M / 200M
+    assert defaults["valuation_multiple_ps"]["source"].startswith("default_assumption:")
     assert client.get("/reference/bad ticker!", params={"mode": "synthetic"}).status_code == 422

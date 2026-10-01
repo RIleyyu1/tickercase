@@ -1,6 +1,6 @@
 {
-  "case_id": "53a858e7e24d48c090db19375a1ec068",
-  "created_at": "2026-10-01T16:24:24.995342Z",
+  "case_id": "3e175ecaac1f4fd8b61c45d005854d54",
+  "created_at": "2026-10-01T17:42:03.812958Z",
   "status": "evaluated",
   "input_fingerprint": "de5cb91e3248b0495d7acf8d85a6bb036cba803df744e457d247ef99f83bc509",
   "confirmed_claim": {
@@ -26,7 +26,7 @@
       "field_sources": {}
     },
     "fingerprint": "de5cb91e3248b0495d7acf8d85a6bb036cba803df744e457d247ef99f83bc509",
-    "confirmed_at": "2026-10-01T16:24:24.995314Z",
+    "confirmed_at": "2026-10-01T17:42:03.812933Z",
     "value_provenance": {
       "claim_text": "user_input",
       "ticker": "user_input",
@@ -159,7 +159,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/synt-20260804.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/0009999901-26-000013-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -179,7 +179,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/synt-20260630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/0009999901-26-000012-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -199,7 +199,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/synt-20260331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/0009999901-26-000010-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -219,7 +219,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/synt-20251231a.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/0009999901-26-000009-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -239,7 +239,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/synt-20251231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/0009999901-26-000008-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -259,7 +259,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/synt-20260114.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/0009999901-26-000007-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -279,7 +279,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/synt-20250930.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/0009999901-25-000006-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -299,7 +299,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/synt-20250630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/0009999901-25-000005-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -319,7 +319,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/synt-20250331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/0009999901-25-000004-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -339,7 +339,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/synt-20241231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/0009999901-25-000003-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -359,7 +359,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/synt-20231231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/0009999901-24-000001-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T16:24:24.996140Z",
+      "retrieved_at": "2026-10-01T17:42:03.813703Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -380,7 +380,8 @@
         "url": "https://data.sec.gov/submissions/CIK0009999901-submissions-001.json"
       }
     ],
-    "message": "Coverage gap: the requested window starts 2020-01-01, but the parsed recent block covers 2024-02-23 to 2026-08-05. SEC lists 1 older submission file(s) that were not fetched, so filings before 2024-02-23 were not checked."
+    "message": "Coverage gap: the requested window starts 2020-01-01, but the parsed recent block covers 2024-02-23 to 2026-08-05. SEC lists 1 older submission file(s) that were not fetched, so filings before 2024-02-23 were not checked.",
+    "message_zh": "覆盖缺口：检索起始日为 2020-01-01，但已解析的近期记录只覆盖 2024-02-23 至 2026-08-05。SEC 另列有 1 个更早的申报文件未读取，因此 2024-02-23 之前的申报没有检查。"
   },
   "reported_facts": {
     "provider_id": "sec_xbrl_companyfacts",
@@ -574,7 +575,7 @@
       }
     ],
     "source_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0009999901.json",
-    "retrieved_at": "2026-10-01T16:24:24.996534Z",
+    "retrieved_at": "2026-10-01T17:42:03.814049Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "notes": []
@@ -1640,7 +1641,7 @@
       }
     ],
     "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/SYNT?range=5y&interval=1d",
-    "retrieved_at": "2026-10-01T16:24:24.997403Z",
+    "retrieved_at": "2026-10-01T17:42:03.814904Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "note": "Unofficial public quote endpoint; no service guarantee. Prices are as published by the source."
@@ -1651,18 +1652,21 @@
       "check": "metric_growth",
       "stance": "contrary",
       "title": "Required net income growth vs reported history",
-      "detail": "the claim needs net income to grow 65.72% per year from 40.00M to 500.00M; reported growth was 12.62% per year (2022–2025)",
+      "detail": "the claim needs net income to grow 55.19% per year from 40.00M (FY ending 2025-12-31) to 500.00M by about 2031-09-30 (5.75 years); reported growth was 12.62% per year (2022–2025)",
+      "title_zh": "所需净利润增速 vs 已披露增速",
+      "detail_zh": "观点要求净利润从 40.00M（截至 2025-12-31 的财年）在约 5.75 年内（到 2031-09-30 前后）增长到 500.00M，即每年 55.19%；已披露增速为每年 12.62%（2022–2025）",
       "measured": {
         "required_annual_net_income": "500000000",
         "latest_reported_annual_net_income": "40000000",
         "latest_period_end": "2025-12-31",
-        "horizon_years": "5",
-        "required_cagr_from_reported": "0.657227008669993400234290072156321",
+        "years_from_period_end_to_target": "5.7474",
+        "required_cagr_from_reported": "0.551858620442560298569327711072101",
         "reported_cagr": "0.126217337640027395647100187120221",
         "reported_window": "2022-12-31 to 2025-12-31",
-        "gap": "0.531009671029966004587189885036100"
+        "gap": "0.425641282802532902922227523951880"
       },
-      "rule": "supporting if required CAGR <= reported CAGR; neutral if gap <= 5.00%; contrary otherwise",
+      "rule": "supporting if required CAGR <= reported CAGR; neutral if gap <= 5.00 pp; contrary otherwise",
+      "rule_zh": "所需年增速不高于已披露增速为支持；差距不超过 5.00 pp 为背景；否则为反对",
       "sources": [
         {
           "label": "latest annual net income: NetIncomeLoss, FY ending 2025-12-31, 10-K filed 2026-02-20",
@@ -1687,6 +1691,8 @@
       "stance": "supporting",
       "title": "Assumed P/E vs today's P/E",
       "detail": "the claim assumes P/E 20 at the target date; today's P/E is 118.75 (market value 4.75B / net income 40.00M), so the assumption is at or below today's level",
+      "title_zh": "假设 P/E vs 当前 P/E",
+      "detail_zh": "观点假设目标日 P/E 为 20；当前 P/E 为 118.75（市值 4.75B / 净利润 40.00M），假设不高于当前水平",
       "measured": {
         "last_close": "50",
         "shares": "95000000",
@@ -1697,6 +1703,7 @@
         "assumed_over_current": "0.1684210526315789473684210526315789"
       },
       "rule": "supporting if assumed <= current; neutral if assumed <= 1.25x current; contrary otherwise",
+      "rule_zh": "假设倍数不高于当前为支持；不超过当前的 1.25 倍为背景；否则为反对",
       "sources": [
         {
           "label": "close 50 on 2026-09-30 (yahoo_finance_chart)",
@@ -1727,16 +1734,20 @@
       "check": "share_count",
       "stance": "supporting",
       "title": "Assumed target share count vs reported share trend",
-      "detail": "going from 95.00M reported shares to the assumed 100.00M means 1.03% per year; the reported count changed 1.04% per year (2023-07-28 to 2026-07-24)",
+      "detail": "going from 95.00M reported shares to the assumed 100.00M means 0.99% per year; the reported count changed 1.04% per year (2023-07-28 to 2026-07-24)",
+      "title_zh": "假设目标股份数 vs 已披露股份变化",
+      "detail_zh": "从已披露的 95.00M 股到假设的 100.00M 股，即每年 0.99%；已披露股份数每年变化 1.04%（2023-07-28 至 2026-07-24）",
       "measured": {
         "reported_shares": "95000000",
         "reported_as_of": "2026-07-24",
         "target_assumed_shares": "100000000",
-        "implied_annual_change": "0.010311459317936088099109445913165",
+        "implied_annual_change": "0.009939463961262622513892943452546",
+        "years_to_target": "5.1862",
         "reported_annual_change": "0.010423419629615349536428974784180",
         "reported_window": "2023-07-28 to 2026-07-24"
       },
-      "rule": "supporting if implied annual change >= reported change -1.00%; neutral if >= reported change -3.00%; contrary otherwise",
+      "rule": "supporting if implied annual change >= reported change -1.00 pp; neutral if >= reported change -3.00 pp; contrary otherwise",
+      "rule_zh": "隐含年变化不低于已披露变化 -1.00 pp 为支持；不低于 -3.00 pp 为背景；否则为反对",
       "sources": [
         {
           "label": "shares outstanding: dei:EntityCommonStockSharesOutstanding, as of 2026-07-24, 10-Q filed 2026-08-01",
@@ -1761,11 +1772,14 @@
       "stance": "neutral",
       "title": "Freshness of reported data",
       "detail": "latest periodic report filed 2026-08-01 (61 days before this run)",
+      "title_zh": "已披露数据的新旧",
+      "detail_zh": "最近一份定期报告申报于 2026-08-01（本次运行前 61 天）",
       "measured": {
         "latest_periodic_filing": "2026-08-01",
         "age_days": "61"
       },
       "rule": "missing if the latest 10-K/10-Q is older than 135 days",
+      "rule_zh": "最近一份 10-K/10-Q 超过 135 天视为缺失",
       "sources": [
         {
           "label": "10-Q filed 2026-08-01",
@@ -1783,11 +1797,14 @@
       "stance": "neutral",
       "title": "Past price trend (context)",
       "detail": "the closing price moved 12.69% per year from 2021-10-01 to 2026-09-30 (not dividend-adjusted); the claim requires 14.87% per year from the reference price",
+      "title_zh": "过去股价走势（背景）",
+      "detail_zh": "收盘价从 2021-10-01 到 2026-09-30 每年变化 12.69%（未计股息）；观点要求从参考价起每年 14.87%",
       "measured": {
         "past_annualized_price_change": "0.126889172469081680068385124593486",
         "window": "2021-10-01 to 2026-09-30"
       },
       "rule": null,
+      "rule_zh": null,
       "sources": [
         {
           "label": "daily closes (yahoo_finance_chart)",
@@ -1805,17 +1822,29 @@
     "display": "Not Supported Today",
     "as_of": "2026-10-01",
     "rationale": [
-      "Core check E1 is contrary: the claim needs net income to grow 65.72% per year from 40.00M to 500.00M; reported growth was 12.62% per year (2022–2025).",
+      "Core check E1 is contrary: the claim needs net income to grow 55.19% per year from 40.00M (FY ending 2025-12-31) to 500.00M by about 2031-09-30 (5.75 years); reported growth was 12.62% per year (2022–2025).",
       "E2 is supporting: the claim assumes P/E 20 at the target date; today's P/E is 118.75 (market value 4.75B / net income 40.00M), so the assumption is at or below today's level.",
-      "E3 is supporting: going from 95.00M reported shares to the assumed 100.00M means 1.03% per year; the reported count changed 1.04% per year (2023-07-28 to 2026-07-24).",
-      "The growth gap of 53.10% per year exceeds the 15.00% limit of rules-v1."
+      "E3 is supporting: going from 95.00M reported shares to the assumed 100.00M means 0.99% per year; the reported count changed 1.04% per year (2023-07-28 to 2026-07-24).",
+      "The growth gap of 42.56 pp per year exceeds the 15.00 pp limit of rules-v1."
     ],
     "limitations": [
       "Synthetic example data was used. This verdict demonstrates the rules and says nothing about a real company.",
       "Evidence as of 2026-10-01. 'Not Supported Today' describes the state of the evidence on that date. Not Supported Today does not mean the target price is impossible; Supported Today is not a guarantee.",
       "Rules and thresholds are provisional (rules-v1); team validation of verdict thresholds is still open.",
-      "Checks use reported financial history and market prices only. Filing text, guidance and news are not read; AI-assisted analysis (OA.10–OA.12) is not implemented.",
-      "Required growth is measured from the latest reported fiscal year over the confirmed horizon; the time between that fiscal year end and the reference date is not adjusted."
+      "Checks use reported financial history and market prices only. Filing text, guidance and news are not read; AI-assisted analysis (OA.10–OA.12) is not implemented."
+    ],
+    "display_zh": "目前证据不支持",
+    "rationale_zh": [
+      "核心检查 E1 为反对：观点要求净利润从 40.00M（截至 2025-12-31 的财年）在约 5.75 年内（到 2031-09-30 前后）增长到 500.00M，即每年 55.19%；已披露增速为每年 12.62%（2022–2025）。",
+      "E2 为支持：观点假设目标日 P/E 为 20；当前 P/E 为 118.75（市值 4.75B / 净利润 40.00M），假设不高于当前水平。",
+      "E3 为支持：从已披露的 95.00M 股到假设的 100.00M 股，即每年 0.99%；已披露股份数每年变化 1.04%（2023-07-28 至 2026-07-24）。",
+      "增速差距每年 42.56 pp，超过 rules-v1 的 15.00 pp 上限。"
+    ],
+    "limitations_zh": [
+      "本次使用合成示例数据。这个结论只用来演示规则，与任何真实公司无关。",
+      "证据截至 2026-10-01。「目前证据不支持」描述的是当日的证据状态。「目前证据不支持」不表示目标价不可能达到，「目前证据支持」也不是保证。",
+      "规则和阈值是临时的（rules-v1），判断阈值尚待团队验证。",
+      "检查只使用已披露的财务历史和市场价格，不读取申报正文、管理层指引和新闻；AI 辅助分析（OA.10–OA.12）尚未实现。"
     ],
     "basis": [
       "E1",
@@ -1829,9 +1858,11 @@
   "recheck_conditions": [
     {
       "id": "R1",
-      "trigger": "Next annual net income is reported below 66.29M",
+      "trigger": "Next annual net income is reported below 62.07M",
       "watch": "10-K / XBRL company facts for the fiscal year after 2025-12-31",
-      "threshold": "66289080 (65.72% above 40.00M)",
+      "trigger_zh": "下一个年度净利润低于 62.07M",
+      "watch_zh": "2025-12-31 之后财年的 10-K / XBRL 财务数据",
+      "threshold": "62074345 (55.19% above 40.00M)",
       "linked_to": [
         "E1",
         "valuation_multiple",
@@ -1840,9 +1871,11 @@
     },
     {
       "id": "R2",
-      "trigger": "Shares outstanding rise above 95.98M within a year of 2026-07-24, or above 100.00M at any time",
+      "trigger": "Shares outstanding rise above 95.94M within a year of 2026-07-24, or above 100.00M at any time",
       "watch": "cover page of the next 10-Q / 10-K (dei:EntityCommonStockSharesOutstanding); S-1/S-3/424B offerings",
-      "threshold": "95979589",
+      "trigger_zh": "2026-07-24 后一年内股份数超过 95.94M，或任何时候超过 100.00M",
+      "watch_zh": "下一份 10-Q / 10-K 封面的股份数；S-1/S-3/424B 增发文件",
+      "threshold": "95944249",
       "linked_to": [
         "E3",
         "target_assumed_shares"
@@ -1852,6 +1885,8 @@
       "id": "R3",
       "trigger": "Today's P/E falls below 16.00 (the assumed 20 would then need more than 1.25x expansion)",
       "watch": "price x shares / latest annual net income; now 118.75",
+      "trigger_zh": "当前 P/E 跌破 16.00（届时假设的 20 需要超过 1.25 倍的估值扩张）",
+      "watch_zh": "股价 × 股份数 / 最近年度净利润；当前 118.75",
       "threshold": "16.00",
       "linked_to": [
         "E2",
@@ -1862,6 +1897,8 @@
       "id": "R4",
       "trigger": "Next 10-Q or 10-K is filed (expected around 2026-10-31)",
       "watch": "SEC EDGAR filings for the ticker",
+      "trigger_zh": "下一份 10-Q 或 10-K 发布（预计 2026-10-31 前后）",
+      "watch_zh": "该代码在 SEC EDGAR 的申报",
       "threshold": null,
       "linked_to": [
         "E5"
@@ -1871,6 +1908,8 @@
       "id": "R9",
       "trigger": "Any confirmed assumption changes (target price, horizon, multiple, target share count)",
       "watch": "re-confirm the inputs and run the case again",
+      "trigger_zh": "任何已确认的假设发生变化（目标价、时间范围、估值倍数、目标股份数）",
+      "watch_zh": "重新确认输入并再次运行",
       "threshold": null,
       "linked_to": [
         "target_price",
@@ -1881,11 +1920,88 @@
     }
   ],
   "probability": null,
+  "sensitivity": {
+    "metric": "annual_net_income",
+    "base_value": "40000000",
+    "base_label": "reported FY ending 2025-12-31",
+    "multiples": [
+      "10",
+      "15",
+      "20",
+      "25",
+      "30",
+      "40"
+    ],
+    "horizons": [
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "10"
+    ],
+    "required_cagr": [
+      [
+        "1.360692030124296140961697789336548",
+        "0.969982085924838145915348456226687",
+        "0.750767902794790206780035187497544",
+        "0.611317061056362532798242719078125",
+        "0.515092386701578550646069997393306",
+        "0.349186502607809113527412223042870"
+      ],
+      [
+        "1.118602605018423313983574572206027",
+        "0.808716038892737530698811734286053",
+        "0.631512226186060402132167525179923",
+        "0.517342030024805241248514843283230",
+        "0.437838590120776977221994615931759",
+        "0.299234347930229472142101674841603"
+      ],
+      [
+        "0.962048261161977970837124046495220",
+        "0.702367333051279518131913592036530",
+        "0.551858620442560298569327711114252",
+        "0.454008697485113792315960434548592",
+        "0.385427063905476115712682283661310",
+        "0.264918399326255304798185830939974"
+      ],
+      [
+        "0.848627099017988288970548039183678",
+        "0.624202364542926386504567393545988",
+        "0.492762480860071774111835004426451",
+        "0.406709770609989269219720877235063",
+        "0.346092816512482803440697213638685",
+        "0.238926298980749098407261196817910"
+      ],
+      [
+        "0.760839831805916967148543385724127",
+        "0.563008679813133377113249241067061",
+        "0.446151890563323074159100962531021",
+        "0.369208185054160145639094306538262",
+        "0.314784836730472833536008279039955",
+        "0.218086179010137358407034552808408"
+      ],
+      [
+        "0.630722402585503205772947250704152",
+        "0.471107050843860909880659539214557",
+        "0.375547937563579115053379242113257",
+        "0.312057908067049411377658761263823",
+        "0.266858817487943753675784387605412",
+        "0.185913551507860261905778643647286"
+      ]
+    ],
+    "assumed_multiple": "20",
+    "assumed_horizon": "5",
+    "reported_cagr": "0.126217337640027395647100187120221"
+  },
   "provider_errors": [],
   "validation_issues": [],
   "missing_fields": [],
   "warnings": [
     "synthetic example data is used for public sources in this run, not real SEC or market data"
+  ],
+  "warnings_zh": [
+    "本次公开数据使用合成示例数据，不是真实的 SEC 或市场数据"
   ],
   "data_modes": {
     "claim_inputs": "user_input",

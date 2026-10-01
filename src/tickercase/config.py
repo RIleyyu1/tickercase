@@ -32,6 +32,28 @@ def read_dotenv(path: Path) -> dict[str, str]:
     return values
 
 
+def write_env_value(key: str, value: str, path: Optional[Path] = None) -> Path:
+    """Set one KEY=value line in the local .env file (created if missing), keeping the other lines."""
+    if not key.isidentifier() or "\n" in value or "\r" in value or '"' in value:
+        raise ValueError("invalid .env key or value")
+    target = path or REPO_ROOT / ".env"
+    lines = target.read_text(encoding="utf-8").splitlines() if target.is_file() else []
+    entry = f'{key}="{value}"' if " " in value else f"{key}={value}"
+    out, done = [], False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith("#") and stripped.split("=", 1)[0].strip() == key:
+            if not done:
+                out.append(entry)
+                done = True
+            continue
+        out.append(line)
+    if not done:
+        out.append(entry)
+    target.write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
+    return target
+
+
 @dataclass(frozen=True)
 class Settings:
     sec_user_agent: Optional[str]
