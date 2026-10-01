@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Mapping, MutableMapping, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SEC_MODES = ("live", "record", "replay", "synthetic")
+SEC_MODES = ("live", "record", "replay", "synthetic")  # data modes; apply to every external source
 DEFAULT_SYNTHETIC_DIR = REPO_ROOT / "examples" / "sec_synthetic_snapshots"
 
 
@@ -43,6 +43,8 @@ class Settings:
     max_retries: int
     min_interval_seconds: float
     max_retry_after_seconds: float
+    market_user_agent: str = "TickerCase/0.2"
+    market_min_interval_seconds: float = 0.5
 
 
 def _path(value: str) -> Path:
@@ -67,4 +69,6 @@ def load_settings(env: Optional[Mapping[str, str]] = None, dotenv_path: Optional
         max_retries=int(merged.get("SEC_MAX_RETRIES", "2")),
         min_interval_seconds=float(merged.get("SEC_MIN_INTERVAL_SECONDS", "0.2")),
         max_retry_after_seconds=float(merged.get("SEC_MAX_RETRY_AFTER_SECONDS", "30")),
+        market_user_agent=(merged.get("TICKERCASE_MARKET_USER_AGENT") or "").strip() or "TickerCase/0.2",
+        market_min_interval_seconds=float(merged.get("TICKERCASE_MARKET_MIN_INTERVAL_SECONDS", "0.5")),
     )

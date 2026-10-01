@@ -1,5 +1,5 @@
 {
-  "_note": "SYNTHETIC example input. Same price and share assumptions as the P/S example, valued on P/E.",
+  "_note": "SYNTHETIC example input. Same price and share assumptions as the P/S example, valued on P/E. Base net income matches the synthetic SEC facts.",
   "draft": {
     "claim_text": "SYNT will trade at $100 in five years.",
     "ticker": "SYNT",
@@ -12,9 +12,10 @@
     "target_assumed_shares": "100000000",
     "valuation_method": "price_to_earnings",
     "valuation_multiple": "20",
-    "base_annual_metric": "250000000",
+    "base_annual_metric": "40000000",
     "base_metric_currency": "USD",
     "base_metric_period": "FY2025 (synthetic)",
-    "filings_since": "2020-01-01"
+    "filings_since": "2020-01-01",
+    "current_shares": "95000000"
   }
 }

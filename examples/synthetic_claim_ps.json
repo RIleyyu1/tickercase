@@ -16,6 +16,7 @@
     "base_annual_metric": "200000000",
     "base_metric_currency": "USD",
     "base_metric_period": "FY2025 (synthetic)",
-    "filings_since": "2024-01-01"
+    "filings_since": "2024-01-01",
+    "probability_drift": "0.07"
   }
 }

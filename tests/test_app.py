@@ -54,8 +54,10 @@ def test_example_confirm_run_and_stale_result_hidden(app_env):
     run(at)
     result = at.session_state["result"]
     assert result.status.value == "evaluated"
-    assert result.verdict is None
+    assert result.verdict.label == "partially_supported"
+    assert any("部分支持" in m.value for m in at.markdown)  # verdict banner
     assert any(df.value.shape[0] >= 5 for df in at.dataframe)  # calculations table rendered
+    assert result.probability is not None and result.probability.status == "ok"  # P/S example asks for it
 
     # edit an input: confirmation becomes stale, old result is hidden, run disabled
     at.text_input(key="f_target_price").set_value("120")
@@ -66,11 +68,11 @@ def test_example_confirm_run_and_stale_result_hidden(app_env):
     assert not at.dataframe
 
 
-def test_network_failure_shows_error_and_keeps_calculations(app_env):
+def test_data_failure_shows_error_and_keeps_calculations(app_env):
     at = run(AppTest.from_file(APP))
     button(at, "btn_example_ps").click()
     run(at)
-    at.radio(key="sec_mode").set_value("live")  # live without SEC_USER_AGENT -> provider error
+    at.radio(key="sec_mode").set_value("replay")  # empty snapshot dir -> every provider fails, no network
     run(at)
     button(at, "btn_confirm").click()
     run(at)
@@ -78,10 +80,40 @@ def test_network_failure_shows_error_and_keeps_calculations(app_env):
     run(at)
     result = at.session_state["result"]
     assert result.status.value == "evaluated_with_provider_errors"
-    assert result.evidence_records == []
+    assert result.evidence_records == [] and result.reported_facts is None and result.market is None
+    assert result.verdict.label == "insufficiently_specified"
     page = texts(at)
-    assert "missing_user_agent" in page and "SEC filing data is unavailable" in page
-    assert at.dataframe and at.dataframe[0].value.shape[0] >= 5  # calculations still shown
+    assert "snapshot_missing" in page and "data unavailable for this run" in page
+    assert any(df.value.shape[0] >= 5 for df in at.dataframe)  # calculations still shown
+
+
+def test_prefill_fills_reference_values_with_sources(app_env):
+    at = run(AppTest.from_file(APP))
+    at.radio(key="sec_mode").set_value("synthetic")
+    at.text_input(key="f_ticker").set_value("SYNT")
+    run(at)
+    button(at, "btn_prefill").click()
+    run(at)
+    assert at.session_state["f_reference_price"] == "50"
+    assert at.session_state["f_current_shares"] == "95000000"
+    assert at.session_state["f_base_annual_metric"] == "200000000"  # P/S -> revenue
+    at.selectbox(key="f_valuation_method").set_value("price_to_earnings")
+    run(at)
+    assert at.session_state["f_base_annual_metric"] == "40000000"  # switched to net income
+    assert "已带入" in texts(at)
+
+
+def test_pe_example_not_supported(app_env):
+    at = run(AppTest.from_file(APP))
+    button(at, "btn_example_pe").click()
+    run(at)
+    button(at, "btn_confirm").click()
+    run(at)
+    button(at, "btn_run").click()
+    run(at)
+    result = at.session_state["result"]
+    assert result.verdict.label == "not_supported_today"
+    assert result.probability is None
 
 
 def test_invalid_input_cannot_be_confirmed(app_env):

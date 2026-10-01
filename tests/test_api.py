@@ -34,7 +34,9 @@ def test_full_api_flow(tmp_path):
     r = client.post("/cases", json={"draft": draft, "confirmation": confirmation, "sec_mode": "synthetic"})
     assert r.status_code == 200
     body = r.json()
-    assert body["verdict"] is None and body["analysis_status"] == "not_implemented"
+    assert body["verdict"]["label"] == "partially_supported" and body["analysis_status"] == "deterministic_rules"
+    assert {i["id"] for i in body["evidence_items"]} >= {"E1", "E2", "E3"}
+    assert body["recheck_conditions"]
     calc = {c["name"]: c for c in body["calculations"]}
     assert calc["required_annual_revenue"]["value"] == "400000000"  # Decimal serialised as string
     assert calc["target_market_cap"]["value"] == "10000000000"
@@ -67,3 +69,14 @@ def test_live_failure_via_api_keeps_calculations(tmp_path):
     assert body["status"] == "evaluated_with_provider_errors"
     assert body["provider_errors"][0]["code"] == "missing_user_agent"
     assert len(body["calculations"]) >= 5 and body["evidence_records"] == []
+
+
+def test_reference_endpoint(tmp_path):
+    client = make_client(tmp_path)
+    r = client.get("/reference/SYNT", params={"mode": "synthetic"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["suggestions"]["reference_price"]["value"] == "50"
+    assert body["suggestions"]["current_shares"]["value"] == "95000000"
+    assert body["revenue_suggestion"]["value"] == "200000000"
+    assert client.get("/reference/bad ticker!", params={"mode": "synthetic"}).status_code == 422

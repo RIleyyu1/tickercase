@@ -65,6 +65,11 @@ class ClaimDraft(BaseModel):
     base_metric_currency: Optional[str] = None
     base_metric_period: Optional[str] = None
     filings_since: Optional[str] = None
+    # optional extra: price-probability reference (model output, never the verdict)
+    probability_drift: RawNumber = None
+    probability_volatility: RawNumber = None
+    # field name -> public source the current value was filled from (set by the page's prefill step)
+    field_sources: Optional[dict[str, str]] = None
 
     @field_validator(
         "target_price",
@@ -74,6 +79,8 @@ class ClaimDraft(BaseModel):
         "current_shares",
         "valuation_multiple",
         "base_annual_metric",
+        "probability_drift",
+        "probability_volatility",
         mode="before",
     )
     @classmethod
@@ -127,6 +134,9 @@ class ValidatedClaim(BaseModel):
     base_metric_currency: Optional[str] = None
     base_metric_period: Optional[str] = None
     filings_since: Optional[date] = None
+    probability_drift: Optional[DecimalStr] = None
+    probability_volatility: Optional[DecimalStr] = None
+    field_sources: dict[str, str] = Field(default_factory=dict)
 
 
 class ValidationResult(BaseModel):
@@ -204,6 +214,167 @@ class ProviderErrorRecord(BaseModel):
     data_mode: Optional[DataMode] = None
 
 
+class MetricPoint(BaseModel):
+    """One reported value from SEC XBRL company facts."""
+
+    period_start: Optional[date] = None  # None for point-in-time values such as shares outstanding
+    period_end: date
+    value: DecimalStr
+    unit: str
+    concept: str
+    form: str
+    accession: str
+    filed: date
+    fiscal_year: Optional[int] = None
+    fiscal_period: Optional[str] = None
+
+
+class ReportedFacts(BaseModel):
+    """Annual revenue, annual net income and shares outstanding as reported to the SEC."""
+
+    provider_id: str
+    ticker: str
+    cik: str
+    company_name: Optional[str] = None
+    revenue: list[MetricPoint] = Field(default_factory=list)
+    net_income: list[MetricPoint] = Field(default_factory=list)
+    shares_outstanding: list[MetricPoint] = Field(default_factory=list)
+    source_url: str
+    retrieved_at: datetime
+    source_captured_at: Optional[datetime] = None
+    data_mode: DataMode
+    notes: list[str] = Field(default_factory=list)
+
+
+class PricePoint(BaseModel):
+    day: date
+    close: DecimalStr
+
+
+class MarketSnapshot(BaseModel):
+    """Daily closing prices for the ticker from a public quote source."""
+
+    provider_id: str
+    symbol: str
+    currency: Optional[str] = None
+    last_close: DecimalStr
+    last_date: date
+    history_start: date
+    observations: int
+    annualized_volatility: Optional[DecimalStr] = None
+    volatility_window: str
+    price_series: list[PricePoint] = Field(default_factory=list)  # weekly sample for charts
+    source_url: str
+    retrieved_at: datetime
+    source_captured_at: Optional[datetime] = None
+    data_mode: DataMode
+    note: str = "Unofficial public quote endpoint; no service guarantee. Prices are as published by the source."
+
+
+class SourceRef(BaseModel):
+    label: str
+    url: Optional[str] = None
+    filed: Optional[date] = None
+    accession: Optional[str] = None
+    data_mode: Optional[DataMode] = None
+
+
+Stance = Literal["supporting", "contrary", "missing", "neutral"]
+
+
+class EvidenceItem(BaseModel):
+    """One deterministic check that compares a claim requirement with dated public data."""
+
+    id: str
+    check: str
+    stance: Stance
+    title: str
+    detail: str
+    measured: dict[str, str] = Field(default_factory=dict)
+    rule: Optional[str] = None
+    sources: list[SourceRef] = Field(default_factory=list)
+    as_of: Optional[date] = None
+
+
+VerdictLabel = Literal["supported_today", "partially_supported", "not_supported_today", "insufficiently_specified"]
+
+VERDICT_DISPLAY = {
+    "supported_today": "Supported Today",
+    "partially_supported": "Partially Supported",
+    "not_supported_today": "Not Supported Today",
+    "insufficiently_specified": "Insufficiently Specified",
+}
+
+
+class Verdict(BaseModel):
+    """Evidence-as-of classification (OA.13). Describes the evidence, not the future price."""
+
+    label: VerdictLabel
+    display: str
+    as_of: date
+    rationale: list[str]
+    limitations: list[str]
+    basis: list[str]  # evidence item ids
+    rules_version: str
+
+
+class RecheckCondition(BaseModel):
+    """Observable event that justifies a new review of the case (OA.14)."""
+
+    id: str
+    trigger: str
+    watch: str
+    threshold: Optional[str] = None
+    linked_to: list[str] = Field(default_factory=list)  # evidence ids or input field names
+
+
+class ProbabilityPoint(BaseModel):
+    price: DecimalStr
+    probability_at_or_above: float
+
+
+class ProbabilityReference(BaseModel):
+    """Optional extra: probability of the price being at or above levels under a lognormal model.
+
+    A model output under stated assumptions. It is not part of the verdict.
+    """
+
+    status: Literal["ok", "not_computable"]
+    model: str = "lognormal (geometric Brownian motion), constant drift and volatility"
+    spot: Optional[DecimalStr] = None
+    drift: Optional[DecimalStr] = None
+    volatility: Optional[DecimalStr] = None
+    volatility_source: Optional[str] = None
+    horizon_years: Optional[DecimalStr] = None
+    target_price: Optional[DecimalStr] = None
+    target_probability: Optional[float] = None
+    median_price: Optional[DecimalStr] = None
+    p10_price: Optional[DecimalStr] = None
+    p90_price: Optional[DecimalStr] = None
+    points: list[ProbabilityPoint] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    reason: Optional[str] = None
+
+
+class ReferenceSuggestion(BaseModel):
+    value: str
+    source: str
+
+
+class ReferenceSnapshot(BaseModel):
+    """Public reference values offered to the user before confirmation (page prefill)."""
+
+    ticker: str
+    company_name: Optional[str] = None
+    suggestions: dict[str, ReferenceSuggestion] = Field(default_factory=dict)
+    revenue_suggestion: Optional[ReferenceSuggestion] = None
+    net_income_suggestion: Optional[ReferenceSuggestion] = None
+    period_suggestion: Optional[ReferenceSuggestion] = None
+    provider_errors: list[ProviderErrorRecord] = Field(default_factory=list)
+    data_modes: dict[str, str] = Field(default_factory=dict)
+
+
 class CaseStatus(str, Enum):
     EVALUATED = "evaluated"
     EVALUATED_WITH_PROVIDER_ERRORS = "evaluated_with_provider_errors"
@@ -221,15 +392,21 @@ class CaseResult(BaseModel):
     calculations: list[CalculationItem] = Field(default_factory=list)
     evidence_records: list[FilingRecord] = Field(default_factory=list)
     coverage: Optional[CoverageInfo] = None
+    reported_facts: Optional[ReportedFacts] = None
+    market: Optional[MarketSnapshot] = None
+    evidence_items: list[EvidenceItem] = Field(default_factory=list)
+    verdict: Optional[Verdict] = None
+    recheck_conditions: list[RecheckCondition] = Field(default_factory=list)
+    probability: Optional[ProbabilityReference] = None
     provider_errors: list[ProviderErrorRecord] = Field(default_factory=list)
     validation_issues: list[ValidationIssue] = Field(default_factory=list)
     missing_fields: list[MissingField] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     data_modes: dict[str, str] = Field(default_factory=dict)
     mixed_sources: bool = False
-    analysis_status: Literal["not_implemented"] = "not_implemented"
-    verdict: None = None
+    analysis_status: Literal["not_run", "deterministic_rules"] = "not_run"
     disclaimer: str = (
-        "TickerCase shows what a claim requires under the user's own assumptions. "
-        "It does not rate the claim, estimate a probability, or give investment advice."
+        "TickerCase checks what a claim requires under the user's assumptions against dated public data. "
+        "The verdict describes the evidence as of a date; it is not a price prediction, a guarantee or investment advice. "
+        "The optional probability section is a model output under stated assumptions and is not part of the verdict."
     )

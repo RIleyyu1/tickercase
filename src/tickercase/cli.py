@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     text = case.model_dump_json(indent=2)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(text + "\n", encoding="utf-8")
+        args.out.write_text(text + "\n", encoding="utf-8", newline="\n")
         print(f"wrote {args.out} (status={case.status.value})")
     else:
         print(text)

@@ -145,6 +145,8 @@ class LiveHttpClient:
     max_retry_after_seconds: float = 30.0
     backoff_seconds: float = 1.0
     cache_ttl_seconds: Mapping[str, float] = field(default_factory=dict)
+    require_contact_email: bool = True  # SEC fair-access rule; other sources only need a non-empty User-Agent
+    service_name: str = "SEC"
     transport: Transport = urllib_transport
     sleep: Callable[[float], None] = time.sleep
     monotonic: Callable[[], float] = time.monotonic
@@ -175,7 +177,10 @@ class LiveHttpClient:
             self._last_request = self.monotonic()
 
     def get_json(self, url: str) -> FetchedJson:
-        problem = validate_user_agent(self.user_agent)
+        if self.require_contact_email:
+            problem = validate_user_agent(self.user_agent)
+        else:
+            problem = None if (self.user_agent or "").strip() else f"no User-Agent configured for {self.service_name}"
         if problem:
             raise FetchError("missing_user_agent", problem, url=url, data_mode=DataMode.LIVE)
         if urlparse(url).scheme != "https":
@@ -222,13 +227,14 @@ class LiveHttpClient:
                     self._cache[url] = (self.monotonic(), fetched)
                 return fetched
             if status == 403:
-                raise FetchError(
-                    "forbidden",
-                    "SEC returned 403 Forbidden. Common causes: missing or generic User-Agent without a contact email, "
-                    "request rate above SEC's fair-access limit, or a network/firewall that blocks sec.gov. "
-                    f"URL: {url}",
-                    url=url, http_status=403, data_mode=DataMode.LIVE,
-                )
+                if self.service_name == "SEC":
+                    message = (
+                        "SEC returned 403 Forbidden. Common causes: missing or generic User-Agent without a contact email, "
+                        "request rate above SEC's fair-access limit, or a network/firewall that blocks sec.gov. "
+                    )
+                else:
+                    message = f"{self.service_name} returned 403 Forbidden (access refused by the source or a network filter). "
+                raise FetchError("forbidden", message + f"URL: {url}", url=url, http_status=403, data_mode=DataMode.LIVE)
             if status == 404:
                 raise FetchError("not_found", f"404 Not Found: {url}", url=url, http_status=404, data_mode=DataMode.LIVE)
             if status == 429:
@@ -316,7 +322,7 @@ def write_snapshot(
         envelope["note"] = note
     fd, tmp_name = tempfile.mkstemp(prefix=".tmp-", suffix=".json", dir=directory)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             json.dump(envelope, handle, ensure_ascii=False, indent=1, sort_keys=True)
             handle.flush()
             os.fsync(handle.fileno())

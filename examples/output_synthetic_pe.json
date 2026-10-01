@@ -1,8 +1,8 @@
 {
-  "case_id": "553875f439e14153beca6efc69d039dc",
-  "created_at": "2026-10-01T15:07:47.263050Z",
+  "case_id": "53a858e7e24d48c090db19375a1ec068",
+  "created_at": "2026-10-01T16:24:24.995342Z",
   "status": "evaluated",
-  "input_fingerprint": "de86abd9d0775673d00d14cd6e0e3c866910d7790da0f41c0d344066f71809bb",
+  "input_fingerprint": "de5cb91e3248b0495d7acf8d85a6bb036cba803df744e457d247ef99f83bc509",
   "confirmed_claim": {
     "values": {
       "claim_text": "SYNT will trade at $100 in five years.",
@@ -14,16 +14,19 @@
       "reference_price_source": "synthetic example value",
       "horizon_years": "5",
       "target_assumed_shares": "100000000",
-      "current_shares": null,
+      "current_shares": "95000000",
       "valuation_method": "price_to_earnings",
       "valuation_multiple": "20",
-      "base_annual_metric": "250000000",
+      "base_annual_metric": "40000000",
       "base_metric_currency": "USD",
       "base_metric_period": "FY2025 (synthetic)",
-      "filings_since": "2020-01-01"
+      "filings_since": "2020-01-01",
+      "probability_drift": null,
+      "probability_volatility": null,
+      "field_sources": {}
     },
-    "fingerprint": "de86abd9d0775673d00d14cd6e0e3c866910d7790da0f41c0d344066f71809bb",
-    "confirmed_at": "2026-10-01T15:07:47.263023Z",
+    "fingerprint": "de5cb91e3248b0495d7acf8d85a6bb036cba803df744e457d247ef99f83bc509",
+    "confirmed_at": "2026-10-01T16:24:24.995314Z",
     "value_provenance": {
       "claim_text": "user_input",
       "ticker": "user_input",
@@ -34,6 +37,7 @@
       "reference_price_source": "user_input",
       "horizon_years": "user_input:assumption",
       "target_assumed_shares": "user_input:assumption",
+      "current_shares": "user_input:manual_reference_value",
       "valuation_method": "user_input:assumption",
       "valuation_multiple": "user_input:assumption",
       "base_annual_metric": "user_input:manual_reference_value",
@@ -92,6 +96,21 @@
       "reason": null
     },
     {
+      "name": "implied_share_count_change",
+      "status": "ok",
+      "value": "0.052631578947368421052631578947368",
+      "unit": "ratio",
+      "formula": "target_assumed_shares / current_shares - 1",
+      "inputs": {
+        "target_assumed_shares": "100000000",
+        "current_shares": "95000000"
+      },
+      "assumptions": [
+        "current_shares is a manual reference value entered by the user"
+      ],
+      "reason": null
+    },
+    {
       "name": "required_annual_net_income",
       "status": "ok",
       "value": "500000000",
@@ -109,13 +128,13 @@
     {
       "name": "required_metric_cagr",
       "status": "ok",
-      "value": "0.148698354997035006798626946777928",
+      "value": "0.657227008669993400234290072156321",
       "unit": "ratio per year",
       "formula": "(required_annual_net_income / base_annual_net_income) ** (1 / horizon_years) - 1",
       "inputs": {
         "required_annual_net_income": "500000000",
         "horizon_years": "5",
-        "base_annual_net_income": "250000000"
+        "base_annual_net_income": "40000000"
       },
       "assumptions": [
         "base_annual_net_income is a manual reference value entered by the user",
@@ -140,7 +159,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/synt-20260804.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/0009999901-26-000013-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -160,7 +179,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/synt-20260630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/0009999901-26-000012-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -180,7 +199,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/synt-20260331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/0009999901-26-000010-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -200,7 +219,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/synt-20251231a.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/0009999901-26-000009-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -220,7 +239,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/synt-20251231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/0009999901-26-000008-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -240,7 +259,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/synt-20260114.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/0009999901-26-000007-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -260,7 +279,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/synt-20250930.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/0009999901-25-000006-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -280,7 +299,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/synt-20250630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/0009999901-25-000005-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -300,7 +319,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/synt-20250331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/0009999901-25-000004-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -320,7 +339,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/synt-20241231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/0009999901-25-000003-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -340,7 +359,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/synt-20231231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/0009999901-24-000001-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T15:07:47.263577Z",
+      "retrieved_at": "2026-10-01T16:24:24.996140Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -363,18 +382,1519 @@
     ],
     "message": "Coverage gap: the requested window starts 2020-01-01, but the parsed recent block covers 2024-02-23 to 2026-08-05. SEC lists 1 older submission file(s) that were not fetched, so filings before 2024-02-23 were not checked."
   },
+  "reported_facts": {
+    "provider_id": "sec_xbrl_companyfacts",
+    "ticker": "SYNT",
+    "cik": "0009999901",
+    "company_name": "Synthetic Example Corp (fictional)",
+    "revenue": [
+      {
+        "period_start": "2021-01-01",
+        "period_end": "2021-12-31",
+        "value": "120000000",
+        "unit": "USD",
+        "concept": "RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-K",
+        "accession": "0009999901-23-000090",
+        "filed": "2023-02-24",
+        "fiscal_year": 2022,
+        "fiscal_period": "FY"
+      },
+      {
+        "period_start": "2022-01-01",
+        "period_end": "2022-12-31",
+        "value": "140000000",
+        "unit": "USD",
+        "concept": "RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-K",
+        "accession": "0009999901-24-000001",
+        "filed": "2024-02-23",
+        "fiscal_year": 2023,
+        "fiscal_period": "FY"
+      },
+      {
+        "period_start": "2023-01-01",
+        "period_end": "2023-12-31",
+        "value": "160000000",
+        "unit": "USD",
+        "concept": "RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-K",
+        "accession": "0009999901-25-000003",
+        "filed": "2025-02-21",
+        "fiscal_year": 2024,
+        "fiscal_period": "FY"
+      },
+      {
+        "period_start": "2024-01-01",
+        "period_end": "2024-12-31",
+        "value": "180000000",
+        "unit": "USD",
+        "concept": "RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-K",
+        "accession": "0009999901-26-000008",
+        "filed": "2026-02-20",
+        "fiscal_year": 2025,
+        "fiscal_period": "FY"
+      },
+      {
+        "period_start": "2025-01-01",
+        "period_end": "2025-12-31",
+        "value": "200000000",
+        "unit": "USD",
+        "concept": "RevenueFromContractWithCustomerExcludingAssessedTax",
+        "form": "10-K",
+        "accession": "0009999901-26-000008",
+        "filed": "2026-02-20",
+        "fiscal_year": 2025,
+        "fiscal_period": "FY"
+      }
+    ],
+    "net_income": [
+      {
+        "period_start": "2021-01-01",
+        "period_end": "2021-12-31",
+        "value": "22000000",
+        "unit": "USD",
+        "concept": "NetIncomeLoss",
+        "form": "10-K",
+        "accession": "0009999901-23-000090",
+        "filed": "2023-02-24",
+        "fiscal_year": 2022,
+        "fiscal_period": "FY"
+      },
+      {
+        "period_start": "2022-01-01",
+        "period_end": "2022-12-31",
+        "value": "28000000",
+        "unit": "USD",
+        "concept": "NetIncomeLoss",
+        "form": "10-K",
+        "accession": "0009999901-24-000001",
+        "filed": "2024-02-23",
+        "fiscal_year": 2023,
+        "fiscal_period": "FY"
+      },
+      {
+        "period_start": "2023-01-01",
+        "period_end": "2023-12-31",
+        "value": "32000000",
+        "unit": "USD",
+        "concept": "NetIncomeLoss",
+        "form": "10-K",
+        "accession": "0009999901-25-000003",
+        "filed": "2025-02-21",
+        "fiscal_year": 2024,
+        "fiscal_period": "FY"
+      },
+      {
+        "period_start": "2024-01-01",
+        "period_end": "2024-12-31",
+        "value": "36000000",
+        "unit": "USD",
+        "concept": "NetIncomeLoss",
+        "form": "10-K",
+        "accession": "0009999901-26-000008",
+        "filed": "2026-02-20",
+        "fiscal_year": 2025,
+        "fiscal_period": "FY"
+      },
+      {
+        "period_start": "2025-01-01",
+        "period_end": "2025-12-31",
+        "value": "40000000",
+        "unit": "USD",
+        "concept": "NetIncomeLoss",
+        "form": "10-K",
+        "accession": "0009999901-26-000008",
+        "filed": "2026-02-20",
+        "fiscal_year": 2025,
+        "fiscal_period": "FY"
+      }
+    ],
+    "shares_outstanding": [
+      {
+        "period_start": null,
+        "period_end": "2023-07-28",
+        "value": "92100000",
+        "unit": "shares",
+        "concept": "dei:EntityCommonStockSharesOutstanding",
+        "form": "10-Q",
+        "accession": "0009999901-23-000150",
+        "filed": "2023-08-01",
+        "fiscal_year": 2023,
+        "fiscal_period": "Q2"
+      },
+      {
+        "period_start": null,
+        "period_end": "2024-07-26",
+        "value": "93500000",
+        "unit": "shares",
+        "concept": "dei:EntityCommonStockSharesOutstanding",
+        "form": "10-Q",
+        "accession": "0009999901-24-000150",
+        "filed": "2024-08-01",
+        "fiscal_year": 2024,
+        "fiscal_period": "Q2"
+      },
+      {
+        "period_start": null,
+        "period_end": "2025-07-25",
+        "value": "94200000",
+        "unit": "shares",
+        "concept": "dei:EntityCommonStockSharesOutstanding",
+        "form": "10-Q",
+        "accession": "0009999901-25-000006",
+        "filed": "2025-08-01",
+        "fiscal_year": 2025,
+        "fiscal_period": "Q2"
+      },
+      {
+        "period_start": null,
+        "period_end": "2026-01-30",
+        "value": "94600000",
+        "unit": "shares",
+        "concept": "dei:EntityCommonStockSharesOutstanding",
+        "form": "10-K",
+        "accession": "0009999901-26-000008",
+        "filed": "2026-02-20",
+        "fiscal_year": 2026,
+        "fiscal_period": "FY"
+      },
+      {
+        "period_start": null,
+        "period_end": "2026-07-24",
+        "value": "95000000",
+        "unit": "shares",
+        "concept": "dei:EntityCommonStockSharesOutstanding",
+        "form": "10-Q",
+        "accession": "0009999901-26-000012",
+        "filed": "2026-08-01",
+        "fiscal_year": 2026,
+        "fiscal_period": "Q2"
+      }
+    ],
+    "source_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0009999901.json",
+    "retrieved_at": "2026-10-01T16:24:24.996534Z",
+    "source_captured_at": "2026-10-01T00:00:00Z",
+    "data_mode": "synthetic",
+    "notes": []
+  },
+  "market": {
+    "provider_id": "yahoo_finance_chart",
+    "symbol": "SYNT",
+    "currency": "USD",
+    "last_close": "50",
+    "last_date": "2026-09-30",
+    "history_start": "2021-10-01",
+    "observations": 1304,
+    "annualized_volatility": "0.351718",
+    "volatility_window": "daily log returns of adjusted close, 2021-10-01 to 2026-09-30 (1303 returns)",
+    "price_series": [
+      {
+        "day": "2021-10-01",
+        "close": "27.5259"
+      },
+      {
+        "day": "2021-10-08",
+        "close": "28.0962"
+      },
+      {
+        "day": "2021-10-15",
+        "close": "28.277"
+      },
+      {
+        "day": "2021-10-22",
+        "close": "28.327"
+      },
+      {
+        "day": "2021-10-29",
+        "close": "29.8766"
+      },
+      {
+        "day": "2021-11-05",
+        "close": "29.427"
+      },
+      {
+        "day": "2021-11-12",
+        "close": "29.0289"
+      },
+      {
+        "day": "2021-11-19",
+        "close": "31.2756"
+      },
+      {
+        "day": "2021-11-26",
+        "close": "32.5086"
+      },
+      {
+        "day": "2021-12-03",
+        "close": "32.6023"
+      },
+      {
+        "day": "2021-12-10",
+        "close": "32.1942"
+      },
+      {
+        "day": "2021-12-17",
+        "close": "29.248"
+      },
+      {
+        "day": "2021-12-24",
+        "close": "31.207"
+      },
+      {
+        "day": "2021-12-31",
+        "close": "28.959"
+      },
+      {
+        "day": "2022-01-07",
+        "close": "27.9957"
+      },
+      {
+        "day": "2022-01-14",
+        "close": "29.4965"
+      },
+      {
+        "day": "2022-01-21",
+        "close": "30.8073"
+      },
+      {
+        "day": "2022-01-28",
+        "close": "29.8678"
+      },
+      {
+        "day": "2022-02-04",
+        "close": "27.4992"
+      },
+      {
+        "day": "2022-02-11",
+        "close": "26.5449"
+      },
+      {
+        "day": "2022-02-18",
+        "close": "26.773"
+      },
+      {
+        "day": "2022-02-25",
+        "close": "26.4755"
+      },
+      {
+        "day": "2022-03-04",
+        "close": "25.5549"
+      },
+      {
+        "day": "2022-03-11",
+        "close": "25.7314"
+      },
+      {
+        "day": "2022-03-18",
+        "close": "24.8826"
+      },
+      {
+        "day": "2022-03-25",
+        "close": "26.2336"
+      },
+      {
+        "day": "2022-04-01",
+        "close": "29.9435"
+      },
+      {
+        "day": "2022-04-08",
+        "close": "31.0552"
+      },
+      {
+        "day": "2022-04-15",
+        "close": "28.6"
+      },
+      {
+        "day": "2022-04-22",
+        "close": "31.2295"
+      },
+      {
+        "day": "2022-04-29",
+        "close": "34.3731"
+      },
+      {
+        "day": "2022-05-06",
+        "close": "33.6735"
+      },
+      {
+        "day": "2022-05-13",
+        "close": "32.3808"
+      },
+      {
+        "day": "2022-05-20",
+        "close": "32.6417"
+      },
+      {
+        "day": "2022-05-27",
+        "close": "32.648"
+      },
+      {
+        "day": "2022-06-03",
+        "close": "34.117"
+      },
+      {
+        "day": "2022-06-10",
+        "close": "35.1259"
+      },
+      {
+        "day": "2022-06-17",
+        "close": "34.6802"
+      },
+      {
+        "day": "2022-06-24",
+        "close": "35.608"
+      },
+      {
+        "day": "2022-07-01",
+        "close": "34.809"
+      },
+      {
+        "day": "2022-07-08",
+        "close": "31.1794"
+      },
+      {
+        "day": "2022-07-15",
+        "close": "32.5681"
+      },
+      {
+        "day": "2022-07-22",
+        "close": "31.7507"
+      },
+      {
+        "day": "2022-07-29",
+        "close": "29.7393"
+      },
+      {
+        "day": "2022-08-05",
+        "close": "28.145"
+      },
+      {
+        "day": "2022-08-12",
+        "close": "27.919"
+      },
+      {
+        "day": "2022-08-19",
+        "close": "28.0612"
+      },
+      {
+        "day": "2022-08-26",
+        "close": "27.8877"
+      },
+      {
+        "day": "2022-09-02",
+        "close": "28.9445"
+      },
+      {
+        "day": "2022-09-09",
+        "close": "30.6549"
+      },
+      {
+        "day": "2022-09-16",
+        "close": "32.8348"
+      },
+      {
+        "day": "2022-09-23",
+        "close": "32.4497"
+      },
+      {
+        "day": "2022-09-30",
+        "close": "36.0451"
+      },
+      {
+        "day": "2022-10-07",
+        "close": "36.0859"
+      },
+      {
+        "day": "2022-10-14",
+        "close": "38.8694"
+      },
+      {
+        "day": "2022-10-21",
+        "close": "45.433"
+      },
+      {
+        "day": "2022-10-28",
+        "close": "45.566"
+      },
+      {
+        "day": "2022-11-04",
+        "close": "44.6426"
+      },
+      {
+        "day": "2022-11-11",
+        "close": "47.2491"
+      },
+      {
+        "day": "2022-11-18",
+        "close": "42.6309"
+      },
+      {
+        "day": "2022-11-25",
+        "close": "41.3151"
+      },
+      {
+        "day": "2022-12-02",
+        "close": "41.6905"
+      },
+      {
+        "day": "2022-12-09",
+        "close": "40.3723"
+      },
+      {
+        "day": "2022-12-16",
+        "close": "41.7979"
+      },
+      {
+        "day": "2022-12-23",
+        "close": "45.0608"
+      },
+      {
+        "day": "2022-12-30",
+        "close": "46.7819"
+      },
+      {
+        "day": "2023-01-06",
+        "close": "42.5315"
+      },
+      {
+        "day": "2023-01-13",
+        "close": "44.2849"
+      },
+      {
+        "day": "2023-01-20",
+        "close": "41.8802"
+      },
+      {
+        "day": "2023-01-27",
+        "close": "40.6093"
+      },
+      {
+        "day": "2023-02-03",
+        "close": "41.1451"
+      },
+      {
+        "day": "2023-02-10",
+        "close": "38.765"
+      },
+      {
+        "day": "2023-02-17",
+        "close": "38.0096"
+      },
+      {
+        "day": "2023-02-24",
+        "close": "38.6219"
+      },
+      {
+        "day": "2023-03-03",
+        "close": "38.0775"
+      },
+      {
+        "day": "2023-03-10",
+        "close": "36.1378"
+      },
+      {
+        "day": "2023-03-17",
+        "close": "36.2563"
+      },
+      {
+        "day": "2023-03-24",
+        "close": "36.8476"
+      },
+      {
+        "day": "2023-03-31",
+        "close": "37.4396"
+      },
+      {
+        "day": "2023-04-07",
+        "close": "38.242"
+      },
+      {
+        "day": "2023-04-14",
+        "close": "36.9161"
+      },
+      {
+        "day": "2023-04-21",
+        "close": "37.5602"
+      },
+      {
+        "day": "2023-04-28",
+        "close": "38.3251"
+      },
+      {
+        "day": "2023-05-05",
+        "close": "41.1787"
+      },
+      {
+        "day": "2023-05-12",
+        "close": "41.1679"
+      },
+      {
+        "day": "2023-05-19",
+        "close": "41.3834"
+      },
+      {
+        "day": "2023-05-26",
+        "close": "42.3814"
+      },
+      {
+        "day": "2023-06-02",
+        "close": "45.9461"
+      },
+      {
+        "day": "2023-06-09",
+        "close": "44.3193"
+      },
+      {
+        "day": "2023-06-16",
+        "close": "43.8844"
+      },
+      {
+        "day": "2023-06-23",
+        "close": "45.4655"
+      },
+      {
+        "day": "2023-06-30",
+        "close": "47.7607"
+      },
+      {
+        "day": "2023-07-07",
+        "close": "45.9647"
+      },
+      {
+        "day": "2023-07-14",
+        "close": "41.3128"
+      },
+      {
+        "day": "2023-07-21",
+        "close": "44.6669"
+      },
+      {
+        "day": "2023-07-28",
+        "close": "42.8488"
+      },
+      {
+        "day": "2023-08-04",
+        "close": "40.6296"
+      },
+      {
+        "day": "2023-08-11",
+        "close": "37.9578"
+      },
+      {
+        "day": "2023-08-18",
+        "close": "34.4804"
+      },
+      {
+        "day": "2023-08-25",
+        "close": "33.9562"
+      },
+      {
+        "day": "2023-09-01",
+        "close": "33.9397"
+      },
+      {
+        "day": "2023-09-08",
+        "close": "33.9581"
+      },
+      {
+        "day": "2023-09-15",
+        "close": "34.1756"
+      },
+      {
+        "day": "2023-09-22",
+        "close": "33.7695"
+      },
+      {
+        "day": "2023-09-29",
+        "close": "35.6487"
+      },
+      {
+        "day": "2023-10-06",
+        "close": "35.2814"
+      },
+      {
+        "day": "2023-10-13",
+        "close": "32.8839"
+      },
+      {
+        "day": "2023-10-20",
+        "close": "31.3468"
+      },
+      {
+        "day": "2023-10-27",
+        "close": "32.7841"
+      },
+      {
+        "day": "2023-11-03",
+        "close": "30.6611"
+      },
+      {
+        "day": "2023-11-10",
+        "close": "30.2539"
+      },
+      {
+        "day": "2023-11-17",
+        "close": "32.1652"
+      },
+      {
+        "day": "2023-11-24",
+        "close": "30.5629"
+      },
+      {
+        "day": "2023-12-01",
+        "close": "35.1432"
+      },
+      {
+        "day": "2023-12-08",
+        "close": "34.6212"
+      },
+      {
+        "day": "2023-12-15",
+        "close": "38.3835"
+      },
+      {
+        "day": "2023-12-22",
+        "close": "36.1734"
+      },
+      {
+        "day": "2023-12-29",
+        "close": "37.4587"
+      },
+      {
+        "day": "2024-01-05",
+        "close": "36.7622"
+      },
+      {
+        "day": "2024-01-12",
+        "close": "38.1658"
+      },
+      {
+        "day": "2024-01-19",
+        "close": "35.5767"
+      },
+      {
+        "day": "2024-01-26",
+        "close": "34.1829"
+      },
+      {
+        "day": "2024-02-02",
+        "close": "32.3626"
+      },
+      {
+        "day": "2024-02-09",
+        "close": "33.4243"
+      },
+      {
+        "day": "2024-02-16",
+        "close": "34.5448"
+      },
+      {
+        "day": "2024-02-23",
+        "close": "33.7817"
+      },
+      {
+        "day": "2024-03-01",
+        "close": "34.9323"
+      },
+      {
+        "day": "2024-03-08",
+        "close": "32.0859"
+      },
+      {
+        "day": "2024-03-15",
+        "close": "33.9082"
+      },
+      {
+        "day": "2024-03-22",
+        "close": "36.2049"
+      },
+      {
+        "day": "2024-03-29",
+        "close": "38.1886"
+      },
+      {
+        "day": "2024-04-05",
+        "close": "37.6089"
+      },
+      {
+        "day": "2024-04-12",
+        "close": "36.2273"
+      },
+      {
+        "day": "2024-04-19",
+        "close": "35.2449"
+      },
+      {
+        "day": "2024-04-26",
+        "close": "36.6638"
+      },
+      {
+        "day": "2024-05-03",
+        "close": "34.6721"
+      },
+      {
+        "day": "2024-05-10",
+        "close": "35.9997"
+      },
+      {
+        "day": "2024-05-17",
+        "close": "31.7446"
+      },
+      {
+        "day": "2024-05-24",
+        "close": "30.4672"
+      },
+      {
+        "day": "2024-05-31",
+        "close": "30.5435"
+      },
+      {
+        "day": "2024-06-07",
+        "close": "29.6898"
+      },
+      {
+        "day": "2024-06-14",
+        "close": "29.0293"
+      },
+      {
+        "day": "2024-06-21",
+        "close": "29.1618"
+      },
+      {
+        "day": "2024-06-28",
+        "close": "30.4517"
+      },
+      {
+        "day": "2024-07-05",
+        "close": "30.9372"
+      },
+      {
+        "day": "2024-07-12",
+        "close": "31.0381"
+      },
+      {
+        "day": "2024-07-19",
+        "close": "30.9578"
+      },
+      {
+        "day": "2024-07-26",
+        "close": "29.043"
+      },
+      {
+        "day": "2024-08-02",
+        "close": "28.9342"
+      },
+      {
+        "day": "2024-08-09",
+        "close": "29.9255"
+      },
+      {
+        "day": "2024-08-16",
+        "close": "31.968"
+      },
+      {
+        "day": "2024-08-23",
+        "close": "33.3849"
+      },
+      {
+        "day": "2024-08-30",
+        "close": "38.3683"
+      },
+      {
+        "day": "2024-09-06",
+        "close": "37.4956"
+      },
+      {
+        "day": "2024-09-13",
+        "close": "39.832"
+      },
+      {
+        "day": "2024-09-20",
+        "close": "41.8507"
+      },
+      {
+        "day": "2024-09-27",
+        "close": "39.4164"
+      },
+      {
+        "day": "2024-10-04",
+        "close": "39.8324"
+      },
+      {
+        "day": "2024-10-11",
+        "close": "36.3114"
+      },
+      {
+        "day": "2024-10-18",
+        "close": "39.2913"
+      },
+      {
+        "day": "2024-10-25",
+        "close": "37.9558"
+      },
+      {
+        "day": "2024-11-01",
+        "close": "39.3799"
+      },
+      {
+        "day": "2024-11-08",
+        "close": "39.2301"
+      },
+      {
+        "day": "2024-11-15",
+        "close": "37.8267"
+      },
+      {
+        "day": "2024-11-22",
+        "close": "37.4832"
+      },
+      {
+        "day": "2024-11-29",
+        "close": "37.7558"
+      },
+      {
+        "day": "2024-12-06",
+        "close": "35.7727"
+      },
+      {
+        "day": "2024-12-13",
+        "close": "37.0031"
+      },
+      {
+        "day": "2024-12-20",
+        "close": "36.1829"
+      },
+      {
+        "day": "2024-12-27",
+        "close": "34.6832"
+      },
+      {
+        "day": "2025-01-03",
+        "close": "34.1377"
+      },
+      {
+        "day": "2025-01-10",
+        "close": "35.1293"
+      },
+      {
+        "day": "2025-01-17",
+        "close": "35.1183"
+      },
+      {
+        "day": "2025-01-24",
+        "close": "34.5173"
+      },
+      {
+        "day": "2025-01-31",
+        "close": "34.709"
+      },
+      {
+        "day": "2025-02-07",
+        "close": "34.3643"
+      },
+      {
+        "day": "2025-02-14",
+        "close": "36.1978"
+      },
+      {
+        "day": "2025-02-21",
+        "close": "37.3178"
+      },
+      {
+        "day": "2025-02-28",
+        "close": "38.3073"
+      },
+      {
+        "day": "2025-03-07",
+        "close": "41.0495"
+      },
+      {
+        "day": "2025-03-14",
+        "close": "41.7982"
+      },
+      {
+        "day": "2025-03-21",
+        "close": "41.5576"
+      },
+      {
+        "day": "2025-03-28",
+        "close": "42.4311"
+      },
+      {
+        "day": "2025-04-04",
+        "close": "40.3944"
+      },
+      {
+        "day": "2025-04-11",
+        "close": "43.6836"
+      },
+      {
+        "day": "2025-04-18",
+        "close": "44.7533"
+      },
+      {
+        "day": "2025-04-25",
+        "close": "46.4459"
+      },
+      {
+        "day": "2025-05-02",
+        "close": "48.2892"
+      },
+      {
+        "day": "2025-05-09",
+        "close": "48.6974"
+      },
+      {
+        "day": "2025-05-16",
+        "close": "44.7277"
+      },
+      {
+        "day": "2025-05-23",
+        "close": "48.3023"
+      },
+      {
+        "day": "2025-05-30",
+        "close": "48.5457"
+      },
+      {
+        "day": "2025-06-06",
+        "close": "48.0396"
+      },
+      {
+        "day": "2025-06-13",
+        "close": "51.3861"
+      },
+      {
+        "day": "2025-06-20",
+        "close": "47.9931"
+      },
+      {
+        "day": "2025-06-27",
+        "close": "48.5148"
+      },
+      {
+        "day": "2025-07-04",
+        "close": "48.4871"
+      },
+      {
+        "day": "2025-07-11",
+        "close": "47.7678"
+      },
+      {
+        "day": "2025-07-18",
+        "close": "48.2923"
+      },
+      {
+        "day": "2025-07-25",
+        "close": "47.9389"
+      },
+      {
+        "day": "2025-08-01",
+        "close": "48.2018"
+      },
+      {
+        "day": "2025-08-08",
+        "close": "51.2144"
+      },
+      {
+        "day": "2025-08-15",
+        "close": "47.3655"
+      },
+      {
+        "day": "2025-08-22",
+        "close": "46.4048"
+      },
+      {
+        "day": "2025-08-29",
+        "close": "45.7818"
+      },
+      {
+        "day": "2025-09-05",
+        "close": "49.2543"
+      },
+      {
+        "day": "2025-09-12",
+        "close": "49.7063"
+      },
+      {
+        "day": "2025-09-19",
+        "close": "50.2009"
+      },
+      {
+        "day": "2025-09-26",
+        "close": "50.7084"
+      },
+      {
+        "day": "2025-10-03",
+        "close": "54.5519"
+      },
+      {
+        "day": "2025-10-10",
+        "close": "55.5188"
+      },
+      {
+        "day": "2025-10-17",
+        "close": "54.9807"
+      },
+      {
+        "day": "2025-10-24",
+        "close": "56.4782"
+      },
+      {
+        "day": "2025-10-31",
+        "close": "55.2756"
+      },
+      {
+        "day": "2025-11-07",
+        "close": "52.9899"
+      },
+      {
+        "day": "2025-11-14",
+        "close": "59.6581"
+      },
+      {
+        "day": "2025-11-21",
+        "close": "61.7329"
+      },
+      {
+        "day": "2025-11-28",
+        "close": "62.4561"
+      },
+      {
+        "day": "2025-12-05",
+        "close": "56.3833"
+      },
+      {
+        "day": "2025-12-12",
+        "close": "54.8448"
+      },
+      {
+        "day": "2025-12-19",
+        "close": "57.014"
+      },
+      {
+        "day": "2025-12-26",
+        "close": "54.5319"
+      },
+      {
+        "day": "2026-01-02",
+        "close": "56.0142"
+      },
+      {
+        "day": "2026-01-09",
+        "close": "60.8085"
+      },
+      {
+        "day": "2026-01-16",
+        "close": "68.4477"
+      },
+      {
+        "day": "2026-01-23",
+        "close": "65.3843"
+      },
+      {
+        "day": "2026-01-30",
+        "close": "64.3033"
+      },
+      {
+        "day": "2026-02-06",
+        "close": "62.1506"
+      },
+      {
+        "day": "2026-02-13",
+        "close": "65.7841"
+      },
+      {
+        "day": "2026-02-20",
+        "close": "60.9022"
+      },
+      {
+        "day": "2026-02-27",
+        "close": "57.6764"
+      },
+      {
+        "day": "2026-03-06",
+        "close": "54.4202"
+      },
+      {
+        "day": "2026-03-13",
+        "close": "56.6946"
+      },
+      {
+        "day": "2026-03-20",
+        "close": "62.0053"
+      },
+      {
+        "day": "2026-03-27",
+        "close": "63.4832"
+      },
+      {
+        "day": "2026-04-03",
+        "close": "67.0976"
+      },
+      {
+        "day": "2026-04-10",
+        "close": "62.5594"
+      },
+      {
+        "day": "2026-04-17",
+        "close": "62.0856"
+      },
+      {
+        "day": "2026-04-24",
+        "close": "58.6572"
+      },
+      {
+        "day": "2026-05-01",
+        "close": "57.6437"
+      },
+      {
+        "day": "2026-05-08",
+        "close": "52.2564"
+      },
+      {
+        "day": "2026-05-15",
+        "close": "52.9543"
+      },
+      {
+        "day": "2026-05-22",
+        "close": "50.2943"
+      },
+      {
+        "day": "2026-05-29",
+        "close": "53.0764"
+      },
+      {
+        "day": "2026-06-05",
+        "close": "51.7937"
+      },
+      {
+        "day": "2026-06-12",
+        "close": "49.9284"
+      },
+      {
+        "day": "2026-06-19",
+        "close": "49.3887"
+      },
+      {
+        "day": "2026-06-26",
+        "close": "50.6644"
+      },
+      {
+        "day": "2026-07-03",
+        "close": "47.7475"
+      },
+      {
+        "day": "2026-07-10",
+        "close": "48.7633"
+      },
+      {
+        "day": "2026-07-17",
+        "close": "51.9706"
+      },
+      {
+        "day": "2026-07-24",
+        "close": "55.3497"
+      },
+      {
+        "day": "2026-07-31",
+        "close": "53.017"
+      },
+      {
+        "day": "2026-08-07",
+        "close": "51.0834"
+      },
+      {
+        "day": "2026-08-14",
+        "close": "50.4167"
+      },
+      {
+        "day": "2026-08-21",
+        "close": "52.7991"
+      },
+      {
+        "day": "2026-08-28",
+        "close": "51.4856"
+      },
+      {
+        "day": "2026-09-04",
+        "close": "51.7961"
+      },
+      {
+        "day": "2026-09-11",
+        "close": "48.9704"
+      },
+      {
+        "day": "2026-09-18",
+        "close": "46.4373"
+      },
+      {
+        "day": "2026-09-25",
+        "close": "49.4119"
+      },
+      {
+        "day": "2026-09-30",
+        "close": "50"
+      }
+    ],
+    "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/SYNT?range=5y&interval=1d",
+    "retrieved_at": "2026-10-01T16:24:24.997403Z",
+    "source_captured_at": "2026-10-01T00:00:00Z",
+    "data_mode": "synthetic",
+    "note": "Unofficial public quote endpoint; no service guarantee. Prices are as published by the source."
+  },
+  "evidence_items": [
+    {
+      "id": "E1",
+      "check": "metric_growth",
+      "stance": "contrary",
+      "title": "Required net income growth vs reported history",
+      "detail": "the claim needs net income to grow 65.72% per year from 40.00M to 500.00M; reported growth was 12.62% per year (2022–2025)",
+      "measured": {
+        "required_annual_net_income": "500000000",
+        "latest_reported_annual_net_income": "40000000",
+        "latest_period_end": "2025-12-31",
+        "horizon_years": "5",
+        "required_cagr_from_reported": "0.657227008669993400234290072156321",
+        "reported_cagr": "0.126217337640027395647100187120221",
+        "reported_window": "2022-12-31 to 2025-12-31",
+        "gap": "0.531009671029966004587189885036100"
+      },
+      "rule": "supporting if required CAGR <= reported CAGR; neutral if gap <= 5.00%; contrary otherwise",
+      "sources": [
+        {
+          "label": "latest annual net income: NetIncomeLoss, FY ending 2025-12-31, 10-K filed 2026-02-20",
+          "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/0009999901-26-000008-index.htm",
+          "filed": "2026-02-20",
+          "accession": "0009999901-26-000008",
+          "data_mode": "synthetic"
+        },
+        {
+          "label": "earlier annual net income: NetIncomeLoss, FY ending 2022-12-31, 10-K filed 2024-02-23",
+          "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/0009999901-24-000001-index.htm",
+          "filed": "2024-02-23",
+          "accession": "0009999901-24-000001",
+          "data_mode": "synthetic"
+        }
+      ],
+      "as_of": "2026-02-20"
+    },
+    {
+      "id": "E2",
+      "check": "valuation_multiple",
+      "stance": "supporting",
+      "title": "Assumed P/E vs today's P/E",
+      "detail": "the claim assumes P/E 20 at the target date; today's P/E is 118.75 (market value 4.75B / net income 40.00M), so the assumption is at or below today's level",
+      "measured": {
+        "last_close": "50",
+        "shares": "95000000",
+        "current_market_cap": "4750000000",
+        "latest_reported_annual_net_income": "40000000",
+        "assumed_multiple": "20",
+        "current_multiple": "118.75",
+        "assumed_over_current": "0.1684210526315789473684210526315789"
+      },
+      "rule": "supporting if assumed <= current; neutral if assumed <= 1.25x current; contrary otherwise",
+      "sources": [
+        {
+          "label": "close 50 on 2026-09-30 (yahoo_finance_chart)",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/SYNT?range=5y&interval=1d",
+          "filed": null,
+          "accession": null,
+          "data_mode": "synthetic"
+        },
+        {
+          "label": "latest annual net income: NetIncomeLoss, FY ending 2025-12-31, 10-K filed 2026-02-20",
+          "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/0009999901-26-000008-index.htm",
+          "filed": "2026-02-20",
+          "accession": "0009999901-26-000008",
+          "data_mode": "synthetic"
+        },
+        {
+          "label": "shares outstanding: dei:EntityCommonStockSharesOutstanding, as of 2026-07-24, 10-Q filed 2026-08-01",
+          "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/0009999901-26-000012-index.htm",
+          "filed": "2026-08-01",
+          "accession": "0009999901-26-000012",
+          "data_mode": "synthetic"
+        }
+      ],
+      "as_of": "2026-09-30"
+    },
+    {
+      "id": "E3",
+      "check": "share_count",
+      "stance": "supporting",
+      "title": "Assumed target share count vs reported share trend",
+      "detail": "going from 95.00M reported shares to the assumed 100.00M means 1.03% per year; the reported count changed 1.04% per year (2023-07-28 to 2026-07-24)",
+      "measured": {
+        "reported_shares": "95000000",
+        "reported_as_of": "2026-07-24",
+        "target_assumed_shares": "100000000",
+        "implied_annual_change": "0.010311459317936088099109445913165",
+        "reported_annual_change": "0.010423419629615349536428974784180",
+        "reported_window": "2023-07-28 to 2026-07-24"
+      },
+      "rule": "supporting if implied annual change >= reported change -1.00%; neutral if >= reported change -3.00%; contrary otherwise",
+      "sources": [
+        {
+          "label": "shares outstanding: dei:EntityCommonStockSharesOutstanding, as of 2026-07-24, 10-Q filed 2026-08-01",
+          "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/0009999901-26-000012-index.htm",
+          "filed": "2026-08-01",
+          "accession": "0009999901-26-000012",
+          "data_mode": "synthetic"
+        },
+        {
+          "label": "earlier shares outstanding: dei:EntityCommonStockSharesOutstanding, as of 2023-07-28, 10-Q filed 2023-08-01",
+          "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990123000150/0009999901-23-000150-index.htm",
+          "filed": "2023-08-01",
+          "accession": "0009999901-23-000150",
+          "data_mode": "synthetic"
+        }
+      ],
+      "as_of": "2026-08-01"
+    },
+    {
+      "id": "E5",
+      "check": "evidence_freshness",
+      "stance": "neutral",
+      "title": "Freshness of reported data",
+      "detail": "latest periodic report filed 2026-08-01 (61 days before this run)",
+      "measured": {
+        "latest_periodic_filing": "2026-08-01",
+        "age_days": "61"
+      },
+      "rule": "missing if the latest 10-K/10-Q is older than 135 days",
+      "sources": [
+        {
+          "label": "10-Q filed 2026-08-01",
+          "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/0009999901-26-000012-index.htm",
+          "filed": "2026-08-01",
+          "accession": "0009999901-26-000012",
+          "data_mode": "synthetic"
+        }
+      ],
+      "as_of": "2026-08-01"
+    },
+    {
+      "id": "E6",
+      "check": "price_history",
+      "stance": "neutral",
+      "title": "Past price trend (context)",
+      "detail": "the closing price moved 12.69% per year from 2021-10-01 to 2026-09-30 (not dividend-adjusted); the claim requires 14.87% per year from the reference price",
+      "measured": {
+        "past_annualized_price_change": "0.126889172469081680068385124593486",
+        "window": "2021-10-01 to 2026-09-30"
+      },
+      "rule": null,
+      "sources": [
+        {
+          "label": "daily closes (yahoo_finance_chart)",
+          "url": "https://query1.finance.yahoo.com/v8/finance/chart/SYNT?range=5y&interval=1d",
+          "filed": null,
+          "accession": null,
+          "data_mode": "synthetic"
+        }
+      ],
+      "as_of": "2026-09-30"
+    }
+  ],
+  "verdict": {
+    "label": "not_supported_today",
+    "display": "Not Supported Today",
+    "as_of": "2026-10-01",
+    "rationale": [
+      "Core check E1 is contrary: the claim needs net income to grow 65.72% per year from 40.00M to 500.00M; reported growth was 12.62% per year (2022–2025).",
+      "E2 is supporting: the claim assumes P/E 20 at the target date; today's P/E is 118.75 (market value 4.75B / net income 40.00M), so the assumption is at or below today's level.",
+      "E3 is supporting: going from 95.00M reported shares to the assumed 100.00M means 1.03% per year; the reported count changed 1.04% per year (2023-07-28 to 2026-07-24).",
+      "The growth gap of 53.10% per year exceeds the 15.00% limit of rules-v1."
+    ],
+    "limitations": [
+      "Synthetic example data was used. This verdict demonstrates the rules and says nothing about a real company.",
+      "Evidence as of 2026-10-01. 'Not Supported Today' describes the state of the evidence on that date. Not Supported Today does not mean the target price is impossible; Supported Today is not a guarantee.",
+      "Rules and thresholds are provisional (rules-v1); team validation of verdict thresholds is still open.",
+      "Checks use reported financial history and market prices only. Filing text, guidance and news are not read; AI-assisted analysis (OA.10–OA.12) is not implemented.",
+      "Required growth is measured from the latest reported fiscal year over the confirmed horizon; the time between that fiscal year end and the reference date is not adjusted."
+    ],
+    "basis": [
+      "E1",
+      "E2",
+      "E3",
+      "E5",
+      "E6"
+    ],
+    "rules_version": "rules-v1 (provisional)"
+  },
+  "recheck_conditions": [
+    {
+      "id": "R1",
+      "trigger": "Next annual net income is reported below 66.29M",
+      "watch": "10-K / XBRL company facts for the fiscal year after 2025-12-31",
+      "threshold": "66289080 (65.72% above 40.00M)",
+      "linked_to": [
+        "E1",
+        "valuation_multiple",
+        "horizon_years"
+      ]
+    },
+    {
+      "id": "R2",
+      "trigger": "Shares outstanding rise above 95.98M within a year of 2026-07-24, or above 100.00M at any time",
+      "watch": "cover page of the next 10-Q / 10-K (dei:EntityCommonStockSharesOutstanding); S-1/S-3/424B offerings",
+      "threshold": "95979589",
+      "linked_to": [
+        "E3",
+        "target_assumed_shares"
+      ]
+    },
+    {
+      "id": "R3",
+      "trigger": "Today's P/E falls below 16.00 (the assumed 20 would then need more than 1.25x expansion)",
+      "watch": "price x shares / latest annual net income; now 118.75",
+      "threshold": "16.00",
+      "linked_to": [
+        "E2",
+        "valuation_multiple"
+      ]
+    },
+    {
+      "id": "R4",
+      "trigger": "Next 10-Q or 10-K is filed (expected around 2026-10-31)",
+      "watch": "SEC EDGAR filings for the ticker",
+      "threshold": null,
+      "linked_to": [
+        "E5"
+      ]
+    },
+    {
+      "id": "R9",
+      "trigger": "Any confirmed assumption changes (target price, horizon, multiple, target share count)",
+      "watch": "re-confirm the inputs and run the case again",
+      "threshold": null,
+      "linked_to": [
+        "target_price",
+        "horizon_years",
+        "valuation_multiple",
+        "target_assumed_shares"
+      ]
+    }
+  ],
+  "probability": null,
   "provider_errors": [],
   "validation_issues": [],
   "missing_fields": [],
   "warnings": [
-    "SEC section uses synthetic example data, not real SEC filings"
+    "synthetic example data is used for public sources in this run, not real SEC or market data"
   ],
   "data_modes": {
     "claim_inputs": "user_input",
-    "sec_filings": "synthetic"
+    "sec_filings": "synthetic",
+    "sec_facts": "synthetic",
+    "market_prices": "synthetic",
+    "analysis": "deterministic rules-v1 (provisional)"
   },
   "mixed_sources": true,
-  "analysis_status": "not_implemented",
-  "verdict": null,
-  "disclaimer": "TickerCase shows what a claim requires under the user's own assumptions. It does not rate the claim, estimate a probability, or give investment advice."
+  "analysis_status": "deterministic_rules",
+  "disclaimer": "TickerCase checks what a claim requires under the user's assumptions against dated public data. The verdict describes the evidence as of a date; it is not a price prediction, a guarantee or investment advice. The optional probability section is a model output under stated assumptions and is not part of the verdict."
 }

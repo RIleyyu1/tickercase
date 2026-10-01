@@ -1,4 +1,4 @@
-"""One-off live SEC smoke test with recording.
+"""One-off live smoke test (SEC filings, SEC XBRL facts, market prices) with recording.
 
 Usage:
     SEC_USER_AGENT="TickerCase/0.1 Your Name you@example.org" python scripts/live_smoke.py --ticker AAPL
@@ -24,7 +24,10 @@ sys.path.insert(0, str(ROOT / "src"))
 from tickercase.config import load_settings  # noqa: E402
 from tickercase.http_client import FetchError, LiveHttpClient, RecordingHttpClient  # noqa: E402
 from tickercase.providers.base import ProviderError  # noqa: E402
+from tickercase.providers.market import YahooChartProvider  # noqa: E402
 from tickercase.providers.sec import SecFilingProvider, SecFilingQuery  # noqa: E402
+from tickercase.providers.sec_facts import SecCompanyFactsProvider  # noqa: E402
+from tickercase.service import build_fetcher  # noqa: E402
 
 
 def main() -> int:
@@ -53,14 +56,31 @@ def main() -> int:
             warnings=result.warnings,
         )
         ok = bool(result.records)
+        facts = SecCompanyFactsProvider(client).fetch_facts(args.ticker)
+        summary["xbrl"] = {
+            "url": facts.source_url,
+            "latest_revenue": facts.revenue[-1].model_dump(mode="json") if facts.revenue else None,
+            "latest_net_income": facts.net_income[-1].model_dump(mode="json") if facts.net_income else None,
+            "latest_shares": facts.shares_outstanding[-1].model_dump(mode="json") if facts.shares_outstanding else None,
+            "notes": facts.notes,
+        }
+        ok = ok and bool(facts.revenue or facts.net_income)
     except (FetchError, ProviderError) as exc:
         summary.update(error={"code": exc.code, "message": exc.message, "url": exc.url, "http_status": getattr(exc, "http_status", None)})
+    try:
+        market_client = RecordingHttpClient(build_fetcher("live", settings, "market"), snap_dir)
+        m = YahooChartProvider(market_client).fetch_history(args.ticker)
+        summary["market"] = {"url": m.source_url, "last_close": str(m.last_close), "last_date": str(m.last_date),
+                             "observations": m.observations, "annualized_volatility": str(m.annualized_volatility)}
+    except (FetchError, ProviderError) as exc:
+        summary["market_error"] = {"code": exc.code, "message": exc.message, "url": exc.url}
+        ok = False
     summary["requested_urls"] = live.request_log
     summary["finished_at"] = datetime.now(timezone.utc).isoformat()
     summary["snapshots_written"] = [str(p) for p in client.written]
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(json.dumps({k: summary.get(k) for k in ("ticker", "company_name", "cik", "record_count", "error")}, ensure_ascii=False))
+    print(json.dumps({k: summary.get(k) for k in ("ticker", "company_name", "cik", "record_count", "error", "market", "market_error")}, ensure_ascii=False))
     print(f"summary: {out}")
     return 0 if ok else 1
 

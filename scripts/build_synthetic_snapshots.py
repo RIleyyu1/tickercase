@@ -14,8 +14,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import math  # noqa: E402
+import random  # noqa: E402
+from datetime import date, timedelta  # noqa: E402
+
 from tickercase.http_client import ORIGIN_SYNTHETIC, write_snapshot  # noqa: E402
+from tickercase.providers.market import CHART_URL  # noqa: E402
 from tickercase.providers.sec import SUBMISSIONS_URL, TICKERS_URL  # noqa: E402
+from tickercase.providers.sec_facts import COMPANYFACTS_URL  # noqa: E402
 
 OUT = ROOT / "examples" / "sec_synthetic_snapshots"
 AUTHORED_AT = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -73,12 +79,87 @@ def empty_submissions() -> dict:
     return {"cik": "9999902", "name": "Synthetic Empty Filer Inc (fictional)", "filings": {"recent": {c: [] for c in cols}, "files": []}}
 
 
+# fiscal year -> (revenue, net income, accession of the 10-K that first reported it, filed date)
+ANNUAL = {
+    2021: (120_000_000, 22_000_000, f"{CIK}-22-000090", "2022-02-25"),
+    2022: (140_000_000, 28_000_000, f"{CIK}-23-000090", "2023-02-24"),
+    2023: (160_000_000, 32_000_000, f"{CIK}-24-000001", "2024-02-23"),
+    2024: (180_000_000, 36_000_000, f"{CIK}-25-000003", "2025-02-21"),
+    2025: (200_000_000, 40_000_000, f"{CIK}-26-000008", "2026-02-20"),
+}
+# cover-page share counts: (as-of date, shares, form, accession, filed)
+SHARES = [
+    ("2023-07-28", 92_100_000, "10-Q", f"{CIK}-23-000150", "2023-08-01"),
+    ("2024-07-26", 93_500_000, "10-Q", f"{CIK}-24-000150", "2024-08-01"),
+    ("2025-07-25", 94_200_000, "10-Q", f"{CIK}-25-000006", "2025-08-01"),
+    ("2026-01-30", 94_600_000, "10-K", f"{CIK}-26-000008", "2026-02-20"),
+    ("2026-07-24", 95_000_000, "10-Q", f"{CIK}-26-000012", "2026-08-01"),
+]
+
+
+def companyfacts() -> dict:
+    revenue, income = [], []
+    for fy, (rev, ni, accn, filed) in ANNUAL.items():
+        # each 10-K reports its own year and the prior year as comparative
+        for year in (fy - 1, fy):
+            if year not in ANNUAL:
+                continue
+            row = {"start": f"{year}-01-01", "end": f"{year}-12-31", "accn": accn, "fy": fy, "fp": "FY", "form": "10-K", "filed": filed}
+            revenue.append({**row, "val": ANNUAL[year][0]})
+            income.append({**row, "val": ANNUAL[year][1]})
+    shares = [{"end": end, "val": val, "accn": accn, "fy": int(filed[:4]), "fp": "FY" if form == "10-K" else "Q2", "form": form, "filed": filed}
+              for end, val, form, accn, filed in SHARES]
+    return {
+        "cik": int(CIK),
+        "entityName": "Synthetic Example Corp (fictional)",
+        "facts": {
+            "dei": {"EntityCommonStockSharesOutstanding": {"label": "Entity Common Stock, Shares Outstanding", "units": {"shares": shares}}},
+            "us-gaap": {
+                "RevenueFromContractWithCustomerExcludingAssessedTax": {"label": "Revenue", "units": {"USD": revenue}},
+                "NetIncomeLoss": {"label": "Net Income (Loss)", "units": {"USD": income}},
+            },
+        },
+    }
+
+
+def price_chart() -> dict:
+    """Five years of fictional daily closes ending at exactly 50.00 on 2026-09-30."""
+    rng = random.Random(5151)
+    days, d = [], date(2021, 10, 1)
+    while d <= date(2026, 9, 30):
+        if d.weekday() < 5:
+            days.append(d)
+        d += timedelta(days=1)
+    sigma = 0.35 / math.sqrt(252)
+    logs, x = [], 0.0
+    for _ in days:
+        x += rng.gauss(0.0004, sigma)
+        logs.append(x)
+    shift = math.log(50.0) - logs[-1]
+    closes = [round(math.exp(v + shift), 4) for v in logs]
+    closes[-1] = 50.0
+    stamps = [int((datetime(dd.year, dd.month, dd.day, 13, 30, tzinfo=timezone.utc)).timestamp()) for dd in days]
+    return {
+        "chart": {
+            "result": [{
+                "meta": {"currency": "USD", "symbol": "SYNT", "exchangeTimezoneName": "America/New_York", "gmtoffset": -14400,
+                         "regularMarketPrice": 50.0, "longName": "Synthetic Example Corp (fictional)"},
+                "timestamp": stamps,
+                "indicators": {"quote": [{"close": closes}], "adjclose": [{"adjclose": closes}]},
+            }],
+            "error": None,
+        }
+    }
+
+
 def main() -> None:
     for path in OUT.glob("*.json"):
         path.unlink()
     write_snapshot(OUT, TICKERS_URL, TICKERS, captured_at=AUTHORED_AT, origin=ORIGIN_SYNTHETIC, note=NOTE)
     write_snapshot(OUT, SUBMISSIONS_URL.format(cik=CIK), submissions(), captured_at=AUTHORED_AT, origin=ORIGIN_SYNTHETIC, note=NOTE)
     write_snapshot(OUT, SUBMISSIONS_URL.format(cik="0009999902"), empty_submissions(), captured_at=AUTHORED_AT, origin=ORIGIN_SYNTHETIC, note=NOTE)
+    write_snapshot(OUT, COMPANYFACTS_URL.format(cik=CIK), companyfacts(), captured_at=AUTHORED_AT, origin=ORIGIN_SYNTHETIC, note=NOTE)
+    write_snapshot(OUT, CHART_URL.format(symbol="SYNT"), price_chart(), captured_at=AUTHORED_AT, origin=ORIGIN_SYNTHETIC, note=NOTE)
     print(f"wrote {len(list(OUT.glob('*.json')))} synthetic snapshots to {OUT}")
 
 

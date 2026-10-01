@@ -4,6 +4,7 @@ POST /claims/validate   -> validation issues, missing fields, input fingerprint
 POST /claims/confirm    -> confirmation for exactly these inputs (422 if invalid)
 POST /cases             -> run a confirmed case; returns CaseResult
 GET  /cases/{case_id}   -> stored CaseResult
+GET  /reference/{ticker} -> public reference values (price, shares, latest annual metrics) to review before confirming
 GET  /health
 """
 
@@ -17,7 +18,7 @@ from pydantic import BaseModel
 
 from . import __version__
 from .config import load_settings
-from .models import CaseResult, CaseStatus, ClaimDraft, Confirmation, ValidationResult
+from .models import CaseResult, CaseStatus, ClaimDraft, Confirmation, ReferenceSnapshot, ValidationResult
 from .service import CaseService
 from .storage import CaseStore
 from .validation import ConfirmationError, confirm, validate_draft
@@ -67,6 +68,13 @@ def create_app(service: Optional[CaseService] = None) -> FastAPI:
         mode = request.sec_mode or service.settings.sec_mode
         result = service.evaluate(request.draft, request.confirmation, sec_mode=mode)
         return JSONResponse(status_code=STATUS_CODES[result.status], content=result.model_dump(mode="json"))
+
+    @app.get("/reference/{ticker}", response_model=ReferenceSnapshot)
+    def reference(ticker: str, mode: Optional[SecMode] = None):
+        try:
+            return service.reference_snapshot(ticker, mode=mode or service.settings.sec_mode)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
 
     @app.get("/cases/{case_id}", response_model=CaseResult)
     def get_case(case_id: str):
