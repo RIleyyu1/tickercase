@@ -6,14 +6,26 @@ It does **not** trade, manage portfolios, predict prices or give investment advi
 
 ## Flow (UC.1)
 
-1. Enter the claim: text, ticker, target price, horizon. On the page, "Fill in the rest" adds reference values from public data (latest close, reported shares, latest annual revenue / net income) and default assumptions for empty fields (target shares = current shares, multiple = today's multiple). Every filled value is visible and labelled with its source. (OA.1, OA.4)
+1. Write the claim as one sentence. "识别并补全" (Read and fill in) reads the ticker, target price and time frame from it by fixed rules (no AI): tickers such as `TSLA` or `$TSLA` checked against SEC's ticker list, common Chinese and English company names, prices such as "1000一股", "$1.5k", "两百美元", relative targets such as "翻倍", "10x", "涨50%", and times such as "2030年", "五年后", "in 3 years", "明年", "18个月". It then adds reference values from public data (latest close, reported shares, latest annual revenue / net income) and default assumptions for empty fields (target shares = current shares, multiple = today's multiple). Every filled value is visible and labelled with its source. (OA.1, OA.4)
 2. Confirm. The confirmation is bound to a SHA-256 fingerprint of the exact inputs; any edit makes it stale. (OA.5)
 3. Deterministic calculation (`Decimal`, no network). (OA.8)
 4. Public evidence: SEC filings, SEC XBRL financial facts, daily prices. (OA.6, OA.7, OA.9)
 5. Deterministic evidence checks classified as supporting / contrary / missing / context, a verdict and recheck conditions. (OA.12–OA.14)
 6. Result with calculations, evidence and sources, verdict, recheck conditions, gaps, provider errors and the data mode of every part. (OA.15)
 
-Not implemented yet: AI extraction of claim fields from free text (OA.2–OA.3) and AI-drafted analysis of filing text (OA.10–OA.11).
+Not implemented yet: AI extraction for sentences the rules cannot read (OA.2–OA.3 currently use rules) and AI-drafted analysis of filing text (OA.10–OA.11).
+
+## Plain report
+
+The first result tab is a layered report for readers without a finance background, adapted from the report template of komako-workshop/digital-oracle (layered signal tables, analysis, scenarios, conclusion, signals to monitor):
+
+- a one-sentence headline: what the claim needs against what the company has done;
+- four layers, each a table of signal | data | what it means: what the claim needs, what the company has done, how the market prices it today, how reliable the data is;
+- analysis: checks that agree, key divergences (for example "valuation is not the problem, results are"), and a time view (next report, next fiscal year, target date);
+- scenarios: the price at the target date if the business keeps its past pace at today's or the claimed valuation, and the claim's own path. These are formulas without probabilities;
+- conclusion: what the verdict means, what would strengthen or weaken the case, and signals to watch with current values and triggers.
+
+Every number in the report comes from the calculations, checks and data of the case; the report adds wording, not judgement. Amounts use 亿/万亿 in Chinese and B/T in English.
 
 ## Quick start
 
@@ -38,7 +50,7 @@ API:
 
 ```bash
 uvicorn --factory tickercase.api:app_factory --reload
-# POST /claims/validate, POST /claims/confirm, POST /cases, GET /cases/{id}, GET /reference/{ticker}, GET /health
+# POST /claims/extract, POST /claims/validate, POST /claims/confirm, POST /cases, GET /cases/{id}, GET /reference/{ticker}, GET /health
 ```
 
 Command line:
@@ -158,6 +170,8 @@ src/tickercase/validation.py        validation, missing fields, confirmation fin
 src/tickercase/calculations.py      pure Decimal calculations
 src/tickercase/analysis.py          evidence checks, verdict rules, recheck conditions
 src/tickercase/probability.py       optional lognormal probability reference
+src/tickercase/extract.py           rule-based ticker / target / horizon extraction from the claim sentence
+src/tickercase/report.py            layered plain-language report
 src/tickercase/http_client.py       live / record / replay / fake network boundary
 src/tickercase/providers/sec.py     SEC submissions adapter
 src/tickercase/providers/sec_facts.py SEC XBRL company facts adapter

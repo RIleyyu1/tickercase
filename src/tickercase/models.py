@@ -397,6 +397,71 @@ class Sensitivity(BaseModel):
     reported_cagr: Optional[str] = None
 
 
+class ClaimExtraction(BaseModel):
+    """Candidate fields read from the claim sentence by rules (OA.2-OA.3). Reviewed and confirmed by the user."""
+
+    text: str
+    ticker: Optional[str] = None
+    ticker_text: Optional[str] = None
+    target_price: Optional[DecimalStr] = None
+    target_multiple: Optional[DecimalStr] = None  # "doubles", "10x": resolved against the reference price
+    target_text: Optional[str] = None
+    horizon_years: Optional[DecimalStr] = None
+    target_date: Optional[date] = None
+    horizon_text: Optional[str] = None
+    currency: Optional[str] = None
+    notes_en: list[str] = Field(default_factory=list)
+    notes_zh: list[str] = Field(default_factory=list)
+
+
+class Text(BaseModel):
+    en: str
+    zh: str
+
+
+class ReportRow(BaseModel):
+    signal: Text
+    data: Text
+    meaning: Text
+    tone: Literal["good", "bad", "neutral", "missing"] = "neutral"
+
+
+class ReportLayer(BaseModel):
+    title: Text
+    rows: list[ReportRow] = Field(default_factory=list)
+
+
+class ScenarioRow(BaseModel):
+    name: Text
+    assumptions: Text
+    price: Optional[str] = None
+    vs_target: Optional[str] = None
+    meaning: Text
+
+
+class MonitorRow(BaseModel):
+    signal: Text
+    current: Text
+    threshold: Text
+    meaning: Text
+
+
+class PlainReport(BaseModel):
+    """Layered plain-language summary of the case, built only from the deterministic results."""
+
+    headline: Text
+    verdict_meaning: Text
+    layers: list[ReportLayer] = Field(default_factory=list)
+    agreements: list[Text] = Field(default_factory=list)
+    divergences: list[Text] = Field(default_factory=list)
+    time_view: list[ReportRow] = Field(default_factory=list)
+    scenarios: list[ScenarioRow] = Field(default_factory=list)
+    scenario_note: Optional[Text] = None
+    upside: list[Text] = Field(default_factory=list)
+    downside: list[Text] = Field(default_factory=list)
+    monitor: list[MonitorRow] = Field(default_factory=list)
+
+
 class ReferenceSuggestion(BaseModel):
     value: str
     source: str
@@ -443,6 +508,7 @@ class CaseResult(BaseModel):
     recheck_conditions: list[RecheckCondition] = Field(default_factory=list)
     probability: Optional[ProbabilityReference] = None
     sensitivity: Optional[Sensitivity] = None
+    report: Optional[PlainReport] = None
     provider_errors: list[ProviderErrorRecord] = Field(default_factory=list)
     validation_issues: list[ValidationIssue] = Field(default_factory=list)
     missing_fields: list[MissingField] = Field(default_factory=list)

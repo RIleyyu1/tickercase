@@ -4,6 +4,7 @@ POST /claims/validate   -> validation issues, missing fields, input fingerprint
 POST /claims/confirm    -> confirmation for exactly these inputs (422 if invalid)
 POST /cases             -> run a confirmed case; returns CaseResult
 GET  /cases/{case_id}   -> stored CaseResult
+POST /claims/extract    -> ticker, target and horizon read from the claim sentence (to review before confirming)
 GET  /reference/{ticker} -> public reference values (price, shares, latest annual metrics) to review before confirming
 GET  /health
 """
@@ -18,12 +19,17 @@ from pydantic import BaseModel
 
 from . import __version__
 from .config import load_settings
-from .models import CaseResult, CaseStatus, ClaimDraft, Confirmation, ReferenceSnapshot, ValidationResult
+from .models import CaseResult, CaseStatus, ClaimDraft, ClaimExtraction, Confirmation, ReferenceSnapshot, ValidationResult
 from .service import CaseService
 from .storage import CaseStore
 from .validation import ConfirmationError, confirm, validate_draft
 
 SecMode = Literal["live", "record", "replay", "synthetic"]
+
+
+class ExtractRequest(BaseModel):
+    text: str
+    mode: Optional[SecMode] = None
 
 
 class CaseRequest(BaseModel):
@@ -68,6 +74,10 @@ def create_app(service: Optional[CaseService] = None) -> FastAPI:
         mode = request.sec_mode or service.settings.sec_mode
         result = service.evaluate(request.draft, request.confirmation, sec_mode=mode)
         return JSONResponse(status_code=STATUS_CODES[result.status], content=result.model_dump(mode="json"))
+
+    @app.post("/claims/extract", response_model=ClaimExtraction)
+    def extract(request: ExtractRequest) -> ClaimExtraction:
+        return service.extract(request.text, mode=request.mode or service.settings.sec_mode)
 
     @app.get("/reference/{ticker}", response_model=ReferenceSnapshot)
     def reference(ticker: str, mode: Optional[SecMode] = None):

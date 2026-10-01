@@ -29,10 +29,13 @@ from .models import (
     ConfirmedClaim,
     DataMode,
     ProviderErrorRecord,
+    ClaimExtraction,
     ReferenceSnapshot,
     ReferenceSuggestion,
 )
+from .extract import extract_claim
 from .probability import probability_reference
+from .report import build_report
 from .providers.base import ProviderError
 from .providers.market import CHART_URL, YahooChartProvider
 from .providers.sec import SecFilingProvider, SecFilingQuery
@@ -64,6 +67,7 @@ USER_INPUT_PROVENANCE = {
 }
 
 DEFAULT_PREFIX = "default_assumption:"
+CLAIM_TEXT_PREFIX = "claim_text:"
 SEC_PROVIDER_ID = SecFilingProvider.provider_id
 FACTS_PROVIDER_ID = SecCompanyFactsProvider.provider_id
 MARKET_PROVIDER_ID = YahooChartProvider.provider_id
@@ -189,7 +193,7 @@ class CaseService:
         assert claim is not None
         provenance = {k: v for k, v in USER_INPUT_PROVENANCE.items() if getattr(claim, k, None) is not None}
         for name, source in claim.field_sources.items():
-            provenance[name] = source if source.startswith(DEFAULT_PREFIX) else f"public_data:{source}"
+            provenance[name] = source if source.startswith((DEFAULT_PREFIX, CLAIM_TEXT_PREFIX)) else f"public_data:{source}"
         if claim.target_shares_derived:
             provenance["target_assumed_shares"] = "derived:current_shares * (1 + share_change_rate) ** horizon_years"
         confirmed = ConfirmedClaim(values=claim, fingerprint=current_fp, confirmed_at=confirmation.confirmed_at, value_provenance=provenance)
@@ -237,6 +241,9 @@ class CaseService:
             warn("synthetic example data is used for public sources in this run, not real SEC or market data",
                  "本次公开数据使用合成示例数据，不是真实的 SEC 或市场数据")
 
+        probability = probability_reference(claim, market)
+        report = build_report(claim, calculations, facts=facts, market=market, items=outcome.items, verdict=outcome.verdict,
+                              rechecks=outcome.rechecks, probability=probability, today=self.today())
         result = CaseResult(
             status=CaseStatus.EVALUATED_WITH_PROVIDER_ERRORS if errors else CaseStatus.EVALUATED,
             confirmed_claim=confirmed,
@@ -248,8 +255,9 @@ class CaseService:
             evidence_items=outcome.items,
             verdict=outcome.verdict,
             recheck_conditions=outcome.rechecks,
-            probability=probability_reference(claim, market),
+            probability=probability,
             sensitivity=outcome.sensitivity,
+            report=report,
             provider_errors=errors,
             data_modes=data_modes,
             mixed_sources=bool(records or facts or market),
@@ -257,6 +265,20 @@ class CaseService:
             **base,
         )
         return self._finish(result)
+
+    # ---------------------------------------------------------------- extraction
+
+    def extract(self, text: str, *, mode: str) -> ClaimExtraction:
+        """Read ticker, target and horizon from the claim sentence; tickers are checked against SEC's list when it is reachable."""
+        is_known = None
+        errors: list[ProviderErrorRecord] = []
+        fetcher = self._guard(SEC_PROVIDER_ID, mode, errors, lambda: self._fetcher(mode, "sec"))
+        if fetcher is not None:
+            provider = SecFilingProvider(fetcher)
+            mapping = self._guard(SEC_PROVIDER_ID, mode, errors, provider._load_ticker_map)
+            if mapping:
+                is_known = lambda sym: sym in mapping or sym.replace(".", "-") in mapping  # noqa: E731
+        return extract_claim(text, today=self.today(), is_known_ticker=is_known)
 
     # ---------------------------------------------------------------- prefill
 
@@ -275,7 +297,8 @@ class CaseService:
         snap = ReferenceSnapshot(ticker=symbol, provider_errors=errors, company_name=facts.company_name if facts else None)
         if market is not None:
             label = f"{market.provider_id} close {market.last_date} ({market.data_mode.value})"
-            snap.suggestions["reference_price"] = ReferenceSuggestion(value=format(market.last_close, "f"), source=label)
+            close = market.last_close.quantize(Decimal("0.01")).normalize()
+            snap.suggestions["reference_price"] = ReferenceSuggestion(value=format(close, "f"), source=label)
             snap.suggestions["reference_price_date"] = ReferenceSuggestion(value=market.last_date.isoformat(), source=label)
             snap.suggestions["reference_price_source"] = ReferenceSuggestion(value=label, source=label)
             if market.currency:

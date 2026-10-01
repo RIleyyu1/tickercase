@@ -1,6 +1,6 @@
 {
-  "case_id": "9628b536451a4441b81b1128718a75ac",
-  "created_at": "2026-10-01T19:07:17.595487Z",
+  "case_id": "2d17e46a27bb40ae9a33d04307c55ffb",
+  "created_at": "2026-10-01T21:09:07.789297Z",
   "status": "evaluated",
   "input_fingerprint": "ea3bd4f2d7fdd783ba6142647d101f4972886d3f8993d60fc4aa36ecabccee56",
   "confirmed_claim": {
@@ -29,7 +29,7 @@
       "field_sources": {}
     },
     "fingerprint": "ea3bd4f2d7fdd783ba6142647d101f4972886d3f8993d60fc4aa36ecabccee56",
-    "confirmed_at": "2026-10-01T19:07:17.595461Z",
+    "confirmed_at": "2026-10-01T21:09:07.789272Z",
     "value_provenance": {
       "claim_text": "user_input",
       "ticker": "user_input",
@@ -163,7 +163,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/synt-20260804.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/0009999901-26-000013-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -183,7 +183,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/synt-20260630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000012/0009999901-26-000012-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -203,7 +203,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/synt-20260331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000010/0009999901-26-000010-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -223,7 +223,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/synt-20251231a.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000009/0009999901-26-000009-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -243,7 +243,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/synt-20251231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000008/0009999901-26-000008-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -263,7 +263,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/synt-20260114.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/0009999901-26-000007-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -283,7 +283,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/synt-20250930.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000006/0009999901-25-000006-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -303,7 +303,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/synt-20250630.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000005/0009999901-25-000005-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -323,7 +323,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/synt-20250331.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000004/0009999901-25-000004-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -343,7 +343,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/synt-20241231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990125000003/0009999901-25-000003-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -363,7 +363,7 @@
       "document_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/synt-20231231.htm",
       "filing_index_url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990124000001/0009999901-24-000001-index.htm",
       "source_response_url": "https://data.sec.gov/submissions/CIK0009999901.json",
-      "retrieved_at": "2026-10-01T19:07:17.596225Z",
+      "retrieved_at": "2026-10-01T21:09:07.789994Z",
       "source_captured_at": "2026-10-01T00:00:00Z",
       "data_mode": "synthetic",
       "note": "Filing metadata only. The document has not been read and does not by itself support or refute the claim."
@@ -579,7 +579,7 @@
       }
     ],
     "source_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0009999901.json",
-    "retrieved_at": "2026-10-01T19:07:17.596582Z",
+    "retrieved_at": "2026-10-01T21:09:07.790341Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "notes": []
@@ -1645,7 +1645,7 @@
       }
     ],
     "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/SYNT?range=5y&interval=1d",
-    "retrieved_at": "2026-10-01T19:07:17.597322Z",
+    "retrieved_at": "2026-10-01T21:09:07.791059Z",
     "source_captured_at": "2026-10-01T00:00:00Z",
     "data_mode": "synthetic",
     "note": "Unofficial public quote endpoint; no service guarantee. Prices are as published by the source."
@@ -1658,7 +1658,7 @@
       "title": "Required revenue growth vs reported history",
       "detail": "the claim needs revenue to grow 12.82% per year from 200.00M (FY ending 2025-12-31) to 400.00M by about 2031-09-30 (5.75 years); reported growth was 12.62% per year (2022–2025)",
       "title_zh": "所需营收增速 vs 已披露增速",
-      "detail_zh": "观点要求营收从 200.00M（截至 2025-12-31 的财年）在约 5.75 年内（到 2031-09-30 前后）增长到 400.00M，即每年 12.82%；已披露增速为每年 12.62%（2022–2025）",
+      "detail_zh": "观点要求营收从 2.00 亿（截至 2025-12-31 的财年）在约 5.75 年内（到 2031-09-30 前后）增长到 4.00 亿，即每年 12.82%；已披露增速为每年 12.62%（2022–2025）",
       "measured": {
         "required_annual_revenue": "400000000",
         "latest_reported_annual_revenue": "200000000",
@@ -1696,7 +1696,7 @@
       "title": "Assumed P/S vs today's P/S",
       "detail": "the claim assumes P/S 25 at the target date; today's P/S is 23.75 (market value 4.75B / revenue 200.00M), so the assumption is 1.05x today's level",
       "title_zh": "假设 P/S vs 当前 P/S",
-      "detail_zh": "观点假设目标日 P/S 为 25；当前 P/S 为 23.75（市值 4.75B / 营收 200.00M），假设是当前的 1.05 倍",
+      "detail_zh": "观点假设目标日 P/S 为 25；当前 P/S 为 23.75（市值 47.50 亿 / 营收 2.00 亿），假设是当前的 1.05 倍",
       "measured": {
         "last_close": "50",
         "shares": "95000000",
@@ -1740,7 +1740,7 @@
       "title": "Assumed target share count vs reported share trend",
       "detail": "going from 95.00M reported shares to the assumed 100.00M means 0.99% per year; the reported count changed 1.04% per year (2023-07-28 to 2026-07-24)",
       "title_zh": "假设目标股份数 vs 已披露股份变化",
-      "detail_zh": "从已披露的 95.00M 股到假设的 100.00M 股，即每年 0.99%；已披露股份数每年变化 1.04%（2023-07-28 至 2026-07-24）",
+      "detail_zh": "从已披露的 9,500 万 股到假设的 1.00 亿 股，即每年 0.99%；已披露股份数每年变化 1.04%（2023-07-28 至 2026-07-24）",
       "measured": {
         "reported_shares": "95000000",
         "reported_as_of": "2026-07-24",
@@ -1777,7 +1777,7 @@
       "title": "Reported profitability (context)",
       "detail": "latest annual net income is 40.00M (FY ending 2025-12-31), i.e. a profit. A P/S target does not require profit, but losses can lead to financing and dilution.",
       "title_zh": "已披露盈利情况（背景）",
-      "detail_zh": "最近年度净利润为 40.00M（截至 2025-12-31 的财年），处于盈利。P/S 目标不要求盈利，但持续亏损可能带来融资和股份稀释。",
+      "detail_zh": "最近年度净利润为 4,000 万（截至 2025-12-31 的财年），处于盈利。P/S 目标不要求盈利，但持续亏损可能带来融资和股份稀释。",
       "measured": {
         "latest_net_income": "40000000"
       },
@@ -1861,8 +1861,8 @@
     ],
     "display_zh": "部分支持",
     "rationale_zh": [
-      "核心检查 E1 为背景：观点要求营收从 200.00M（截至 2025-12-31 的财年）在约 5.75 年内（到 2031-09-30 前后）增长到 400.00M，即每年 12.82%；已披露增速为每年 12.62%（2022–2025）。",
-      "E3 为支持：从已披露的 95.00M 股到假设的 100.00M 股，即每年 0.99%；已披露股份数每年变化 1.04%（2023-07-28 至 2026-07-24）。"
+      "核心检查 E1 为背景：观点要求营收从 2.00 亿（截至 2025-12-31 的财年）在约 5.75 年内（到 2031-09-30 前后）增长到 4.00 亿，即每年 12.82%；已披露增速为每年 12.62%（2022–2025）。",
+      "E3 为支持：从已披露的 9,500 万 股到假设的 1.00 亿 股，即每年 0.99%；已披露股份数每年变化 1.04%（2023-07-28 至 2026-07-24）。"
     ],
     "limitations_zh": [
       "本次使用合成示例数据。这个结论只用来演示规则，与任何真实公司无关。",
@@ -1885,7 +1885,7 @@
       "id": "R1",
       "trigger": "Next annual revenue is reported below 225.63M",
       "watch": "10-K / XBRL company facts for the fiscal year after 2025-12-31",
-      "trigger_zh": "下一个年度营收低于 225.63M",
+      "trigger_zh": "下一个年度营收低于 2.26 亿",
       "watch_zh": "2025-12-31 之后财年的 10-K / XBRL 财务数据",
       "threshold": "225634975 (12.82% above 200.00M)",
       "linked_to": [
@@ -1898,7 +1898,7 @@
       "id": "R2",
       "trigger": "Shares outstanding rise above 95.94M within a year of 2026-07-24, or above 100.00M at any time",
       "watch": "cover page of the next 10-Q / 10-K (dei:EntityCommonStockSharesOutstanding); S-1/S-3/424B offerings",
-      "trigger_zh": "2026-07-24 后一年内股份数超过 95.94M，或任何时候超过 100.00M",
+      "trigger_zh": "2026-07-24 后一年内股份数超过 9,594 万，或任何时候超过 1.00 亿",
       "watch_zh": "下一份 10-Q / 10-K 封面的股份数；S-1/S-3/424B 增发文件",
       "threshold": "95944249",
       "linked_to": [
@@ -2097,6 +2097,471 @@
     "assumed_multiple": "25",
     "assumed_horizon": "5",
     "reported_cagr": "0.126217337640027395647100187120221"
+  },
+  "report": {
+    "headline": {
+      "en": "For Synthetic Example Corp (fictional) to reach 100 by about Sep 2031, its revenue has to grow about 12.8% a year; over the last few years it changed +12.6% a year. That is within reach of its record, but there are gaps, so the claim is only partly supported.",
+      "zh": "Synthetic Example Corp (fictional) 要到 2031 年 9 月前后涨到 100，营收需要每年增长约 12.8%；过去几年实际是每年 +12.6%。这和过去的表现有差距但不算太远，所以只是部分成立。"
+    },
+    "verdict_meaning": {
+      "en": "Some evidence supports the claim and some does not: only part of what it needs is already happening.",
+      "zh": "有支持也有差距：观点需要的条件只有一部分已经在发生。"
+    },
+    "layers": [
+      {
+        "title": {
+          "en": "Layer 1 · What the claim needs",
+          "zh": "第 1 层 · 观点需要什么"
+        },
+        "rows": [
+          {
+            "signal": {
+              "en": "Share price",
+              "zh": "股价"
+            },
+            "data": {
+              "en": "50 → 100 (+100.0%)",
+              "zh": "50 → 100（+100.0%）"
+            },
+            "meaning": {
+              "en": "14.9% a year for 5 years; the stock moved +12.7% a year over the last 5 years",
+              "zh": "相当于 5 年里每年 14.9%；这只股票过去 5 年每年 +12.7%"
+            },
+            "tone": "neutral"
+          },
+          {
+            "signal": {
+              "en": "Company value",
+              "zh": "公司总市值"
+            },
+            "data": {
+              "en": "$4.75B today → $10.00B",
+              "zh": "今天 47.50 亿美元 → 100.00 亿美元"
+            },
+            "meaning": {
+              "en": "the whole company must be worth about 2.1x what the market pays today",
+              "zh": "整家公司的价值要变成今天的约 2.1 倍"
+            },
+            "tone": "neutral"
+          },
+          {
+            "signal": {
+              "en": "Needed revenue",
+              "zh": "需要的营收"
+            },
+            "data": {
+              "en": "$400.00M a year",
+              "zh": "每年 4.00 亿美元"
+            },
+            "meaning": {
+              "en": "about 2.0x the latest year ($200.00M), assuming P/S 25",
+              "zh": "是最近一年（2.00 亿美元）的约 2.0 倍，按 P/S 25 估值"
+            },
+            "tone": "neutral"
+          },
+          {
+            "signal": {
+              "en": "Needed revenue growth",
+              "zh": "需要的营收增速"
+            },
+            "data": {
+              "en": "12.8% a year",
+              "zh": "每年 12.8%"
+            },
+            "meaning": {
+              "en": "past pace +12.6% a year",
+              "zh": "过去是每年 +12.6%"
+            },
+            "tone": "neutral"
+          }
+        ]
+      },
+      {
+        "title": {
+          "en": "Layer 2 · What the company has done",
+          "zh": "第 2 层 · 公司过去做到了什么"
+        },
+        "rows": [
+          {
+            "signal": {
+              "en": "Revenue growth",
+              "zh": "营收增速"
+            },
+            "data": {
+              "en": "+12.6% a year (2022–2025)",
+              "zh": "每年 +12.6%（2022–2025）"
+            },
+            "meaning": {
+              "en": "$140.00M → $200.00M",
+              "zh": "1.40 亿美元 → 2.00 亿美元"
+            },
+            "tone": "good"
+          },
+          {
+            "signal": {
+              "en": "Net income growth",
+              "zh": "净利润增速"
+            },
+            "data": {
+              "en": "+12.6% a year (2022–2025)",
+              "zh": "每年 +12.6%（2022–2025）"
+            },
+            "meaning": {
+              "en": "$28.00M → $40.00M",
+              "zh": "2,800 万美元 → 4,000 万美元"
+            },
+            "tone": "good"
+          },
+          {
+            "signal": {
+              "en": "Profit margin",
+              "zh": "利润率"
+            },
+            "data": {
+              "en": "20.0%",
+              "zh": "20.0%"
+            },
+            "meaning": {
+              "en": "keeps about 20 cents of every $1 of sales as profit",
+              "zh": "每卖 100 元，大约赚 20 元"
+            },
+            "tone": "good"
+          },
+          {
+            "signal": {
+              "en": "Share count",
+              "zh": "股数变化"
+            },
+            "data": {
+              "en": "+1.0% a year (92.10M → 95.00M)",
+              "zh": "每年 +1.0%（9,210 万 → 9,500 万 股）"
+            },
+            "meaning": {
+              "en": "new shares are issued, so each share owns a smaller slice",
+              "zh": "公司在增发，每股分到的份额被摊薄"
+            },
+            "tone": "neutral"
+          }
+        ]
+      },
+      {
+        "title": {
+          "en": "Layer 3 · How the market prices it today",
+          "zh": "第 3 层 · 市场今天怎么定价"
+        },
+        "rows": [
+          {
+            "signal": {
+              "en": "Valuation (P/S)",
+              "zh": "估值（P/S）"
+            },
+            "data": {
+              "en": "today 23.8, claim assumes 25",
+              "zh": "今天 23.8，观点假设 25"
+            },
+            "meaning": {
+              "en": "investors pay about $24 for each $1 of yearly revenue",
+              "zh": "投资者愿意为每 1 元年营收付约 24 元"
+            },
+            "tone": "neutral"
+          },
+          {
+            "signal": {
+              "en": "Price swings",
+              "zh": "股价波动"
+            },
+            "data": {
+              "en": "35.2% a year",
+              "zh": "每年约 35.2%"
+            },
+            "meaning": {
+              "en": "moves of ±35% within a year are common for this stock",
+              "zh": "一年内上下波动 35% 左右对这只股票很常见"
+            },
+            "tone": "neutral"
+          },
+          {
+            "signal": {
+              "en": "Past 5 years",
+              "zh": "过去 5 年股价"
+            },
+            "data": {
+              "en": "+12.7% a year",
+              "zh": "每年 +12.7%"
+            },
+            "meaning": {
+              "en": "the claim needs 14.9% a year from here",
+              "zh": "观点需要从现在起每年 14.9%"
+            },
+            "tone": "neutral"
+          }
+        ]
+      },
+      {
+        "title": {
+          "en": "Layer 4 · How reliable the data is",
+          "zh": "第 4 层 · 数据可靠吗"
+        },
+        "rows": [
+          {
+            "signal": {
+              "en": "Latest report",
+              "zh": "最新财报"
+            },
+            "data": {
+              "en": "latest periodic report filed 2026-08-01 (61 days before this run)",
+              "zh": "最近一份定期报告申报于 2026-08-01（本次运行前 61 天）"
+            },
+            "meaning": {
+              "en": "recent enough",
+              "zh": "足够新"
+            },
+            "tone": "neutral"
+          },
+          {
+            "signal": {
+              "en": "Sources",
+              "zh": "数据来源"
+            },
+            "data": {
+              "en": "SEC filings and XBRL financial data; daily closing prices",
+              "zh": "SEC 申报与 XBRL 财务数据；每日收盘价"
+            },
+            "meaning": {
+              "en": "data mode: synthetic",
+              "zh": "数据模式：synthetic"
+            },
+            "tone": "bad"
+          },
+          {
+            "signal": {
+              "en": "Not read",
+              "zh": "没有读取"
+            },
+            "data": {
+              "en": "filing text, guidance, news",
+              "zh": "申报正文、管理层指引、新闻"
+            },
+            "meaning": {
+              "en": "only reported numbers and prices are compared",
+              "zh": "只比较了已披露的数字和股价"
+            },
+            "tone": "neutral"
+          }
+        ]
+      }
+    ],
+    "agreements": [
+      {
+        "en": "No two checks point clearly the same way; read the layers one by one.",
+        "zh": "没有两项检查明显指向同一方向，请逐层查看。"
+      }
+    ],
+    "divergences": [
+      {
+        "en": "No notable disagreement between the checks.",
+        "zh": "各项检查之间没有明显矛盾。"
+      }
+    ],
+    "time_view": [
+      {
+        "signal": {
+          "en": "Next 3 months",
+          "zh": "未来 3 个月"
+        },
+        "data": {
+          "en": "Next 10-Q or 10-K is filed (expected around 2026-10-31)",
+          "zh": "下一份 10-Q 或 10-K 发布（预计 2026-10-31 前后）"
+        },
+        "meaning": {
+          "en": "new quarterly numbers update every check",
+          "zh": "新的季度数据会更新所有检查"
+        },
+        "tone": "neutral"
+      },
+      {
+        "signal": {
+          "en": "Next fiscal year",
+          "zh": "下一个财年"
+        },
+        "data": {
+          "en": "revenue about $225.63M",
+          "zh": "营收约 2.26 亿美元"
+        },
+        "meaning": {
+          "en": "the first milestone on the claim's path",
+          "zh": "这是观点路径上的第一个里程碑"
+        },
+        "tone": "neutral"
+      },
+      {
+        "signal": {
+          "en": "Target date",
+          "zh": "目标日期"
+        },
+        "data": {
+          "en": "2031-09-30",
+          "zh": "2031-09-30"
+        },
+        "meaning": {
+          "en": "revenue of $400.00M a year and a P/S of 25",
+          "zh": "每年营收 4.00 亿美元，且 P/S 为 25"
+        },
+        "tone": "neutral"
+      }
+    ],
+    "scenarios": [
+      {
+        "name": {
+          "en": "Past pace, today's valuation",
+          "zh": "延续过去增速 + 今天的估值"
+        },
+        "assumptions": {
+          "en": "revenue +12.6% a year, P/S 23.8",
+          "zh": "营收每年 +12.6%，P/S 23.8"
+        },
+        "price": "94.06",
+        "vs_target": "-5.9%",
+        "meaning": {
+          "en": "if nothing changes",
+          "zh": "如果一切照旧"
+        }
+      },
+      {
+        "name": {
+          "en": "Past pace, claimed valuation",
+          "zh": "延续过去增速 + 观点假设的估值"
+        },
+        "assumptions": {
+          "en": "revenue +12.6% a year, P/S 25.0",
+          "zh": "营收每年 +12.6%，P/S 25.0"
+        },
+        "price": "99.01",
+        "vs_target": "-1.0%",
+        "meaning": {
+          "en": "the business keeps its record; valuation as the claim assumes",
+          "zh": "业绩按过去的速度，估值按观点的假设"
+        }
+      },
+      {
+        "name": {
+          "en": "The claim's path",
+          "zh": "观点需要的路径"
+        },
+        "assumptions": {
+          "en": "revenue +12.8% a year, P/S 25.0",
+          "zh": "营收每年 +12.8%，P/S 25.0"
+        },
+        "price": "100.00",
+        "vs_target": "0.0%",
+        "meaning": {
+          "en": "what has to happen for the target",
+          "zh": "要达到目标价必须发生的情况"
+        }
+      }
+    ],
+    "scenario_note": {
+      "en": "Scenario prices are formulas: latest annual metric grown at the stated rate to the target date, times the multiple, divided by the assumed share count. They are not forecasts and carry no probabilities. The optional probability section estimates P(price ≥ target) = 20.3% under its own model.",
+      "zh": "情景价格只是公式推演：最近一年的指标按所列增速增长到目标日，乘以估值倍数，再除以届时的股数。它们不是预测，也没有概率。 附加的概率参考页在其模型假设下估计到期价 ≥ 目标价的概率为 20.3%。"
+    },
+    "upside": [
+      {
+        "en": "Next annual revenue at or above $225.63M would show the company on the claim's path.",
+        "zh": "下一年营收达到或超过 2.26 亿美元，说明公司正走在观点需要的路径上。"
+      },
+      {
+        "en": "A market willing to pay a P/S near 25 (today 23.8).",
+        "zh": "市场愿意给出接近 25 的 P/S（今天 23.8）。"
+      }
+    ],
+    "downside": [
+      {
+        "en": "If revenue keeps changing at +12.6% a year, the gap to the target widens every year.",
+        "zh": "如果营收继续按每年 +12.6% 变化，和目标的差距会逐年扩大。"
+      },
+      {
+        "en": "A P/S falling well below the assumed 25.",
+        "zh": "P/S 明显跌破假设的 25。"
+      },
+      {
+        "en": "Faster share issuance than assumed.",
+        "zh": "增发速度快于假设。"
+      }
+    ],
+    "monitor": [
+      {
+        "signal": {
+          "en": "Annual revenue",
+          "zh": "年度营收"
+        },
+        "current": {
+          "en": "$200.00M",
+          "zh": "2.00 亿美元"
+        },
+        "threshold": {
+          "en": "Next annual revenue is reported below 225.63M",
+          "zh": "下一个年度营收低于 2.26 亿"
+        },
+        "meaning": {
+          "en": "below it: off the claim's path",
+          "zh": "低于它：偏离观点路径"
+        }
+      },
+      {
+        "signal": {
+          "en": "Share count",
+          "zh": "股数"
+        },
+        "current": {
+          "en": "95.00M",
+          "zh": "9,500 万 股"
+        },
+        "threshold": {
+          "en": "Shares outstanding rise above 95.94M within a year of 2026-07-24, or above 100.00M at any time",
+          "zh": "2026-07-24 后一年内股份数超过 9,594 万，或任何时候超过 1.00 亿"
+        },
+        "meaning": {
+          "en": "above it: more dilution than assumed",
+          "zh": "超过它：稀释多于假设"
+        }
+      },
+      {
+        "signal": {
+          "en": "Today's P/S",
+          "zh": "当前 P/S"
+        },
+        "current": {
+          "en": "23.8",
+          "zh": "23.8"
+        },
+        "threshold": {
+          "en": "Today's P/S falls below 20.00 (the assumed 25 would then need more than 1.25x expansion)",
+          "zh": "当前 P/S 跌破 20.00（届时假设的 25 需要超过 1.25 倍的估值扩张）"
+        },
+        "meaning": {
+          "en": "below it: the valuation assumption gets harder",
+          "zh": "低于它：估值假设更难实现"
+        }
+      },
+      {
+        "signal": {
+          "en": "Next report",
+          "zh": "下一份财报"
+        },
+        "current": {
+          "en": "2026-08-01",
+          "zh": "2026-08-01"
+        },
+        "threshold": {
+          "en": "Next 10-Q or 10-K is filed (expected around 2026-10-31)",
+          "zh": "下一份 10-Q 或 10-K 发布（预计 2026-10-31 前后）"
+        },
+        "meaning": {
+          "en": "re-run the case with new numbers",
+          "zh": "用新数据重新运行"
+        }
+      }
+    ]
   },
   "provider_errors": [],
   "validation_issues": [],

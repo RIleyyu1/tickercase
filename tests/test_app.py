@@ -228,3 +228,25 @@ def test_example_values_are_replaced_by_prefill_and_custom_choices_are_kept(app_
     claim = at.session_state["result"].confirmed_claim
     assert claim.values.share_change_rate == Decimal("-0.02") and claim.values.target_shares_derived
     assert claim.value_provenance["target_assumed_shares"].startswith("derived:")
+
+
+def test_one_sentence_is_enough(app_env):
+    at = run(AppTest.from_file(APP))
+    at.radio(key="sec_mode").set_value("synthetic")
+    at.text_area(key="f_claim_text").set_value("SYNT 五年后股价翻倍")
+    run(at)
+    button(at, "btn_prefill").click()
+    run(at)
+    assert at.session_state["f_ticker"] == "SYNT"
+    assert at.session_state["f_horizon_years"] == "5"
+    assert at.session_state["f_target_price"] == "100"  # "翻倍" x reference price 50
+    assert "从原文识别" in texts(at)
+    button(at, "btn_confirm").click()
+    run(at)
+    button(at, "btn_run").click()
+    run(at)
+    result = at.session_state["result"]
+    assert result.report is not None and len(result.report.layers) == 4
+    assert result.confirmed_claim.value_provenance["ticker"].startswith("claim_text:")
+    page = " ".join(m.value for m in at.markdown)
+    assert "第 1 层" in page and "情景推演" in page and "需要关注的信号" in page

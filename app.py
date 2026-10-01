@@ -17,8 +17,8 @@ import streamlit as st
 
 from tickercase.config import REPO_ROOT, load_settings, write_env_value
 from tickercase.http_client import validate_user_agent
-from tickercase.models import VERDICT_DISPLAY_ZH, CaseResult, ClaimDraft, Confirmation, EvidenceItem, ReferenceSnapshot
-from tickercase.service import DEFAULT_PREFIX, CaseService
+from tickercase.models import VERDICT_DISPLAY_ZH, CaseResult, ClaimDraft, Confirmation, EvidenceItem, PlainReport, ReferenceSnapshot, Text
+from tickercase.service import CLAIM_TEXT_PREFIX, DEFAULT_PREFIX, CaseService
 from tickercase.storage import CaseStore
 from tickercase.validation import ConfirmationError, confirm, confirmation_state, fingerprint, validate_draft
 
@@ -47,9 +47,24 @@ S = {
     "sec_saved": ("已保存。", "Saved."), "sec_ok": ("SEC 联系方式已设置", "SEC contact is set"),
     "sec_bad": ("请输入有效邮箱。", "Enter a valid email."),
     "s1": ("1. 观点", "1. Claim"),
-    "s1_hint": ("只需填写这一栏，然后点「补全其余项」。其余输入会用公开数据和默认假设补全，你核对后确认即可。",
-                "Fill in this box only, then click “Fill in the rest”. The other inputs are filled from public data and default assumptions for you to check."),
-    "prefill": ("补全其余项", "Fill in the rest"),
+    "s1_hint": ("写一句观点就行，例如「特斯拉 2030 年涨到 1000 美元」或「NVDA will hit $300 in 3 years」，然后点「识别并补全」。代码、目标价和时间会从原文识别，其余用公开数据和默认假设补全，你核对后确认。",
+                "Write the claim as one sentence, e.g. “Tesla to $1,000 by 2030” or “特斯拉五年后翻倍”, then click “Read and fill in”. Ticker, target and time are read from the sentence; the rest comes from public data and default assumptions for you to check."),
+    "prefill": ("识别并补全", "Read and fill in"),
+    "need_text": ("先写一句观点。", "Write the claim first."),
+    "recognized": ("从原文识别：{items}", "Read from the claim: {items}"),
+    "recognized_none": ("没有从原文识别出代码、目标价或时间。", "Nothing could be read from the claim."),
+    "multiple_target": ("目标价 = 参考价 {ref} × {x}（原文「{text}」）", "Target = reference {ref} × {x} (from “{text}”)"),
+    "detail_fields": ("识别结果（可修改）", "What was read (editable)"),
+    "r_data": ("数据摘要", "Data summary"), "r_analysis": ("分析", "Analysis"),
+    "r_agree": ("一致的信号", "Signals that agree"), "r_diverge": ("关键分歧", "Key divergences"),
+    "r_time": ("时间维度", "Time view"), "r_scen": ("情景推演", "Scenarios"),
+    "r_concl": ("结论", "Conclusion"), "r_up": ("什么会让判断变好", "What would strengthen the case"),
+    "r_down": ("什么会让判断变差", "What would weaken the case"), "r_monitor": ("需要关注的信号", "Signals to watch"),
+    "r_cols": (("", "信号", "数据", "说明了什么"), ("", "Signal", "Data", "What it says")),
+    "r_scen_cols": (("情景", "假设", "目标日股价", "相对目标价", "含义"), ("Scenario", "Assumptions", "Price at target date", "vs target", "Meaning")),
+    "r_mon_cols": (("信号", "当前", "触发条件", "含义"), ("Signal", "Now", "Trigger", "Meaning")),
+    "r_time_cols": (("时间", "要看什么", "说明"), ("When", "What", "Note")),
+    "r_none": ("这个案例没有简明报告（由旧版本生成）。", "This case has no plain report (made by an older version)."),
     "prefill_help": ("按股票代码读取收盘价、SEC 披露的股份数和年度营收/净利润；空着的假设用默认值（目标期股份数 = 当前股份数，估值倍数 = 当前倍数）。",
                      "Reads the latest close, SEC-reported shares and annual revenue / net income; empty assumptions get defaults (target shares = current shares, multiple = today's multiple)."),
     "need_ticker": ("先填写股票代码。", "Enter a ticker first."),
@@ -85,8 +100,8 @@ S = {
     "case": ("投资案例", "Investment case"),
     "as_of": ("证据截至 {d} · {r} · 描述当日的证据状态，不是价格预测", "Evidence as of {d} · {r} · describes the evidence on that date; not a price prediction"),
     "notes": ("提示（{n}）", "Notes ({n})"),
-    "tabs": (["结论与依据", "证据", "计算", "公开数据", "概率参考（附加）", "运行记录"],
-             ["Verdict", "Evidence", "Calculations", "Public data", "Probability (extra)", "Run log"]),
+    "tabs": (["简明报告", "结论与依据", "证据", "计算", "公开数据", "概率参考（附加）", "运行记录"],
+             ["Plain report", "Verdict details", "Evidence", "Calculations", "Public data", "Probability (extra)", "Run log"]),
     "rationale": ("判断依据", "Rationale"), "rechecks": ("何时需要重新评估", "When to review again"),
     "watch": ("观察：", "Watch: "), "threshold": ("阈值：", "Threshold: "), "linked": ("关联：", "Linked to: "),
     "limits": ("这个结论的限制", "Limits of this verdict"),
@@ -285,7 +300,8 @@ def _init_state() -> None:
     st.session_state.setdefault("sec_mode", "live")
     st.session_state.setdefault("lang", "zh")
     st.session_state.setdefault("view", "new")
-    for key in ("confirmation", "confirm_feedback", "result", "result_mode", "run_error", "prefill_msg", "prefill_snapshot", "sec_msg"):
+    for key in ("confirmation", "confirm_feedback", "result", "result_mode", "run_error", "prefill_msg", "prefill_snapshot", "sec_msg",
+                "extract_msg", "extraction"):
         st.session_state.setdefault(key, None)
     st.session_state.setdefault("prefill_sources", {})
 
@@ -307,6 +323,7 @@ def _load_example(key: str) -> None:
     st.session_state["view"] = "new"
     st.session_state["prefill_sources"] = {}
     st.session_state["prefill_msg"] = None
+    st.session_state["extract_msg"] = None
     _reset_confirmation()
 
 
@@ -318,6 +335,7 @@ def _clear_form() -> None:
     st.session_state["example_values"] = {}
     st.session_state["prefill_sources"] = {}
     st.session_state["prefill_msg"] = None
+    st.session_state["extract_msg"] = None
     st.session_state["prefill_snapshot"] = None
     _reset_confirmation()
 
@@ -406,6 +424,54 @@ def _prefill() -> None:
     _reset_confirmation()
 
 
+def _extract_and_fill() -> None:
+    """Read ticker, target and horizon from the sentence, then fill the rest from public data."""
+    text = st.session_state["f_claim_text"].strip()
+    if not text:
+        if st.session_state["f_ticker"].strip():
+            st.session_state["extract_msg"] = None
+            _prefill()  # no sentence, but a ticker: fill from public data only
+        else:
+            st.session_state["prefill_msg"] = ("error", S["need_text"])
+        return
+    ex = get_service().extract(text, mode=st.session_state["sec_mode"])
+    sources = dict(st.session_state["prefill_sources"])
+    found_zh, found_en = [], []
+    for name, value, src in (("ticker", ex.ticker, ex.ticker_text), ("target_price", ex.target_price, ex.target_text),
+                             ("horizon_years", ex.horizon_years, ex.horizon_text)):
+        if value is None or not _is_untouched(name):
+            continue
+        val = format(value.normalize(), "f") if isinstance(value, Decimal) else str(value)
+        st.session_state[f"f_{name}"] = val
+        sources[name] = (val, f"{CLAIM_TEXT_PREFIX}{src}")
+        found_zh.append(f"{FIELD_META[name][0]} {val}（「{src}」）")
+        found_en.append(f"{FIELD_META[name][1]} {val} (“{src}”)")
+    st.session_state["prefill_sources"] = sources
+    st.session_state["extraction"] = ex
+    zh = S["recognized"][0].format(items="；".join(found_zh)) if found_zh else S["recognized_none"][0]
+    en = S["recognized"][1].format(items="; ".join(found_en)) if found_en else S["recognized_none"][1]
+    if ex.notes_zh:
+        zh += " " + " ".join(ex.notes_zh)
+        en += " " + " ".join(ex.notes_en)
+    st.session_state["extract_msg"] = ("warning" if ex.notes_zh else "info", (zh, en))
+    if st.session_state["f_ticker"].strip():
+        _prefill()
+    # "doubles" / "10x": the target is the reference price times the factor
+    ref = st.session_state["f_reference_price"].strip()
+    if ex.target_multiple is not None and ref and _is_untouched("target_price"):
+        try:
+            target = (Decimal(ref) * ex.target_multiple).quantize(Decimal("0.01"))
+        except Exception:
+            return
+        val = format(target.normalize(), "f")
+        st.session_state["f_target_price"] = val
+        st.session_state["prefill_sources"]["target_price"] = (val, f"{CLAIM_TEXT_PREFIX}{ex.target_text} x {ex.target_multiple} of reference {ref}")
+        note = (S["multiple_target"][0].format(ref=ref, x=ex.target_multiple, text=ex.target_text),
+                S["multiple_target"][1].format(ref=ref, x=ex.target_multiple, text=ex.target_text))
+        kind, (mzh, men) = st.session_state["extract_msg"]
+        st.session_state["extract_msg"] = (kind, (mzh + " " + note[0], men + " " + note[1]))
+
+
 def _method_changed() -> None:
     """Keep the prefilled base metric and default multiple consistent with the valuation method."""
     snap: Optional[ReferenceSnapshot] = st.session_state.get("prefill_snapshot")
@@ -480,11 +546,15 @@ def field(name: str, container=None) -> None:
     target = container or st
     src = st.session_state["prefill_sources"].get(name)
     if src and st.session_state.get(f"f_{name}") == src[0]:
-        is_default = src[1].startswith(DEFAULT_PREFIX)
-        mark = "◇" if is_default else "ⓘ"
-        kind = ("默认假设" if lang() == "zh" else "Default assumption") if is_default else ("来自公开数据" if lang() == "zh" else "From public data")
+        zh = lang() == "zh"
+        if src[1].startswith(DEFAULT_PREFIX):
+            mark, kind = "◇", ("默认假设" if zh else "Default assumption")
+        elif src[1].startswith(CLAIM_TEXT_PREFIX):
+            mark, kind = "✎", ("从原文识别" if zh else "Read from the claim")
+        else:
+            mark, kind = "ⓘ", ("来自公开数据" if zh else "From public data")
         label = f"{label} {mark}"
-        help_text = f"{help_text}\n\n{kind}：{src[1].removeprefix(DEFAULT_PREFIX)}"
+        help_text = f"{help_text}\n\n{kind}：{src[1].removeprefix(DEFAULT_PREFIX).removeprefix(CLAIM_TEXT_PREFIX)}"
     if name == "claim_text":
         target.text_area(label, key=f"f_{name}", placeholder=placeholder, help=help_text, height=80)
     else:
@@ -496,16 +566,19 @@ def render_claim_box() -> None:
         st.markdown(f"**{t('s1')}**")
         st.caption(t("s1_hint"))
         field("claim_text")
+        b1, b2 = st.columns([1, 3])
+        b1.button(t("prefill"), key="btn_prefill", on_click=_extract_and_fill, help=t("prefill_help"), type="primary", use_container_width=True)
+        with b2:
+            for key in ("extract_msg", "prefill_msg"):
+                msg = st.session_state[key]
+                if msg:
+                    kind, (zh, en) = msg
+                    {"success": st.success, "warning": st.warning, "error": st.error, "info": st.info}[kind](zh if lang() == "zh" else en)
+        st.caption(t("detail_fields"))
         c = st.columns([1.2, 1, 1])
         field("ticker", c[0])
         field("target_price", c[1])
         field("horizon_years", c[2])
-        b1, b2 = st.columns([1, 3])
-        b1.button(t("prefill"), key="btn_prefill", on_click=_prefill, help=t("prefill_help"), type="primary", use_container_width=True)
-        msg = st.session_state["prefill_msg"]
-        if msg:
-            kind, (zh, en) = msg
-            {"success": b2.success, "warning": b2.warning, "error": b2.error}[kind](zh if lang() == "zh" else en)
 
 
 def render_share_input() -> None:
@@ -853,6 +926,67 @@ def tab_run_log(result: CaseResult, key_suffix: str) -> None:
                        mime="application/json", key=f"dl_{key_suffix}")
 
 
+TONE_ICON = {"good": "✔", "bad": "✖", "missing": "…", "neutral": "·"}
+
+
+def tr(text: Optional[Text]) -> str:
+    if text is None:
+        return ""
+    return text.zh if lang() == "zh" else text.en
+
+
+def _cell(x: str) -> str:
+    return (x or "").replace("|", "\\|").replace("\n", " ")
+
+
+def _md_table(cols, rows) -> str:
+    head = "| " + " | ".join(cols) + " |\n|" + "---|" * len(cols)
+    return head + "\n" + "\n".join("| " + " | ".join(_cell(c) for c in r) + " |" for r in rows)
+
+
+def render_report(report: Optional[PlainReport]) -> None:
+    if report is None:
+        st.caption(t("r_none"))
+        return
+    i = 0 if lang() == "zh" else 1
+    st.markdown(f"#### {t('r_data')}")
+    for layer in report.layers:
+        st.markdown(f"**{tr(layer.title)}**")
+        st.markdown(_md_table(S["r_cols"][i], [(TONE_ICON[r.tone], tr(r.signal), tr(r.data), tr(r.meaning)) for r in layer.rows]))
+    st.markdown(f"#### {t('r_analysis')}")
+    c1, c2 = st.columns(2)
+    with c1.container(border=True):
+        st.markdown(f"**{t('r_agree')}**")
+        for x in report.agreements:
+            st.markdown(f"- {tr(x)}")
+    with c2.container(border=True):
+        st.markdown(f"**{t('r_diverge')}**")
+        for x in report.divergences:
+            st.markdown(f"- {tr(x)}")
+    if report.time_view:
+        st.markdown(f"**{t('r_time')}**")
+        st.markdown(_md_table(S["r_time_cols"][i], [(tr(r.signal), tr(r.data), tr(r.meaning)) for r in report.time_view]))
+    if report.scenarios:
+        st.markdown(f"#### {t('r_scen')}")
+        st.markdown(_md_table(S["r_scen_cols"][i], [(tr(x.name), tr(x.assumptions), x.price or "—", x.vs_target or "—", tr(x.meaning))
+                                                    for x in report.scenarios]))
+        st.caption(tr(report.scenario_note))
+    st.markdown(f"#### {t('r_concl')}")
+    st.markdown(tr(report.verdict_meaning))
+    c1, c2 = st.columns(2)
+    with c1.container(border=True):
+        st.markdown(f"**✔ {t('r_up')}**")
+        for x in report.upside:
+            st.markdown(f"- {tr(x)}")
+    with c2.container(border=True):
+        st.markdown(f"**✖ {t('r_down')}**")
+        for x in report.downside:
+            st.markdown(f"- {tr(x)}")
+    if report.monitor:
+        st.markdown(f"**{t('r_monitor')}**")
+        st.markdown(_md_table(S["r_mon_cols"][i], [(tr(m.signal), tr(m.current), tr(m.threshold), tr(m.meaning)) for m in report.monitor]))
+
+
 def render_result(result: CaseResult, key_suffix: str = "current") -> None:
     if result.validation_issues:
         for i in result.validation_issues:
@@ -861,6 +995,8 @@ def render_result(result: CaseResult, key_suffix: str = "current") -> None:
     if result.confirmed_claim is None:
         return
     render_verdict(result)
+    if result.report is not None:
+        st.markdown(f"<div style='font-size:1.08rem; line-height:1.6; margin: 0 0 8px 0'>{tr(result.report.headline)}</div>", unsafe_allow_html=True)
     for e in result.provider_errors:
         st.error(f"[{e.provider_id}] {e.code}" + (f" (HTTP {e.http_status})" if e.http_status else "") + f": {e.message}")
     warnings = result.warnings_zh if lang() == "zh" and len(result.warnings_zh) == len(result.warnings) else result.warnings
@@ -868,20 +1004,22 @@ def render_result(result: CaseResult, key_suffix: str = "current") -> None:
         with st.expander(t("notes", n=len(warnings)), expanded=bool(result.provider_errors)):
             for w in warnings:
                 st.warning(w)
-    render_key_numbers(result)
     tabs = st.tabs(S["tabs"][0 if lang() == "zh" else 1])
     with tabs[0]:
+        render_report(result.report)
+    with tabs[1]:
+        render_key_numbers(result)
         if result.verdict is not None:
             tab_conclusion(result)
-    with tabs[1]:
-        tab_evidence(result)
     with tabs[2]:
-        tab_calculations(result)
+        tab_evidence(result)
     with tabs[3]:
-        tab_public_data(result)
+        tab_calculations(result)
     with tabs[4]:
-        tab_probability(result)
+        tab_public_data(result)
     with tabs[5]:
+        tab_probability(result)
+    with tabs[6]:
         tab_run_log(result, key_suffix)
 
 

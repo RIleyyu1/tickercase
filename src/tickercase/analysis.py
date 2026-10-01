@@ -116,6 +116,16 @@ def _amount(value: Decimal) -> str:
     return f"{sign}{v:,.0f}"
 
 
+def _amount_zh(value: Decimal) -> str:
+    """Chinese units: 3,649.82 亿, 1.40 万亿, 2,800 万."""
+    v = abs(value)
+    sign = "-" if value < 0 else ""
+    for size, unit, places in ((Decimal("1e12"), "万亿", 2), (Decimal("1e8"), "亿", 2), (Decimal("1e4"), "万", 0)):
+        if v >= size:
+            return f"{sign}{v / size:,.{places}f} {unit}"
+    return f"{sign}{v:,.0f}"
+
+
 def _years(start: date, end: date) -> Decimal:
     with localcontext(_ctx()):
         return Decimal((end - start).days) / Decimal("365.25")
@@ -259,7 +269,7 @@ class _Checks:
             return _item("E1", "metric_growth", "contrary", title, Bilingual(
                 f"latest reported annual {m.en} is {_amount(latest.value)} (FY ending {latest.period_end}); the claim requires "
                 f"{_amount(self.required)} per year, which needs a turnaround that a growth rate cannot express",
-                f"最近披露的年度{m.zh}为 {_amount(latest.value)}（截至 {latest.period_end} 的财年）；观点需要每年 {_amount(self.required)}，"
+                f"最近披露的年度{m.zh}为 {_amount_zh(latest.value)}（截至 {latest.period_end} 的财年）；观点需要每年 {_amount_zh(self.required)}，"
                 "需要先扭亏，无法用增长率表示",
             ), rule, measured=measured, sources=sources, as_of=latest.filed)
         self.req_cagr = annualized_rate(self.required, latest.value, years)
@@ -283,8 +293,8 @@ class _Checks:
             f"the claim needs {m.en} to grow {_pct(self.req_cagr)} per year from {_amount(latest.value)} (FY ending {latest.period_end}) "
             f"to {_amount(self.required)} by about {target_date} ({years:.2f} years); reported growth was {_pct(hist)} per year "
             f"({start.period_end.year}–{latest.period_end.year})",
-            f"观点要求{m.zh}从 {_amount(latest.value)}（截至 {latest.period_end} 的财年）在约 {years:.2f} 年内（到 {target_date} 前后）"
-            f"增长到 {_amount(self.required)}，即每年 {_pct(self.req_cagr)}；已披露增速为每年 {_pct(hist)}"
+            f"观点要求{m.zh}从 {_amount_zh(latest.value)}（截至 {latest.period_end} 的财年）在约 {years:.2f} 年内（到 {target_date} 前后）"
+            f"增长到 {_amount_zh(self.required)}，即每年 {_pct(self.req_cagr)}；已披露增速为每年 {_pct(hist)}"
             f"（{start.period_end.year}–{latest.period_end.year}）",
         )
         return _item("E1", "metric_growth", stance, title, detail, rule, measured=measured, sources=sources, as_of=latest.filed)
@@ -340,7 +350,7 @@ class _Checks:
             f"the claim assumes {ml} {self.claim.valuation_multiple} at the target date; today's {ml} is {current:.2f} "
             f"(market value {_amount(cap)} / {m.en} {_amount(latest.value)}), so the assumption is {rel_en} today's level",
             f"观点假设目标日 {ml} 为 {self.claim.valuation_multiple}；当前 {ml} 为 {current:.2f}"
-            f"（市值 {_amount(cap)} / {m.zh} {_amount(latest.value)}），假设{rel_zh}",
+            f"（市值 {_amount_zh(cap)} / {m.zh} {_amount_zh(latest.value)}），假设{rel_zh}",
         )
         return _item("E2", "valuation_multiple", stance, title, detail, rule, measured=measured, sources=sources, as_of=self.market.last_date)
 
@@ -380,7 +390,7 @@ class _Checks:
         detail = Bilingual(
             f"going from {_amount(latest.value)} reported shares to the assumed {_amount(self.claim.target_assumed_shares)} means "
             f"{_pct(self.implied_share_rate)} per year; the reported count changed {_pct(hist)} per year ({start.period_end} to {latest.period_end})",
-            f"从已披露的 {_amount(latest.value)} 股到假设的 {_amount(self.claim.target_assumed_shares)} 股，即每年 {_pct(self.implied_share_rate)}；"
+            f"从已披露的 {_amount_zh(latest.value)} 股到假设的 {_amount_zh(self.claim.target_assumed_shares)} 股，即每年 {_pct(self.implied_share_rate)}；"
             f"已披露股份数每年变化 {_pct(hist)}（{start.period_end} 至 {latest.period_end}）",
         )
         return _item("E3", "share_count", stance, title, detail, rule, measured=measured, sources=sources, as_of=latest.filed)
@@ -395,7 +405,7 @@ class _Checks:
         return _item("E4", "profitability", "neutral", Bilingual("Reported profitability (context)", "已披露盈利情况（背景）"), Bilingual(
             f"latest annual net income is {_amount(latest.value)} (FY ending {latest.period_end}), i.e. {'a net loss' if loss else 'a profit'}. "
             "A P/S target does not require profit, but losses can lead to financing and dilution.",
-            f"最近年度净利润为 {_amount(latest.value)}（截至 {latest.period_end} 的财年），{'处于亏损' if loss else '处于盈利'}。"
+            f"最近年度净利润为 {_amount_zh(latest.value)}（截至 {latest.period_end} 的财年），{'处于亏损' if loss else '处于盈利'}。"
             "P/S 目标不要求盈利，但持续亏损可能带来融资和股份稀释。"),
             measured={"latest_net_income": _s(latest.value)}, sources=[_fact_source(self.facts, latest, "latest annual net income")],
             as_of=latest.filed)
@@ -470,14 +480,14 @@ class _Checks:
                 self.warnings.append(Bilingual(
                     f"your base {self.metric.en} {_amount(c.base_annual_metric)} differs from the reported {_amount(latest.value)} "
                     f"(FY ending {latest.period_end}); evidence checks use the reported value",
-                    f"你填写的基期{self.metric.zh} {_amount(c.base_annual_metric)} 与披露值 {_amount(latest.value)}（截至 {latest.period_end}）"
+                    f"你填写的基期{self.metric.zh} {_amount_zh(c.base_annual_metric)} 与披露值 {_amount_zh(latest.value)}（截至 {latest.period_end}）"
                     "不一致；证据检查使用披露值"))
         if self.facts and self.facts.shares_outstanding and c.current_shares is not None:
             latest = self.facts.shares_outstanding[-1]
             if _rel_diff(c.current_shares, latest.value) > INPUT_MISMATCH:
                 self.warnings.append(Bilingual(
                     f"your current share count {_amount(c.current_shares)} differs from the reported {_amount(latest.value)} as of {latest.period_end}",
-                    f"你填写的当前股份数 {_amount(c.current_shares)} 与 {latest.period_end} 披露的 {_amount(latest.value)} 不一致"))
+                    f"你填写的当前股份数 {_amount_zh(c.current_shares)} 与 {latest.period_end} 披露的 {_amount_zh(latest.value)} 不一致"))
 
     # ------------------------------------------------------------- sensitivity
 
@@ -579,7 +589,7 @@ def _rechecks(checks: _Checks, items: list[EvidenceItem]) -> list[RecheckConditi
             path = latest.value * (1 + checks.req_cagr)
         out.append(_recheck(
             "R1",
-            Bilingual(f"Next annual {m.en} is reported below {_amount(path)}", f"下一个年度{m.zh}低于 {_amount(path)}"),
+            Bilingual(f"Next annual {m.en} is reported below {_amount(path)}", f"下一个年度{m.zh}低于 {_amount_zh(path)}"),
             Bilingual(f"10-K / XBRL company facts for the fiscal year after {latest.period_end}",
                       f"{latest.period_end} 之后财年的 10-K / XBRL 财务数据"),
             ["E1", "valuation_multiple", "horizon_years"],
@@ -592,7 +602,7 @@ def _rechecks(checks: _Checks, items: list[EvidenceItem]) -> list[RecheckConditi
         out.append(_recheck(
             "R2",
             Bilingual(f"Shares outstanding rise above {_amount(path)} within a year of {s.period_end}, or above {_amount(c.target_assumed_shares)} at any time",
-                      f"{s.period_end} 后一年内股份数超过 {_amount(path)}，或任何时候超过 {_amount(c.target_assumed_shares)}"),
+                      f"{s.period_end} 后一年内股份数超过 {_amount_zh(path)}，或任何时候超过 {_amount_zh(c.target_assumed_shares)}"),
             Bilingual("cover page of the next 10-Q / 10-K (dei:EntityCommonStockSharesOutstanding); S-1/S-3/424B offerings",
                       "下一份 10-Q / 10-K 封面的股份数；S-1/S-3/424B 增发文件"),
             ["E3", "target_assumed_shares"], threshold=_s(path.quantize(Decimal(1))),
