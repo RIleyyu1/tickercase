@@ -161,3 +161,11 @@ def price_base_rate(closes: list[tuple[date, float]], months: int, required_retu
     returns = sorted(closes[i + months][1] / closes[i][1] - 1 for i in range(len(closes) - months))
     hits = sum(1 for x in returns if x >= float(required_return))
     return len(returns), hits, returns[len(returns) // 2], returns[-1]
+
+
+def price_touch_hits(closes: list[tuple[date, float]], months: int, required_return: Decimal) -> int:
+    """Windows in which some month-end close reached the required rise (month-end closes miss intramonth highs)."""
+    if months < 1 or len(closes) <= months:
+        return 0
+    need = 1 + float(required_return)
+    return sum(1 for i in range(len(closes) - months) if max(c for _, c in closes[i + 1: i + months + 1]) / closes[i][1] >= need)

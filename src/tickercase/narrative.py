@@ -94,6 +94,8 @@ def build_facts(r: CaseResult) -> list[Fact]:
     if r.oracle:
         o = r.oracle
         f.add("target date", "目标日期", o.target_date.isoformat(), source="reference date + horizon")
+        f.add("claim condition", "观点条件", "touch the target at any time before the date" if o.condition == "touch" else "at or above the target on the date",
+              source="claim wording, confirmed by the user")
         f.add("probability range low", "概率区间下限", o.low, "probability 0-1", "TickerCase cross-check of methods")
         f.add("probability range high", "概率区间上限", o.high, "probability 0-1", "TickerCase cross-check of methods")
         f.add("probability tier", "概率等级", o.tier_label.en, source="TickerCase")
@@ -107,6 +109,8 @@ def build_facts(r: CaseResult) -> list[Fact]:
         for row in o.ladder:
             if row.options_p is not None:
                 f.add(f"option-implied P(end >= {row.level}) ({row.label.en})", f"期权隐含 到期 ≥ {row.level}（{row.label.zh}）的概率", row.options_p, "probability 0-1", "option chain")
+            if row.options_touch is not None:
+                f.add(f"option-implied P(touch {row.level}) ({row.label.en})", f"期权隐含 期间触及 {row.level}（{row.label.zh}）的概率", row.options_touch, "probability 0-1", "option chain")
     if r.market:
         m = r.market
         f.add("latest close", "最新收盘价", m.last_close, m.currency or "", f"{m.provider_id} {m.last_date}")

@@ -1,6 +1,6 @@
 # TickerCase
 
-**Since v0.5 TickerCase is a stock-only version of digital-oracle:** the headline answer to a claim such as "RKLB reaches $300 within 3 years" is a probability range computed by independent methods and cross-checked, with every number traced to a source. The original evidence-as-of verdict (OA.13) is kept as a secondary view. This changes the product scope of the Team 12 course documents, which describe a verdict without price prediction; the documents need revising.
+**Since v0.5 TickerCase is a stock-only version of digital-oracle:** the headline answer to a claim such as "RKLB reaches $300 within 3 years" or "RKLB spikes to $200" is a probability range computed by independent methods and cross-checked, with every number traced to a source. The original evidence-as-of verdict (OA.13) is kept as a secondary view. This changes the product scope of the Team 12 course documents, which describe a verdict without price prediction; the documents need revising.
 
 ## Probability and cross-checks (v0.5)
 
@@ -12,6 +12,15 @@
 | M4 own history | share of past windows of the same length in which this stock rose enough | monthly closes; used in the range only when the history holds ≥ 4 non-overlapping windows |
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
+
+## Touch claims, event pricing and scenarios (v0.7)
+
+- **What counts as coming true.** A claim such as "冲到 200", "脉冲到 200", "hit $300" or "3年内达到 300" is about touching the price at any time before the deadline; "收在 500 以上", "closes above", "2027年底" is about the price on the date. The extractor reads this from the wording (`ClaimExtraction.condition`), the page shows it as a choice the user confirms (`price_condition`), and the probability range follows it: for touch claims M1 and M2 use the first-passage formula, M4 counts windows whose highest month-end close reached the target, and M3 (business base rate) is shown as context only, because a spike does not need the business to grow into the price.
+- **What the option market prices for an event.** The options provider also reads the at-the-money implied volatility of up to 12 more expiries (about monthly for the first half year, then every 2–6 months to 24 months). `oracle.event_move` takes the extra implied variance between the expiries just before and after a date, minus what an ordinary stretch of that length costs, as the market's priced move for an event on that date (one standard deviation). Earnings in the same stretch are mixed in, and wide gaps between expiries are flagged.
+- **Your scenario.** The "情景推演" tab takes an event date, the chance it succeeds and the price move on success and on failure, and gives the probability under that scenario (`oracle.scenario`: ordinary volatility plus one jump; exact for "on the date", approximate for "touch"), the success probability needed for 50%, and the success probability that today's option prices imply for those move sizes. It updates as the sliders move, without fetching again.
+- **Page.** The result reads as a report: a header with the claim, the probability range on a square-root strip showing each method, then tabs for the layered report (with the AI narrative), the scenario, probability by price level and the four methods, the fundamentals check (OA.13/OA.14 verdict, evidence, calculations, sensitivity) and raw data. Muted colours with light and dark themes, short eased transitions (off under reduced-motion). The page is either Chinese or English, switched in the sidebar; no label shows both.
+
+A live RKLB run ("RKLB 3年内脉冲到200") fetches all eleven steps plus the term structure in about 17 seconds: touch probability 26.6%–27.1% (end-above 9.1%), and the option market prices about ±11% of extra movement around 2027-03-01.
 
 ## AI narrative with number checking (v0.6)
 

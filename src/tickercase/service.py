@@ -42,7 +42,7 @@ from .report import build_report
 from .providers.base import ProviderError
 from .oracle import build_oracle
 from .providers.insiders import InsiderProvider
-from .providers.market import CHART_URL, MONTHLY_URL, YahooChartProvider, monthly_closes, price_base_rate
+from .providers.market import CHART_URL, MONTHLY_URL, YahooChartProvider, monthly_closes, price_base_rate, price_touch_hits
 from .providers.options import YahooOptionsProvider
 from .providers.sec_frames import SecFramesBaseRateProvider
 from .providers.sentiment import FearGreedProvider, PolymarketProvider
@@ -265,7 +265,7 @@ class CaseService:
         target_date = claim.reference_price_date + timedelta(days=round(float(claim.horizon_years) * 365.25))
         market_fetcher = self._guard(MARKET_PROVIDER_ID, mode, errors, lambda: self._fetcher(mode, "market"))
         options = step("options", OPTIONS_PROVIDER_ID, lambda: YahooOptionsProvider(self._fetcher(mode, "options")).fetch_chain(
-            claim.ticker, target_date, claim.target_price))
+            claim.ticker, target_date, claim.target_price, today=self.today()))
         risk_free = None
         if market_fetcher is not None:
             tnx = step("risk_free_rate", MARKET_PROVIDER_ID, lambda: YahooChartProvider(market_fetcher).fetch_history("^TNX"))
@@ -364,10 +364,12 @@ class CaseService:
         closes = monthly_closes(fetched.payload, url)
         required = claim.target_price / spot - 1
         windows, hits, med, best = price_base_rate(closes, months, required)
+        touch_hits = price_touch_hits(closes, months, required)
         return PriceBaseRate(
             symbol=yahoo_symbol(claim.ticker), window_months=months, windows=windows, hits=hits, rate=hits / windows if windows else None,
             required_return=required.quantize(Decimal("0.0001")), median_return=Decimal(str(round(med, 4))) if med is not None else None,
             best_return=Decimal(str(round(best, 4))) if best is not None else None, history_start=closes[0][0] if closes else date.today(),
+            touch_hits=touch_hits,
             source_url=url, retrieved_at=fetched.retrieved_at, source_captured_at=fetched.source_captured_at, data_mode=fetched.data_mode)
 
     @staticmethod

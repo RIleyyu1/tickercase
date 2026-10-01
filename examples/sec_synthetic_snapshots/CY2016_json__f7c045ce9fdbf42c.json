@@ -1,0 +1,2420 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://data.sec.gov/api/xbrl/frames/us-gaap/RevenueFromContractWithCustomerExcludingAssessedTax/USD/CY2016.json"
+ },
+ "response": {
+  "ccp": "CY2016",
+  "data": [
+   {
+    "accn": "0009990000-17-000001",
+    "cik": 9990000,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 000 (fictional)",
+    "loc": "US-DE",
+    "val": 136822646
+   },
+   {
+    "accn": "0009990001-17-000001",
+    "cik": 9990001,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 001 (fictional)",
+    "loc": "US-DE",
+    "val": 453801157
+   },
+   {
+    "accn": "0009990002-17-000001",
+    "cik": 9990002,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 002 (fictional)",
+    "loc": "US-DE",
+    "val": 104384215
+   },
+   {
+    "accn": "0009990003-17-000001",
+    "cik": 9990003,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 003 (fictional)",
+    "loc": "US-DE",
+    "val": 607186659
+   },
+   {
+    "accn": "0009990004-17-000001",
+    "cik": 9990004,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 004 (fictional)",
+    "loc": "US-DE",
+    "val": 249292238
+   },
+   {
+    "accn": "0009990005-17-000001",
+    "cik": 9990005,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 005 (fictional)",
+    "loc": "US-DE",
+    "val": 187070481
+   },
+   {
+    "accn": "0009990006-17-000001",
+    "cik": 9990006,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 006 (fictional)",
+    "loc": "US-DE",
+    "val": 146011787
+   },
+   {
+    "accn": "0009990007-17-000001",
+    "cik": 9990007,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 007 (fictional)",
+    "loc": "US-DE",
+    "val": 98199088
+   },
+   {
+    "accn": "0009990008-17-000001",
+    "cik": 9990008,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 008 (fictional)",
+    "loc": "US-DE",
+    "val": 37948948
+   },
+   {
+    "accn": "0009990009-17-000001",
+    "cik": 9990009,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 009 (fictional)",
+    "loc": "US-DE",
+    "val": 235803990
+   },
+   {
+    "accn": "0009990010-17-000001",
+    "cik": 9990010,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 010 (fictional)",
+    "loc": "US-DE",
+    "val": 443096514
+   },
+   {
+    "accn": "0009990011-17-000001",
+    "cik": 9990011,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 011 (fictional)",
+    "loc": "US-DE",
+    "val": 190716365
+   },
+   {
+    "accn": "0009990012-17-000001",
+    "cik": 9990012,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 012 (fictional)",
+    "loc": "US-DE",
+    "val": 116585284
+   },
+   {
+    "accn": "0009990013-17-000001",
+    "cik": 9990013,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 013 (fictional)",
+    "loc": "US-DE",
+    "val": 98143347
+   },
+   {
+    "accn": "0009990014-17-000001",
+    "cik": 9990014,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 014 (fictional)",
+    "loc": "US-DE",
+    "val": 93830157
+   },
+   {
+    "accn": "0009990015-17-000001",
+    "cik": 9990015,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 015 (fictional)",
+    "loc": "US-DE",
+    "val": 531078967
+   },
+   {
+    "accn": "0009990016-17-000001",
+    "cik": 9990016,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 016 (fictional)",
+    "loc": "US-DE",
+    "val": 343846540
+   },
+   {
+    "accn": "0009990017-17-000001",
+    "cik": 9990017,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 017 (fictional)",
+    "loc": "US-DE",
+    "val": 276205046
+   },
+   {
+    "accn": "0009990018-17-000001",
+    "cik": 9990018,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 018 (fictional)",
+    "loc": "US-DE",
+    "val": 52842241
+   },
+   {
+    "accn": "0009990019-17-000001",
+    "cik": 9990019,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 019 (fictional)",
+    "loc": "US-DE",
+    "val": 111611164
+   },
+   {
+    "accn": "0009990020-17-000001",
+    "cik": 9990020,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 020 (fictional)",
+    "loc": "US-DE",
+    "val": 272680613
+   },
+   {
+    "accn": "0009990021-17-000001",
+    "cik": 9990021,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 021 (fictional)",
+    "loc": "US-DE",
+    "val": 151404875
+   },
+   {
+    "accn": "0009990022-17-000001",
+    "cik": 9990022,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 022 (fictional)",
+    "loc": "US-DE",
+    "val": 338485395
+   },
+   {
+    "accn": "0009990023-17-000001",
+    "cik": 9990023,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 023 (fictional)",
+    "loc": "US-DE",
+    "val": 651649610
+   },
+   {
+    "accn": "0009990024-17-000001",
+    "cik": 9990024,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 024 (fictional)",
+    "loc": "US-DE",
+    "val": 227290883
+   },
+   {
+    "accn": "0009990025-17-000001",
+    "cik": 9990025,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 025 (fictional)",
+    "loc": "US-DE",
+    "val": 108375269
+   },
+   {
+    "accn": "0009990026-17-000001",
+    "cik": 9990026,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 026 (fictional)",
+    "loc": "US-DE",
+    "val": 304130426
+   },
+   {
+    "accn": "0009990027-17-000001",
+    "cik": 9990027,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 027 (fictional)",
+    "loc": "US-DE",
+    "val": 261132545
+   },
+   {
+    "accn": "0009990028-17-000001",
+    "cik": 9990028,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 028 (fictional)",
+    "loc": "US-DE",
+    "val": 819948470
+   },
+   {
+    "accn": "0009990029-17-000001",
+    "cik": 9990029,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 029 (fictional)",
+    "loc": "US-DE",
+    "val": 84913949
+   },
+   {
+    "accn": "0009990030-17-000001",
+    "cik": 9990030,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 030 (fictional)",
+    "loc": "US-DE",
+    "val": 28376091
+   },
+   {
+    "accn": "0009990031-17-000001",
+    "cik": 9990031,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 031 (fictional)",
+    "loc": "US-DE",
+    "val": 312060582
+   },
+   {
+    "accn": "0009990032-17-000001",
+    "cik": 9990032,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 032 (fictional)",
+    "loc": "US-DE",
+    "val": 453597645
+   },
+   {
+    "accn": "0009990033-17-000001",
+    "cik": 9990033,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 033 (fictional)",
+    "loc": "US-DE",
+    "val": 341659243
+   },
+   {
+    "accn": "0009990034-17-000001",
+    "cik": 9990034,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 034 (fictional)",
+    "loc": "US-DE",
+    "val": 210052474
+   },
+   {
+    "accn": "0009990035-17-000001",
+    "cik": 9990035,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 035 (fictional)",
+    "loc": "US-DE",
+    "val": 437350393
+   },
+   {
+    "accn": "0009990036-17-000001",
+    "cik": 9990036,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 036 (fictional)",
+    "loc": "US-DE",
+    "val": 93774253
+   },
+   {
+    "accn": "0009990037-17-000001",
+    "cik": 9990037,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 037 (fictional)",
+    "loc": "US-DE",
+    "val": 301533276
+   },
+   {
+    "accn": "0009990038-17-000001",
+    "cik": 9990038,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 038 (fictional)",
+    "loc": "US-DE",
+    "val": 254717134
+   },
+   {
+    "accn": "0009990039-17-000001",
+    "cik": 9990039,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 039 (fictional)",
+    "loc": "US-DE",
+    "val": 102190827
+   },
+   {
+    "accn": "0009990040-17-000001",
+    "cik": 9990040,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 040 (fictional)",
+    "loc": "US-DE",
+    "val": 49059846
+   },
+   {
+    "accn": "0009990041-17-000001",
+    "cik": 9990041,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 041 (fictional)",
+    "loc": "US-DE",
+    "val": 430041240
+   },
+   {
+    "accn": "0009990042-17-000001",
+    "cik": 9990042,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 042 (fictional)",
+    "loc": "US-DE",
+    "val": 512566915
+   },
+   {
+    "accn": "0009990043-17-000001",
+    "cik": 9990043,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 043 (fictional)",
+    "loc": "US-DE",
+    "val": 1156064878
+   },
+   {
+    "accn": "0009990044-17-000001",
+    "cik": 9990044,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 044 (fictional)",
+    "loc": "US-DE",
+    "val": 76509878
+   },
+   {
+    "accn": "0009990045-17-000001",
+    "cik": 9990045,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 045 (fictional)",
+    "loc": "US-DE",
+    "val": 309437577
+   },
+   {
+    "accn": "0009990046-17-000001",
+    "cik": 9990046,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 046 (fictional)",
+    "loc": "US-DE",
+    "val": 647511481
+   },
+   {
+    "accn": "0009990047-17-000001",
+    "cik": 9990047,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 047 (fictional)",
+    "loc": "US-DE",
+    "val": 138400399
+   },
+   {
+    "accn": "0009990048-17-000001",
+    "cik": 9990048,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 048 (fictional)",
+    "loc": "US-DE",
+    "val": 371561232
+   },
+   {
+    "accn": "0009990049-17-000001",
+    "cik": 9990049,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 049 (fictional)",
+    "loc": "US-DE",
+    "val": 326150641
+   },
+   {
+    "accn": "0009990050-17-000001",
+    "cik": 9990050,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 050 (fictional)",
+    "loc": "US-DE",
+    "val": 943151135
+   },
+   {
+    "accn": "0009990051-17-000001",
+    "cik": 9990051,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 051 (fictional)",
+    "loc": "US-DE",
+    "val": 54914697
+   },
+   {
+    "accn": "0009990052-17-000001",
+    "cik": 9990052,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 052 (fictional)",
+    "loc": "US-DE",
+    "val": 164678212
+   },
+   {
+    "accn": "0009990053-17-000001",
+    "cik": 9990053,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 053 (fictional)",
+    "loc": "US-DE",
+    "val": 71429713
+   },
+   {
+    "accn": "0009990054-17-000001",
+    "cik": 9990054,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 054 (fictional)",
+    "loc": "US-DE",
+    "val": 115453261
+   },
+   {
+    "accn": "0009990055-17-000001",
+    "cik": 9990055,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 055 (fictional)",
+    "loc": "US-DE",
+    "val": 214261936
+   },
+   {
+    "accn": "0009990056-17-000001",
+    "cik": 9990056,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 056 (fictional)",
+    "loc": "US-DE",
+    "val": 500363904
+   },
+   {
+    "accn": "0009990057-17-000001",
+    "cik": 9990057,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 057 (fictional)",
+    "loc": "US-DE",
+    "val": 421183204
+   },
+   {
+    "accn": "0009990058-17-000001",
+    "cik": 9990058,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 058 (fictional)",
+    "loc": "US-DE",
+    "val": 262454197
+   },
+   {
+    "accn": "0009990059-17-000001",
+    "cik": 9990059,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 059 (fictional)",
+    "loc": "US-DE",
+    "val": 141631468
+   },
+   {
+    "accn": "0009990060-17-000001",
+    "cik": 9990060,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 060 (fictional)",
+    "loc": "US-DE",
+    "val": 303147607
+   },
+   {
+    "accn": "0009990061-17-000001",
+    "cik": 9990061,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 061 (fictional)",
+    "loc": "US-DE",
+    "val": 794145269
+   },
+   {
+    "accn": "0009990062-17-000001",
+    "cik": 9990062,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 062 (fictional)",
+    "loc": "US-DE",
+    "val": 505062686
+   },
+   {
+    "accn": "0009990063-17-000001",
+    "cik": 9990063,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 063 (fictional)",
+    "loc": "US-DE",
+    "val": 262585666
+   },
+   {
+    "accn": "0009990064-17-000001",
+    "cik": 9990064,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 064 (fictional)",
+    "loc": "US-DE",
+    "val": 297772713
+   },
+   {
+    "accn": "0009990065-17-000001",
+    "cik": 9990065,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 065 (fictional)",
+    "loc": "US-DE",
+    "val": 21217668
+   },
+   {
+    "accn": "0009990066-17-000001",
+    "cik": 9990066,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 066 (fictional)",
+    "loc": "US-DE",
+    "val": 296859662
+   },
+   {
+    "accn": "0009990067-17-000001",
+    "cik": 9990067,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 067 (fictional)",
+    "loc": "US-DE",
+    "val": 295407012
+   },
+   {
+    "accn": "0009990068-17-000001",
+    "cik": 9990068,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 068 (fictional)",
+    "loc": "US-DE",
+    "val": 219524660
+   },
+   {
+    "accn": "0009990069-17-000001",
+    "cik": 9990069,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 069 (fictional)",
+    "loc": "US-DE",
+    "val": 242780929
+   },
+   {
+    "accn": "0009990070-17-000001",
+    "cik": 9990070,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 070 (fictional)",
+    "loc": "US-DE",
+    "val": 89406904
+   },
+   {
+    "accn": "0009990071-17-000001",
+    "cik": 9990071,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 071 (fictional)",
+    "loc": "US-DE",
+    "val": 121916685
+   },
+   {
+    "accn": "0009990072-17-000001",
+    "cik": 9990072,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 072 (fictional)",
+    "loc": "US-DE",
+    "val": 71693174
+   },
+   {
+    "accn": "0009990073-17-000001",
+    "cik": 9990073,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 073 (fictional)",
+    "loc": "US-DE",
+    "val": 213322222
+   },
+   {
+    "accn": "0009990074-17-000001",
+    "cik": 9990074,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 074 (fictional)",
+    "loc": "US-DE",
+    "val": 64042088
+   },
+   {
+    "accn": "0009990075-17-000001",
+    "cik": 9990075,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 075 (fictional)",
+    "loc": "US-DE",
+    "val": 152955829
+   },
+   {
+    "accn": "0009990076-17-000001",
+    "cik": 9990076,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 076 (fictional)",
+    "loc": "US-DE",
+    "val": 336747269
+   },
+   {
+    "accn": "0009990077-17-000001",
+    "cik": 9990077,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 077 (fictional)",
+    "loc": "US-DE",
+    "val": 83730138
+   },
+   {
+    "accn": "0009990078-17-000001",
+    "cik": 9990078,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 078 (fictional)",
+    "loc": "US-DE",
+    "val": 90750701
+   },
+   {
+    "accn": "0009990079-17-000001",
+    "cik": 9990079,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 079 (fictional)",
+    "loc": "US-DE",
+    "val": 229541903
+   },
+   {
+    "accn": "0009990080-17-000001",
+    "cik": 9990080,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 080 (fictional)",
+    "loc": "US-DE",
+    "val": 143865667
+   },
+   {
+    "accn": "0009990081-17-000001",
+    "cik": 9990081,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 081 (fictional)",
+    "loc": "US-DE",
+    "val": 332344888
+   },
+   {
+    "accn": "0009990082-17-000001",
+    "cik": 9990082,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 082 (fictional)",
+    "loc": "US-DE",
+    "val": 357893611
+   },
+   {
+    "accn": "0009990083-17-000001",
+    "cik": 9990083,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 083 (fictional)",
+    "loc": "US-DE",
+    "val": 245889085
+   },
+   {
+    "accn": "0009990084-17-000001",
+    "cik": 9990084,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 084 (fictional)",
+    "loc": "US-DE",
+    "val": 63232816
+   },
+   {
+    "accn": "0009990085-17-000001",
+    "cik": 9990085,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 085 (fictional)",
+    "loc": "US-DE",
+    "val": 448843541
+   },
+   {
+    "accn": "0009990086-17-000001",
+    "cik": 9990086,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 086 (fictional)",
+    "loc": "US-DE",
+    "val": 164277100
+   },
+   {
+    "accn": "0009990087-17-000001",
+    "cik": 9990087,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 087 (fictional)",
+    "loc": "US-DE",
+    "val": 81950301
+   },
+   {
+    "accn": "0009990088-17-000001",
+    "cik": 9990088,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 088 (fictional)",
+    "loc": "US-DE",
+    "val": 290886647
+   },
+   {
+    "accn": "0009990089-17-000001",
+    "cik": 9990089,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 089 (fictional)",
+    "loc": "US-DE",
+    "val": 72037862
+   },
+   {
+    "accn": "0009990090-17-000001",
+    "cik": 9990090,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 090 (fictional)",
+    "loc": "US-DE",
+    "val": 830750113
+   },
+   {
+    "accn": "0009990091-17-000001",
+    "cik": 9990091,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 091 (fictional)",
+    "loc": "US-DE",
+    "val": 112552583
+   },
+   {
+    "accn": "0009990092-17-000001",
+    "cik": 9990092,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 092 (fictional)",
+    "loc": "US-DE",
+    "val": 649933984
+   },
+   {
+    "accn": "0009990093-17-000001",
+    "cik": 9990093,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 093 (fictional)",
+    "loc": "US-DE",
+    "val": 461069018
+   },
+   {
+    "accn": "0009990094-17-000001",
+    "cik": 9990094,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 094 (fictional)",
+    "loc": "US-DE",
+    "val": 200451534
+   },
+   {
+    "accn": "0009990095-17-000001",
+    "cik": 9990095,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 095 (fictional)",
+    "loc": "US-DE",
+    "val": 477539497
+   },
+   {
+    "accn": "0009990096-17-000001",
+    "cik": 9990096,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 096 (fictional)",
+    "loc": "US-DE",
+    "val": 40987924
+   },
+   {
+    "accn": "0009990097-17-000001",
+    "cik": 9990097,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 097 (fictional)",
+    "loc": "US-DE",
+    "val": 707118089
+   },
+   {
+    "accn": "0009990098-17-000001",
+    "cik": 9990098,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 098 (fictional)",
+    "loc": "US-DE",
+    "val": 139340105
+   },
+   {
+    "accn": "0009990099-17-000001",
+    "cik": 9990099,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 099 (fictional)",
+    "loc": "US-DE",
+    "val": 70721892
+   },
+   {
+    "accn": "0009990100-17-000001",
+    "cik": 9990100,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 100 (fictional)",
+    "loc": "US-DE",
+    "val": 51698188
+   },
+   {
+    "accn": "0009990101-17-000001",
+    "cik": 9990101,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 101 (fictional)",
+    "loc": "US-DE",
+    "val": 486241000
+   },
+   {
+    "accn": "0009990102-17-000001",
+    "cik": 9990102,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 102 (fictional)",
+    "loc": "US-DE",
+    "val": 165019161
+   },
+   {
+    "accn": "0009990103-17-000001",
+    "cik": 9990103,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 103 (fictional)",
+    "loc": "US-DE",
+    "val": 206824846
+   },
+   {
+    "accn": "0009990104-17-000001",
+    "cik": 9990104,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 104 (fictional)",
+    "loc": "US-DE",
+    "val": 367816961
+   },
+   {
+    "accn": "0009990105-17-000001",
+    "cik": 9990105,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 105 (fictional)",
+    "loc": "US-DE",
+    "val": 100239983
+   },
+   {
+    "accn": "0009990106-17-000001",
+    "cik": 9990106,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 106 (fictional)",
+    "loc": "US-DE",
+    "val": 80888736
+   },
+   {
+    "accn": "0009990107-17-000001",
+    "cik": 9990107,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 107 (fictional)",
+    "loc": "US-DE",
+    "val": 291758837
+   },
+   {
+    "accn": "0009990108-17-000001",
+    "cik": 9990108,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 108 (fictional)",
+    "loc": "US-DE",
+    "val": 413674032
+   },
+   {
+    "accn": "0009990109-17-000001",
+    "cik": 9990109,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 109 (fictional)",
+    "loc": "US-DE",
+    "val": 231206324
+   },
+   {
+    "accn": "0009990110-17-000001",
+    "cik": 9990110,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 110 (fictional)",
+    "loc": "US-DE",
+    "val": 397612760
+   },
+   {
+    "accn": "0009990111-17-000001",
+    "cik": 9990111,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 111 (fictional)",
+    "loc": "US-DE",
+    "val": 419748124
+   },
+   {
+    "accn": "0009990112-17-000001",
+    "cik": 9990112,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 112 (fictional)",
+    "loc": "US-DE",
+    "val": 128804486
+   },
+   {
+    "accn": "0009990113-17-000001",
+    "cik": 9990113,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 113 (fictional)",
+    "loc": "US-DE",
+    "val": 317462378
+   },
+   {
+    "accn": "0009990114-17-000001",
+    "cik": 9990114,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 114 (fictional)",
+    "loc": "US-DE",
+    "val": 367241631
+   },
+   {
+    "accn": "0009990115-17-000001",
+    "cik": 9990115,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 115 (fictional)",
+    "loc": "US-DE",
+    "val": 698300011
+   },
+   {
+    "accn": "0009990116-17-000001",
+    "cik": 9990116,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 116 (fictional)",
+    "loc": "US-DE",
+    "val": 209877037
+   },
+   {
+    "accn": "0009990117-17-000001",
+    "cik": 9990117,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 117 (fictional)",
+    "loc": "US-DE",
+    "val": 579128451
+   },
+   {
+    "accn": "0009990118-17-000001",
+    "cik": 9990118,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 118 (fictional)",
+    "loc": "US-DE",
+    "val": 97796192
+   },
+   {
+    "accn": "0009990119-17-000001",
+    "cik": 9990119,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 119 (fictional)",
+    "loc": "US-DE",
+    "val": 371839257
+   },
+   {
+    "accn": "0009990120-17-000001",
+    "cik": 9990120,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 120 (fictional)",
+    "loc": "US-DE",
+    "val": 123246057
+   },
+   {
+    "accn": "0009990121-17-000001",
+    "cik": 9990121,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 121 (fictional)",
+    "loc": "US-DE",
+    "val": 56080160
+   },
+   {
+    "accn": "0009990122-17-000001",
+    "cik": 9990122,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 122 (fictional)",
+    "loc": "US-DE",
+    "val": 201237536
+   },
+   {
+    "accn": "0009990123-17-000001",
+    "cik": 9990123,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 123 (fictional)",
+    "loc": "US-DE",
+    "val": 66890172
+   },
+   {
+    "accn": "0009990124-17-000001",
+    "cik": 9990124,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 124 (fictional)",
+    "loc": "US-DE",
+    "val": 196055265
+   },
+   {
+    "accn": "0009990125-17-000001",
+    "cik": 9990125,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 125 (fictional)",
+    "loc": "US-DE",
+    "val": 363111776
+   },
+   {
+    "accn": "0009990126-17-000001",
+    "cik": 9990126,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 126 (fictional)",
+    "loc": "US-DE",
+    "val": 433220234
+   },
+   {
+    "accn": "0009990127-17-000001",
+    "cik": 9990127,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 127 (fictional)",
+    "loc": "US-DE",
+    "val": 417849613
+   },
+   {
+    "accn": "0009990128-17-000001",
+    "cik": 9990128,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 128 (fictional)",
+    "loc": "US-DE",
+    "val": 298897371
+   },
+   {
+    "accn": "0009990129-17-000001",
+    "cik": 9990129,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 129 (fictional)",
+    "loc": "US-DE",
+    "val": 211857347
+   },
+   {
+    "accn": "0009990130-17-000001",
+    "cik": 9990130,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 130 (fictional)",
+    "loc": "US-DE",
+    "val": 349734676
+   },
+   {
+    "accn": "0009990131-17-000001",
+    "cik": 9990131,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 131 (fictional)",
+    "loc": "US-DE",
+    "val": 65574440
+   },
+   {
+    "accn": "0009990132-17-000001",
+    "cik": 9990132,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 132 (fictional)",
+    "loc": "US-DE",
+    "val": 125472056
+   },
+   {
+    "accn": "0009990133-17-000001",
+    "cik": 9990133,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 133 (fictional)",
+    "loc": "US-DE",
+    "val": 403557855
+   },
+   {
+    "accn": "0009990134-17-000001",
+    "cik": 9990134,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 134 (fictional)",
+    "loc": "US-DE",
+    "val": 165810040
+   },
+   {
+    "accn": "0009990135-17-000001",
+    "cik": 9990135,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 135 (fictional)",
+    "loc": "US-DE",
+    "val": 244328070
+   },
+   {
+    "accn": "0009990136-17-000001",
+    "cik": 9990136,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 136 (fictional)",
+    "loc": "US-DE",
+    "val": 714026798
+   },
+   {
+    "accn": "0009990137-17-000001",
+    "cik": 9990137,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 137 (fictional)",
+    "loc": "US-DE",
+    "val": 269376380
+   },
+   {
+    "accn": "0009990138-17-000001",
+    "cik": 9990138,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 138 (fictional)",
+    "loc": "US-DE",
+    "val": 127972800
+   },
+   {
+    "accn": "0009990139-17-000001",
+    "cik": 9990139,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 139 (fictional)",
+    "loc": "US-DE",
+    "val": 104780324
+   },
+   {
+    "accn": "0009990140-17-000001",
+    "cik": 9990140,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 140 (fictional)",
+    "loc": "US-DE",
+    "val": 104647967
+   },
+   {
+    "accn": "0009990141-17-000001",
+    "cik": 9990141,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 141 (fictional)",
+    "loc": "US-DE",
+    "val": 389342275
+   },
+   {
+    "accn": "0009990142-17-000001",
+    "cik": 9990142,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 142 (fictional)",
+    "loc": "US-DE",
+    "val": 441163008
+   },
+   {
+    "accn": "0009990143-17-000001",
+    "cik": 9990143,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 143 (fictional)",
+    "loc": "US-DE",
+    "val": 270538102
+   },
+   {
+    "accn": "0009990144-17-000001",
+    "cik": 9990144,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 144 (fictional)",
+    "loc": "US-DE",
+    "val": 97858192
+   },
+   {
+    "accn": "0009990145-17-000001",
+    "cik": 9990145,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 145 (fictional)",
+    "loc": "US-DE",
+    "val": 220635574
+   },
+   {
+    "accn": "0009990146-17-000001",
+    "cik": 9990146,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 146 (fictional)",
+    "loc": "US-DE",
+    "val": 50332001
+   },
+   {
+    "accn": "0009990147-17-000001",
+    "cik": 9990147,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 147 (fictional)",
+    "loc": "US-DE",
+    "val": 177346877
+   },
+   {
+    "accn": "0009990148-17-000001",
+    "cik": 9990148,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 148 (fictional)",
+    "loc": "US-DE",
+    "val": 165033977
+   },
+   {
+    "accn": "0009990149-17-000001",
+    "cik": 9990149,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 149 (fictional)",
+    "loc": "US-DE",
+    "val": 124731467
+   },
+   {
+    "accn": "0009990150-17-000001",
+    "cik": 9990150,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 150 (fictional)",
+    "loc": "US-DE",
+    "val": 292836333
+   },
+   {
+    "accn": "0009990151-17-000001",
+    "cik": 9990151,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 151 (fictional)",
+    "loc": "US-DE",
+    "val": 99675767
+   },
+   {
+    "accn": "0009990152-17-000001",
+    "cik": 9990152,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 152 (fictional)",
+    "loc": "US-DE",
+    "val": 191779800
+   },
+   {
+    "accn": "0009990153-17-000001",
+    "cik": 9990153,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 153 (fictional)",
+    "loc": "US-DE",
+    "val": 96976244
+   },
+   {
+    "accn": "0009990154-17-000001",
+    "cik": 9990154,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 154 (fictional)",
+    "loc": "US-DE",
+    "val": 220730005
+   },
+   {
+    "accn": "0009990155-17-000001",
+    "cik": 9990155,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 155 (fictional)",
+    "loc": "US-DE",
+    "val": 1063453319
+   },
+   {
+    "accn": "0009990156-17-000001",
+    "cik": 9990156,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 156 (fictional)",
+    "loc": "US-DE",
+    "val": 53598672
+   },
+   {
+    "accn": "0009990157-17-000001",
+    "cik": 9990157,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 157 (fictional)",
+    "loc": "US-DE",
+    "val": 455529290
+   },
+   {
+    "accn": "0009990158-17-000001",
+    "cik": 9990158,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 158 (fictional)",
+    "loc": "US-DE",
+    "val": 345678316
+   },
+   {
+    "accn": "0009990159-17-000001",
+    "cik": 9990159,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 159 (fictional)",
+    "loc": "US-DE",
+    "val": 85295414
+   },
+   {
+    "accn": "0009990160-17-000001",
+    "cik": 9990160,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 160 (fictional)",
+    "loc": "US-DE",
+    "val": 640952633
+   },
+   {
+    "accn": "0009990161-17-000001",
+    "cik": 9990161,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 161 (fictional)",
+    "loc": "US-DE",
+    "val": 354405852
+   },
+   {
+    "accn": "0009990162-17-000001",
+    "cik": 9990162,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 162 (fictional)",
+    "loc": "US-DE",
+    "val": 452682366
+   },
+   {
+    "accn": "0009990163-17-000001",
+    "cik": 9990163,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 163 (fictional)",
+    "loc": "US-DE",
+    "val": 139162635
+   },
+   {
+    "accn": "0009990164-17-000001",
+    "cik": 9990164,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 164 (fictional)",
+    "loc": "US-DE",
+    "val": 334789525
+   },
+   {
+    "accn": "0009990165-17-000001",
+    "cik": 9990165,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 165 (fictional)",
+    "loc": "US-DE",
+    "val": 142378194
+   },
+   {
+    "accn": "0009990166-17-000001",
+    "cik": 9990166,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 166 (fictional)",
+    "loc": "US-DE",
+    "val": 139079694
+   },
+   {
+    "accn": "0009990167-17-000001",
+    "cik": 9990167,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 167 (fictional)",
+    "loc": "US-DE",
+    "val": 123833371
+   },
+   {
+    "accn": "0009990168-17-000001",
+    "cik": 9990168,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 168 (fictional)",
+    "loc": "US-DE",
+    "val": 135134674
+   },
+   {
+    "accn": "0009990169-17-000001",
+    "cik": 9990169,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 169 (fictional)",
+    "loc": "US-DE",
+    "val": 235213899
+   },
+   {
+    "accn": "0009990170-17-000001",
+    "cik": 9990170,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 170 (fictional)",
+    "loc": "US-DE",
+    "val": 377453451
+   },
+   {
+    "accn": "0009990171-17-000001",
+    "cik": 9990171,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 171 (fictional)",
+    "loc": "US-DE",
+    "val": 102176105
+   },
+   {
+    "accn": "0009990172-17-000001",
+    "cik": 9990172,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 172 (fictional)",
+    "loc": "US-DE",
+    "val": 688123753
+   },
+   {
+    "accn": "0009990173-17-000001",
+    "cik": 9990173,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 173 (fictional)",
+    "loc": "US-DE",
+    "val": 366835243
+   },
+   {
+    "accn": "0009990174-17-000001",
+    "cik": 9990174,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 174 (fictional)",
+    "loc": "US-DE",
+    "val": 412574177
+   },
+   {
+    "accn": "0009990175-17-000001",
+    "cik": 9990175,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 175 (fictional)",
+    "loc": "US-DE",
+    "val": 396189725
+   },
+   {
+    "accn": "0009990176-17-000001",
+    "cik": 9990176,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 176 (fictional)",
+    "loc": "US-DE",
+    "val": 86934761
+   },
+   {
+    "accn": "0009990177-17-000001",
+    "cik": 9990177,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 177 (fictional)",
+    "loc": "US-DE",
+    "val": 235799906
+   },
+   {
+    "accn": "0009990178-17-000001",
+    "cik": 9990178,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 178 (fictional)",
+    "loc": "US-DE",
+    "val": 221000793
+   },
+   {
+    "accn": "0009990179-17-000001",
+    "cik": 9990179,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 179 (fictional)",
+    "loc": "US-DE",
+    "val": 137059654
+   },
+   {
+    "accn": "0009990180-17-000001",
+    "cik": 9990180,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 180 (fictional)",
+    "loc": "US-DE",
+    "val": 67321315
+   },
+   {
+    "accn": "0009990181-17-000001",
+    "cik": 9990181,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 181 (fictional)",
+    "loc": "US-DE",
+    "val": 855803109
+   },
+   {
+    "accn": "0009990182-17-000001",
+    "cik": 9990182,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 182 (fictional)",
+    "loc": "US-DE",
+    "val": 276673935
+   },
+   {
+    "accn": "0009990183-17-000001",
+    "cik": 9990183,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 183 (fictional)",
+    "loc": "US-DE",
+    "val": 207636276
+   },
+   {
+    "accn": "0009990184-17-000001",
+    "cik": 9990184,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 184 (fictional)",
+    "loc": "US-DE",
+    "val": 107466701
+   },
+   {
+    "accn": "0009990185-17-000001",
+    "cik": 9990185,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 185 (fictional)",
+    "loc": "US-DE",
+    "val": 408670698
+   },
+   {
+    "accn": "0009990186-17-000001",
+    "cik": 9990186,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 186 (fictional)",
+    "loc": "US-DE",
+    "val": 220655230
+   },
+   {
+    "accn": "0009990187-17-000001",
+    "cik": 9990187,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 187 (fictional)",
+    "loc": "US-DE",
+    "val": 59086065
+   },
+   {
+    "accn": "0009990188-17-000001",
+    "cik": 9990188,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 188 (fictional)",
+    "loc": "US-DE",
+    "val": 304119774
+   },
+   {
+    "accn": "0009990189-17-000001",
+    "cik": 9990189,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 189 (fictional)",
+    "loc": "US-DE",
+    "val": 542303181
+   },
+   {
+    "accn": "0009990190-17-000001",
+    "cik": 9990190,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 190 (fictional)",
+    "loc": "US-DE",
+    "val": 185324795
+   },
+   {
+    "accn": "0009990191-17-000001",
+    "cik": 9990191,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 191 (fictional)",
+    "loc": "US-DE",
+    "val": 118733879
+   },
+   {
+    "accn": "0009990192-17-000001",
+    "cik": 9990192,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 192 (fictional)",
+    "loc": "US-DE",
+    "val": 272541941
+   },
+   {
+    "accn": "0009990193-17-000001",
+    "cik": 9990193,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 193 (fictional)",
+    "loc": "US-DE",
+    "val": 74308630
+   },
+   {
+    "accn": "0009990194-17-000001",
+    "cik": 9990194,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 194 (fictional)",
+    "loc": "US-DE",
+    "val": 385659912
+   },
+   {
+    "accn": "0009990195-17-000001",
+    "cik": 9990195,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 195 (fictional)",
+    "loc": "US-DE",
+    "val": 546000252
+   },
+   {
+    "accn": "0009990196-17-000001",
+    "cik": 9990196,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 196 (fictional)",
+    "loc": "US-DE",
+    "val": 92679115
+   },
+   {
+    "accn": "0009990197-17-000001",
+    "cik": 9990197,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 197 (fictional)",
+    "loc": "US-DE",
+    "val": 226849640
+   },
+   {
+    "accn": "0009990198-17-000001",
+    "cik": 9990198,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 198 (fictional)",
+    "loc": "US-DE",
+    "val": 444785215
+   },
+   {
+    "accn": "0009990199-17-000001",
+    "cik": 9990199,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 199 (fictional)",
+    "loc": "US-DE",
+    "val": 41443546
+   },
+   {
+    "accn": "0009990200-17-000001",
+    "cik": 9990200,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 200 (fictional)",
+    "loc": "US-DE",
+    "val": 236308002
+   },
+   {
+    "accn": "0009990201-17-000001",
+    "cik": 9990201,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 201 (fictional)",
+    "loc": "US-DE",
+    "val": 333780589
+   },
+   {
+    "accn": "0009990202-17-000001",
+    "cik": 9990202,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 202 (fictional)",
+    "loc": "US-DE",
+    "val": 60845425
+   },
+   {
+    "accn": "0009990203-17-000001",
+    "cik": 9990203,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 203 (fictional)",
+    "loc": "US-DE",
+    "val": 142200721
+   },
+   {
+    "accn": "0009990204-17-000001",
+    "cik": 9990204,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 204 (fictional)",
+    "loc": "US-DE",
+    "val": 523626007
+   },
+   {
+    "accn": "0009990205-17-000001",
+    "cik": 9990205,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 205 (fictional)",
+    "loc": "US-DE",
+    "val": 141691182
+   },
+   {
+    "accn": "0009990206-17-000001",
+    "cik": 9990206,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 206 (fictional)",
+    "loc": "US-DE",
+    "val": 363595410
+   },
+   {
+    "accn": "0009990207-17-000001",
+    "cik": 9990207,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 207 (fictional)",
+    "loc": "US-DE",
+    "val": 673895030
+   },
+   {
+    "accn": "0009990208-17-000001",
+    "cik": 9990208,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 208 (fictional)",
+    "loc": "US-DE",
+    "val": 313967461
+   },
+   {
+    "accn": "0009990209-17-000001",
+    "cik": 9990209,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 209 (fictional)",
+    "loc": "US-DE",
+    "val": 125534648
+   },
+   {
+    "accn": "0009990210-17-000001",
+    "cik": 9990210,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 210 (fictional)",
+    "loc": "US-DE",
+    "val": 257215587
+   },
+   {
+    "accn": "0009990211-17-000001",
+    "cik": 9990211,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 211 (fictional)",
+    "loc": "US-DE",
+    "val": 137196739
+   },
+   {
+    "accn": "0009990212-17-000001",
+    "cik": 9990212,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 212 (fictional)",
+    "loc": "US-DE",
+    "val": 41107489
+   },
+   {
+    "accn": "0009990213-17-000001",
+    "cik": 9990213,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 213 (fictional)",
+    "loc": "US-DE",
+    "val": 665688474
+   },
+   {
+    "accn": "0009990214-17-000001",
+    "cik": 9990214,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 214 (fictional)",
+    "loc": "US-DE",
+    "val": 413457380
+   },
+   {
+    "accn": "0009990215-17-000001",
+    "cik": 9990215,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 215 (fictional)",
+    "loc": "US-DE",
+    "val": 1120892178
+   },
+   {
+    "accn": "0009990216-17-000001",
+    "cik": 9990216,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 216 (fictional)",
+    "loc": "US-DE",
+    "val": 110113528
+   },
+   {
+    "accn": "0009990217-17-000001",
+    "cik": 9990217,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 217 (fictional)",
+    "loc": "US-DE",
+    "val": 277772975
+   },
+   {
+    "accn": "0009990218-17-000001",
+    "cik": 9990218,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 218 (fictional)",
+    "loc": "US-DE",
+    "val": 210246956
+   },
+   {
+    "accn": "0009990219-17-000001",
+    "cik": 9990219,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 219 (fictional)",
+    "loc": "US-DE",
+    "val": 134092631
+   },
+   {
+    "accn": "0009990220-17-000001",
+    "cik": 9990220,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 220 (fictional)",
+    "loc": "US-DE",
+    "val": 285683801
+   },
+   {
+    "accn": "0009990221-17-000001",
+    "cik": 9990221,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 221 (fictional)",
+    "loc": "US-DE",
+    "val": 101606480
+   },
+   {
+    "accn": "0009990222-17-000001",
+    "cik": 9990222,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 222 (fictional)",
+    "loc": "US-DE",
+    "val": 152783889
+   },
+   {
+    "accn": "0009990223-17-000001",
+    "cik": 9990223,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 223 (fictional)",
+    "loc": "US-DE",
+    "val": 381462122
+   },
+   {
+    "accn": "0009990224-17-000001",
+    "cik": 9990224,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 224 (fictional)",
+    "loc": "US-DE",
+    "val": 313799133
+   },
+   {
+    "accn": "0009990225-17-000001",
+    "cik": 9990225,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 225 (fictional)",
+    "loc": "US-DE",
+    "val": 522962685
+   },
+   {
+    "accn": "0009990226-17-000001",
+    "cik": 9990226,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 226 (fictional)",
+    "loc": "US-DE",
+    "val": 399790709
+   },
+   {
+    "accn": "0009990227-17-000001",
+    "cik": 9990227,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 227 (fictional)",
+    "loc": "US-DE",
+    "val": 226933328
+   },
+   {
+    "accn": "0009990228-17-000001",
+    "cik": 9990228,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 228 (fictional)",
+    "loc": "US-DE",
+    "val": 280889735
+   },
+   {
+    "accn": "0009990229-17-000001",
+    "cik": 9990229,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 229 (fictional)",
+    "loc": "US-DE",
+    "val": 380241906
+   },
+   {
+    "accn": "0009990230-17-000001",
+    "cik": 9990230,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 230 (fictional)",
+    "loc": "US-DE",
+    "val": 343530266
+   },
+   {
+    "accn": "0009990231-17-000001",
+    "cik": 9990231,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 231 (fictional)",
+    "loc": "US-DE",
+    "val": 187913441
+   },
+   {
+    "accn": "0009990232-17-000001",
+    "cik": 9990232,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 232 (fictional)",
+    "loc": "US-DE",
+    "val": 187507929
+   },
+   {
+    "accn": "0009990233-17-000001",
+    "cik": 9990233,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 233 (fictional)",
+    "loc": "US-DE",
+    "val": 80181971
+   },
+   {
+    "accn": "0009990234-17-000001",
+    "cik": 9990234,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 234 (fictional)",
+    "loc": "US-DE",
+    "val": 355136141
+   },
+   {
+    "accn": "0009990235-17-000001",
+    "cik": 9990235,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 235 (fictional)",
+    "loc": "US-DE",
+    "val": 93430625
+   },
+   {
+    "accn": "0009990236-17-000001",
+    "cik": 9990236,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 236 (fictional)",
+    "loc": "US-DE",
+    "val": 265624632
+   },
+   {
+    "accn": "0009990237-17-000001",
+    "cik": 9990237,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 237 (fictional)",
+    "loc": "US-DE",
+    "val": 448435582
+   },
+   {
+    "accn": "0009990238-17-000001",
+    "cik": 9990238,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 238 (fictional)",
+    "loc": "US-DE",
+    "val": 232463745
+   },
+   {
+    "accn": "0009990239-17-000001",
+    "cik": 9990239,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 239 (fictional)",
+    "loc": "US-DE",
+    "val": 171338418
+   },
+   {
+    "accn": "0009990240-17-000001",
+    "cik": 9990240,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 240 (fictional)",
+    "loc": "US-DE",
+    "val": 53402604
+   },
+   {
+    "accn": "0009990241-17-000001",
+    "cik": 9990241,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 241 (fictional)",
+    "loc": "US-DE",
+    "val": 166780074
+   },
+   {
+    "accn": "0009990242-17-000001",
+    "cik": 9990242,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 242 (fictional)",
+    "loc": "US-DE",
+    "val": 57181232
+   },
+   {
+    "accn": "0009990243-17-000001",
+    "cik": 9990243,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 243 (fictional)",
+    "loc": "US-DE",
+    "val": 75469738
+   },
+   {
+    "accn": "0009990244-17-000001",
+    "cik": 9990244,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 244 (fictional)",
+    "loc": "US-DE",
+    "val": 523058465
+   },
+   {
+    "accn": "0009990245-17-000001",
+    "cik": 9990245,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 245 (fictional)",
+    "loc": "US-DE",
+    "val": 329036863
+   },
+   {
+    "accn": "0009990246-17-000001",
+    "cik": 9990246,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 246 (fictional)",
+    "loc": "US-DE",
+    "val": 710624467
+   },
+   {
+    "accn": "0009990247-17-000001",
+    "cik": 9990247,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 247 (fictional)",
+    "loc": "US-DE",
+    "val": 198289648
+   },
+   {
+    "accn": "0009990248-17-000001",
+    "cik": 9990248,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 248 (fictional)",
+    "loc": "US-DE",
+    "val": 301383630
+   },
+   {
+    "accn": "0009990249-17-000001",
+    "cik": 9990249,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 249 (fictional)",
+    "loc": "US-DE",
+    "val": 171541960
+   },
+   {
+    "accn": "0009990250-17-000001",
+    "cik": 9990250,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 250 (fictional)",
+    "loc": "US-DE",
+    "val": 320126207
+   },
+   {
+    "accn": "0009990251-17-000001",
+    "cik": 9990251,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 251 (fictional)",
+    "loc": "US-DE",
+    "val": 379743767
+   },
+   {
+    "accn": "0009990252-17-000001",
+    "cik": 9990252,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 252 (fictional)",
+    "loc": "US-DE",
+    "val": 64002140
+   },
+   {
+    "accn": "0009990253-17-000001",
+    "cik": 9990253,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 253 (fictional)",
+    "loc": "US-DE",
+    "val": 196867881
+   },
+   {
+    "accn": "0009990254-17-000001",
+    "cik": 9990254,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 254 (fictional)",
+    "loc": "US-DE",
+    "val": 336801296
+   },
+   {
+    "accn": "0009990255-17-000001",
+    "cik": 9990255,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 255 (fictional)",
+    "loc": "US-DE",
+    "val": 268466043
+   },
+   {
+    "accn": "0009990256-17-000001",
+    "cik": 9990256,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 256 (fictional)",
+    "loc": "US-DE",
+    "val": 95319591
+   },
+   {
+    "accn": "0009990257-17-000001",
+    "cik": 9990257,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 257 (fictional)",
+    "loc": "US-DE",
+    "val": 262348946
+   },
+   {
+    "accn": "0009990258-17-000001",
+    "cik": 9990258,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 258 (fictional)",
+    "loc": "US-DE",
+    "val": 98482062
+   },
+   {
+    "accn": "0009990259-17-000001",
+    "cik": 9990259,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 259 (fictional)",
+    "loc": "US-DE",
+    "val": 93496345
+   },
+   {
+    "accn": "0009990260-17-000001",
+    "cik": 9990260,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 260 (fictional)",
+    "loc": "US-DE",
+    "val": 251110413
+   },
+   {
+    "accn": "0009990261-17-000001",
+    "cik": 9990261,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 261 (fictional)",
+    "loc": "US-DE",
+    "val": 111215046
+   },
+   {
+    "accn": "0009990262-17-000001",
+    "cik": 9990262,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 262 (fictional)",
+    "loc": "US-DE",
+    "val": 189015924
+   },
+   {
+    "accn": "0009990263-17-000001",
+    "cik": 9990263,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 263 (fictional)",
+    "loc": "US-DE",
+    "val": 266696509
+   },
+   {
+    "accn": "0009990264-17-000001",
+    "cik": 9990264,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 264 (fictional)",
+    "loc": "US-DE",
+    "val": 147356414
+   },
+   {
+    "accn": "0009990265-17-000001",
+    "cik": 9990265,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 265 (fictional)",
+    "loc": "US-DE",
+    "val": 130368705
+   },
+   {
+    "accn": "0009990266-17-000001",
+    "cik": 9990266,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 266 (fictional)",
+    "loc": "US-DE",
+    "val": 165371489
+   },
+   {
+    "accn": "0009990267-17-000001",
+    "cik": 9990267,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 267 (fictional)",
+    "loc": "US-DE",
+    "val": 139333655
+   },
+   {
+    "accn": "0009990268-17-000001",
+    "cik": 9990268,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 268 (fictional)",
+    "loc": "US-DE",
+    "val": 224924355
+   },
+   {
+    "accn": "0009990269-17-000001",
+    "cik": 9990269,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 269 (fictional)",
+    "loc": "US-DE",
+    "val": 536831859
+   },
+   {
+    "accn": "0009990270-17-000001",
+    "cik": 9990270,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 270 (fictional)",
+    "loc": "US-DE",
+    "val": 47749622
+   },
+   {
+    "accn": "0009990271-17-000001",
+    "cik": 9990271,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 271 (fictional)",
+    "loc": "US-DE",
+    "val": 295452917
+   },
+   {
+    "accn": "0009990272-17-000001",
+    "cik": 9990272,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 272 (fictional)",
+    "loc": "US-DE",
+    "val": 183393379
+   },
+   {
+    "accn": "0009990273-17-000001",
+    "cik": 9990273,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 273 (fictional)",
+    "loc": "US-DE",
+    "val": 278093410
+   },
+   {
+    "accn": "0009990274-17-000001",
+    "cik": 9990274,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 274 (fictional)",
+    "loc": "US-DE",
+    "val": 381232824
+   },
+   {
+    "accn": "0009990275-17-000001",
+    "cik": 9990275,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 275 (fictional)",
+    "loc": "US-DE",
+    "val": 215732680
+   },
+   {
+    "accn": "0009990276-17-000001",
+    "cik": 9990276,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 276 (fictional)",
+    "loc": "US-DE",
+    "val": 172403333
+   },
+   {
+    "accn": "0009990277-17-000001",
+    "cik": 9990277,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 277 (fictional)",
+    "loc": "US-DE",
+    "val": 215887621
+   },
+   {
+    "accn": "0009990278-17-000001",
+    "cik": 9990278,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 278 (fictional)",
+    "loc": "US-DE",
+    "val": 446720136
+   },
+   {
+    "accn": "0009990279-17-000001",
+    "cik": 9990279,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 279 (fictional)",
+    "loc": "US-DE",
+    "val": 190776909
+   },
+   {
+    "accn": "0009990280-17-000001",
+    "cik": 9990280,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 280 (fictional)",
+    "loc": "US-DE",
+    "val": 409212279
+   },
+   {
+    "accn": "0009990281-17-000001",
+    "cik": 9990281,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 281 (fictional)",
+    "loc": "US-DE",
+    "val": 551916921
+   },
+   {
+    "accn": "0009990282-17-000001",
+    "cik": 9990282,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 282 (fictional)",
+    "loc": "US-DE",
+    "val": 63380506
+   },
+   {
+    "accn": "0009990283-17-000001",
+    "cik": 9990283,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 283 (fictional)",
+    "loc": "US-DE",
+    "val": 144883525
+   },
+   {
+    "accn": "0009990284-17-000001",
+    "cik": 9990284,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 284 (fictional)",
+    "loc": "US-DE",
+    "val": 368808962
+   },
+   {
+    "accn": "0009990285-17-000001",
+    "cik": 9990285,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 285 (fictional)",
+    "loc": "US-DE",
+    "val": 218078390
+   },
+   {
+    "accn": "0009990286-17-000001",
+    "cik": 9990286,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 286 (fictional)",
+    "loc": "US-DE",
+    "val": 110865480
+   },
+   {
+    "accn": "0009990287-17-000001",
+    "cik": 9990287,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 287 (fictional)",
+    "loc": "US-DE",
+    "val": 209150783
+   },
+   {
+    "accn": "0009990288-17-000001",
+    "cik": 9990288,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 288 (fictional)",
+    "loc": "US-DE",
+    "val": 144421125
+   },
+   {
+    "accn": "0009990289-17-000001",
+    "cik": 9990289,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 289 (fictional)",
+    "loc": "US-DE",
+    "val": 475030697
+   },
+   {
+    "accn": "0009990290-17-000001",
+    "cik": 9990290,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 290 (fictional)",
+    "loc": "US-DE",
+    "val": 553884937
+   },
+   {
+    "accn": "0009990291-17-000001",
+    "cik": 9990291,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 291 (fictional)",
+    "loc": "US-DE",
+    "val": 173807022
+   },
+   {
+    "accn": "0009990292-17-000001",
+    "cik": 9990292,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 292 (fictional)",
+    "loc": "US-DE",
+    "val": 181357383
+   },
+   {
+    "accn": "0009990293-17-000001",
+    "cik": 9990293,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 293 (fictional)",
+    "loc": "US-DE",
+    "val": 174299384
+   },
+   {
+    "accn": "0009990294-17-000001",
+    "cik": 9990294,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 294 (fictional)",
+    "loc": "US-DE",
+    "val": 79222901
+   },
+   {
+    "accn": "0009990295-17-000001",
+    "cik": 9990295,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 295 (fictional)",
+    "loc": "US-DE",
+    "val": 157245318
+   },
+   {
+    "accn": "0009990296-17-000001",
+    "cik": 9990296,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 296 (fictional)",
+    "loc": "US-DE",
+    "val": 42279621
+   },
+   {
+    "accn": "0009990297-17-000001",
+    "cik": 9990297,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 297 (fictional)",
+    "loc": "US-DE",
+    "val": 80967015
+   },
+   {
+    "accn": "0009990298-17-000001",
+    "cik": 9990298,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 298 (fictional)",
+    "loc": "US-DE",
+    "val": 293967288
+   },
+   {
+    "accn": "0009990299-17-000001",
+    "cik": 9990299,
+    "end": "2016-12-31",
+    "entityName": "Synthetic Filer 299 (fictional)",
+    "loc": "US-DE",
+    "val": 124790588
+   }
+  ],
+  "label": "RevenueFromContractWithCustomerExcludingAssessedTax",
+  "pts": 300,
+  "tag": "RevenueFromContractWithCustomerExcludingAssessedTax",
+  "taxonomy": "us-gaap",
+  "uom": "USD"
+ },
+ "schema": "tickercase.snapshot/1"
+}

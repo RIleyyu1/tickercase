@@ -188,7 +188,9 @@ def _monthly(days: list[date], closes: list[float]) -> tuple[list[date], list[fl
     return [last[k][0] for k in keys], [last[k][1] for k in keys]
 
 
-EXPIRIES = (date(2027, 1, 15), date(2028, 12, 15))
+EXPIRIES = (date(2026, 11, 20), date(2026, 12, 18), date(2027, 1, 15), date(2027, 3, 19), date(2027, 6, 17), date(2028, 1, 21), date(2028, 12, 15))
+# at-the-money IV by expiry: flat 45% except a fictional event in February 2027, priced into the March and later expiries
+ATM_IV = {date(2027, 3, 19): 0.53, date(2027, 6, 17): 0.50, date(2028, 1, 21): 0.47}
 
 
 def _ts(d: date) -> int:
@@ -199,7 +201,7 @@ def option_chain(expiry: date) -> dict:
     """Fictional calls: strikes 20-120, IV smile around 45%, open interest thinning at high strikes."""
     calls = []
     for k in range(20, 125, 5):
-        iv = 0.45 + 0.0015 * abs(k - 50)
+        iv = ATM_IV.get(expiry, 0.45) + 0.0015 * abs(k - 50)
         calls.append({"contractSymbol": f"SYNT{expiry:%y%m%d}C{k:05d}000", "strike": float(k), "impliedVolatility": round(iv, 4),
                       "openInterest": max(0, 900 - 9 * k), "bid": round(max(0.05, 50 - k + 8), 2), "ask": round(max(0.1, 50 - k + 9), 2),
                       "lastPrice": round(max(0.08, 50 - k + 8.5), 2)})
@@ -209,13 +211,13 @@ def option_chain(expiry: date) -> dict:
 
 
 def frames(concept: str, year: int, seed: int) -> dict:
-    """About 300 fictional filers with revenue 50M-600M in 2020 and random 5-year growth."""
+    """About 300 fictional filers with revenue 50M-600M in 2020 growing at a random steady rate, for any year 2015-2025."""
     rng = random.Random(seed)
     rows = []
     for i in range(300):
         base = rng.uniform(50e6, 600e6)
         growth = rng.gauss(0.07, 0.12)
-        value = base if year == 2020 else base * (1 + growth) ** 5
+        value = base * (1 + growth) ** (year - 2020)
         if concept == "NetIncomeLoss":
             value = value * rng.uniform(-0.05, 0.2)
         rows.append({"accn": f"0009990{i:03d}-{year % 100 + 1:02d}-000001", "cik": 9990000 + i, "entityName": f"Synthetic Filer {i:03d} (fictional)",
@@ -279,9 +281,9 @@ def main() -> None:
         dd, cc = _daily_path(seed, end, 0.18, 0.0004)
         md, mc = _monthly(dd, cc)
         w(MONTHLY_URL.format(symbol=sym), _chart(sym, md, mc))
-    # SEC frames for the base rate (2020 -> 2025)
+    # SEC frames for the base rate: every year 2015-2025, so horizons of 1 to 10 years have both ends
     for concept, seed in (("RevenueFromContractWithCustomerExcludingAssessedTax", 21), ("Revenues", 22), ("NetIncomeLoss", 23)):
-        for year in (2020, 2025):
+        for year in range(2015, 2026):
             w(FRAMES_URL.format(concept=concept, year=year), frames(concept, year, seed))
     # Form 4: the submissions block lists one Form 4 on 2026-06-02
     form4_index = next(i for i, row in enumerate(ROWS) if row[0] == "4")

@@ -132,8 +132,8 @@ TARGET_PATTERNS = [
     # 1000 美元 / 1000美金 / 1000 dollars / 1000 USD / 1000刀
     (re.compile(rf"({NUM}|{CN_NUM})\s*([kK千万])?\s*(?:美元|美金|刀|块钱|块|元|dollars?|bucks|usd)", re.I), 4),
     # 达到1000 / 涨到 1000 / 目标价 1000 / reach 1000 / hit 1000 / to 1000
-    (re.compile(rf"(?:达到|涨到|涨至|升到|升至|突破|冲到|冲上|站上|到达|到|上|看|目标价|目标|价格)\s*({NUM}|{CN_NUM})\s*([kK千万])?"), 3),
-    (re.compile(rf"(?:reach(?:es|ing)?|hit(?:s|ting)?|to|at|target(?: price)?(?: of)?|be worth|trade at|worth)\s+\$?\s*({NUM})\s*([kK])?(?![\d])", re.I), 3),
+    (re.compile(rf"(?:达到|涨到|涨至|升到|升至|突破|冲到|冲上|站上|站稳|收在|收于|守住|脉冲到|到达|到|上|看|目标价|目标|价格)\s*({NUM}|{CN_NUM})\s*([kK千万])?"), 3),
+    (re.compile(rf"(?:reach(?:es|ing)?|hit(?:s|ting)?|to|at|above|target(?: price)?(?: of)?|be worth|trade at|worth)\s+\$?\s*({NUM})\s*([kK])?(?![\d])", re.I), 3),
     # 1000一股 / 1000 每股 / 1000 per share
     (re.compile(rf"({NUM}|{CN_NUM})\s*([kK千万])?\s*(?:一股|每股|/股|per share|a share)", re.I), 4),
 ]
@@ -145,6 +145,27 @@ MULTIPLE_PATTERNS = [
     (re.compile(r"ten[- ]?bagger|十倍股", re.I), lambda m: Decimal(10)),
     (re.compile(r"(?:涨|上涨|rise|gain|up)\s*(\d+(?:\.\d+)?)\s*%", re.I), lambda m: 1 + parse_number(m.group(1)) / 100),
 ]
+
+
+# reaching the price at any moment ("spike to", "touch") versus being there on the date
+TOUCH_WORDS = re.compile(r"冲到|冲上|冲高|冲至|冲击|触及|触碰|摸到|摸高|碰到|脉冲|一度|曾经|盘中|"
+                         r"\b(?:touch(?:es|ed|ing)?|spike[sd]?|spiking|pop(?:s|ped)? to|tag(?:s|ged)?|hit(?:s|ting)?|intraday|at some point|at any point)\b", re.I)
+END_WORDS = re.compile(r"站稳|守住|收在|收于|稳定在|维持在|年底|年末|\b(?:close[sd]? (?:above|at)|stay(?:s)? above|hold(?:s)? above|end (?:the year )?above)\b", re.I)
+WITHIN_WORDS = re.compile(r"(?:\d+(?:\.\d+)?|[一二两三四五六七八九十半]+)?\s*(?:年|个月|月)\s*(?:内|以内|之内)|\b(?:within|before|in the next)\b", re.I)
+
+
+def find_condition(text: str) -> Optional[_Found]:
+    """touch / end, with the words it came from; None when the sentence does not say."""
+    m = END_WORDS.search(text)
+    if m:
+        return _Found("end", m.group(0), m.start())
+    m = TOUCH_WORDS.search(text)
+    if m:
+        return _Found("touch", m.group(0), m.start())
+    m = WITHIN_WORDS.search(text)
+    if m:
+        return _Found("touch", m.group(0).strip(), m.start(), extra={"inferred": True})
+    return None
 
 
 def find_target(text: str) -> Optional[_Found]:
@@ -249,6 +270,12 @@ def extract_claim(text: str, *, today: date, is_known_ticker: Optional[Callable[
     else:
         out.notes_en.append("no time frame found; enter the horizon in years")
         out.notes_zh.append("没有识别到时间范围，请手动填写年数")
+    cond = find_condition(text)
+    if cond is not None:
+        out.condition, out.condition_text = cond.value, cond.text
+        if cond.extra.get("inferred"):
+            out.notes_en.append(f"“{cond.text}” is read as reaching the target at any time before the date; switch to “on the date” if you meant that")
+            out.notes_zh.append(f"「{cond.text}」理解为期间任意时点达到目标价；如果指的是到期时站在上面，请切换")
     if re.search(r"港元|港币|hk\$|hkd", text, re.I):
         out.currency = "HKD"
     elif re.search(r"美元|美金|\$|usd|dollar", text, re.I):

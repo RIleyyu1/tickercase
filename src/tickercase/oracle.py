@@ -14,6 +14,14 @@ M4 history    share of past windows of the same length in which this stock rose 
 
 The range is [min, max] over the usable methods. No method is weighted by judgement;
 where they disagree the summary says which is higher and why it measures something different.
+
+The claim's condition decides which probability the range uses: "end" (at or above the
+target on the date) or "touch" (reaches it at any time before). For touch, M1 and M2 use
+the first-passage formula, M4 counts windows whose highest month-end close reached the
+target, and M3 is context only: a spike does not need the business to grow into the price.
+
+event_move() reads the option market's term structure for the extra move it prices around
+one dated event; scenario() gives the probability under the user's own event scenario.
 """
 
 from __future__ import annotations
@@ -26,6 +34,9 @@ from typing import Optional
 
 from .models import (
     BaseRate,
+    EventMove,
+    ScenarioResult,
+    TermPoint,
     LadderRow,
     MarketSnapshot,
     OptionsSnapshot,
@@ -95,6 +106,7 @@ def build_oracle(
     risk_free: Optional[Decimal],
     today: date,
 ) -> OracleSummary:
+    touch = claim.price_condition == "touch"
     target = float(claim.target_price)
     target_date = claim.reference_price_date + timedelta(days=round(float(claim.horizon_years) * 365.25))
     years = max((target_date - today).days / 365.25, 1 / 365.25)
@@ -165,7 +177,9 @@ def build_oracle(
             inputs={"companies": str(base_rate.companies), "achieved": str(base_rate.achieved), "required_cagr": format(base_rate.required_cagr, "f")},
             limitations=[T("Probability of the business condition, not of the price; the valuation assumption still has to hold.",
                            "这是业绩条件的概率，不是股价的概率；估值假设仍需成立。"),
-                         T(base_rate.note, "只统计两年都还在申报的公司，被收购或退市的公司不在其中，所以比例偏乐观。")]))
+                         T(base_rate.note, "只统计两年都还在申报的公司，被收购或退市的公司不在其中，所以比例偏乐观。")]
+            + ([T("The claim is about touching the price at some point; a spike does not need the business to grow into it, so this is context only.",
+                  "观点问的是期间触及；冲高不需要业绩先兑现，所以这一项只作参考，不计入区间。")] if touch else [])))
     else:
         methods.append(ProbabilityMethod(id="M3", name=m3_name, status="not_computable", measures=m3_measures,
                                          detail=T("no base rate in this run (needs SEC frames and a positive reported base)",
@@ -185,6 +199,7 @@ def build_oracle(
                          f"这些时间段大量重叠：历史里只有约 {indep} 段互不重叠的 {price_rate.window_months} 个月，所以只作参考，不计入区间。"))
         methods.append(ProbabilityMethod(
             id="M4", name=m4_name, status="ok", probability=price_rate.rate, measures=m4_measures,
+            touch_probability=(price_rate.touch_hits / price_rate.windows) if price_rate.touch_hits is not None else None,
             detail=T(f"{price_rate.hits} of {price_rate.windows} monthly-start windows of {price_rate.window_months} months since {price_rate.history_start} "
                      f"rose at least {float(price_rate.required_return) * 100:.0f}%; best {float(price_rate.best_return or 0) * 100:.0f}%",
                      f"自 {price_rate.history_start} 以来，{price_rate.windows} 个 {price_rate.window_months} 个月的时间段中有 {price_rate.hits} 个涨幅达到 "
@@ -195,15 +210,19 @@ def build_oracle(
                                          detail=T("not enough price history for a window this long", "价格历史不够长")))
 
     # ---------------------------------------------------------------- synthesis
-    usable = [m for m in methods if m.status == "ok" and m.probability is not None
-              and not (m.id == "M4" and independent_windows(price_rate) < MIN_INDEPENDENT_WINDOWS)]
+    def value(m: ProbabilityMethod) -> Optional[float]:
+        return m.touch_probability if touch else m.probability
+
+    usable = [m for m in methods if m.status == "ok" and value(m) is not None
+              and not (m.id == "M4" and independent_windows(price_rate) < MIN_INDEPENDENT_WINDOWS)
+              and not (touch and m.id == "M3")]
     if usable:
-        values = sorted(m.probability for m in usable)
+        values = sorted(value(m) for m in usable)
         low, high = values[0], values[-1]
         mid = values[len(values) // 2] if len(values) % 2 else (values[len(values) // 2 - 1] + values[len(values) // 2]) / 2
         tier = next(t for t in TIERS if mid < t[0])
-        lo_m = min(usable, key=lambda m: m.probability)
-        hi_m = max(usable, key=lambda m: m.probability)
+        lo_m = min(usable, key=value)
+        hi_m = max(usable, key=value)
         if len(usable) == 1:
             agreement = T(f"Only one method could be computed ({hi_m.name.en}); treat the result with care.",
                           f"只有一种方法算出了结果（{hi_m.name.zh}），请谨慎看待。")
@@ -234,13 +253,106 @@ def build_oracle(
         rows.append((target, T("the claim's target", "观点目标价")))
         hv = float(market.annualized_volatility) if market and market.annualized_volatility else None
         for level, label in sorted(rows, key=lambda x: x[0]):
-            o_p = None
+            o_p = o_t = None
             if options is not None:
                 iv, _ = iv_at(options.calls, level)
-                o_p = p_end_above(spot, level, iv, years, r) if iv else None
+                if iv:
+                    o_p, o_t = p_end_above(spot, level, iv, years, r), p_touch(spot, level, iv, years, r)
             m_p = p_end_above(spot, level, hv, years, r) if hv else None
-            ladder.append(LadderRow(level=Decimal(str(round(level, 2))), label=label, options_p=o_p, model_p=m_p))
+            m_t = p_touch(spot, level, hv, years, r) if hv else None
+            ladder.append(LadderRow(level=Decimal(str(round(level, 2))), label=label, options_p=o_p, model_p=m_p, options_touch=o_t, model_touch=m_t))
 
     return OracleSummary(target_price=claim.target_price, target_date=target_date, low=low, high=high, tier=tier_key, tier_label=tier_label,
-                         methods=methods, ladder=ladder, agreement=agreement,
-                         risk_free_rate=risk_free)
+                         methods=methods, ladder=ladder, agreement=agreement, risk_free_rate=risk_free, condition="touch" if touch else "end",
+                         spot=spot, base_volatility=float(market.annualized_volatility) if market and market.annualized_volatility else None,
+                         implied_volatility=options.target_iv if options is not None else None)
+
+
+# ---------------------------------------------------------------- event move from the term structure
+
+LONG_GAP_DAYS = 120
+
+
+def _years(d: date, today: date) -> float:
+    return max((d - today).days, 0) / 365.25
+
+
+def event_move(term: list[TermPoint], event_date: date, today: date) -> EventMove:
+    """Extra one-standard-deviation move the options price around ``event_date``.
+
+    Total implied variance of an expiry is iv^2 * t. The variance added between the last expiry
+    before the event and the first one after it, minus what an ordinary stretch of that length
+    costs (the forward volatility of a neighbouring interval), is attributed to the event.
+    """
+    pts = sorted((p for p in term if p.expiry > today and p.atm_iv), key=lambda p: p.expiry)
+    after = next((i for i, p in enumerate(pts) if p.expiry >= event_date), None)
+    if event_date <= today or after is None or len(pts) < 2:
+        why = T("The event date must fall between today and the last listed option expiry, and at least two expiries are needed.",
+                "事件日期需要在今天和最远的期权到期日之间，并且至少需要两个到期日。")
+        return EventMove(event_date=event_date, status="not_computable", note=why)
+
+    def var(i: int) -> float:
+        return pts[i].atm_iv ** 2 * _years(pts[i].expiry, today) if i >= 0 else 0.0
+
+    def t(i: int) -> float:
+        return _years(pts[i].expiry, today) if i >= 0 else 0.0
+
+    before = after - 1
+    # ordinary volatility: the forward volatility of the interval just before, else just after
+    if before >= 1:
+        base = (var(before) - var(before - 1)) / max(t(before) - t(before - 1), 1e-9)
+    elif after + 1 < len(pts):
+        base = (var(after + 1) - var(after)) / max(t(after + 1) - t(after), 1e-9)
+    else:
+        base = pts[max(before, 0)].atm_iv ** 2
+    base = max(base, 0.0)
+    extra = var(after) - var(before) - base * (t(after) - t(before))
+    gap = (pts[after].expiry - (pts[before].expiry if before >= 0 else today)).days
+    b_exp = pts[before].expiry if before >= 0 else None
+    notes = []
+    if gap > LONG_GAP_DAYS:
+        notes.append(T(f"The expiries around the event are {gap} days apart, so other news in that stretch is mixed in.",
+                       f"事件前后两个到期日相隔 {gap} 天，期间的其他消息也混在里面。"))
+    if extra <= 0:
+        notes.insert(0, T("The option market does not charge extra volatility around this date.", "期权市场没有为这个日期额外加价波动。"))
+        return EventMove(event_date=event_date, before_expiry=b_exp, after_expiry=pts[after].expiry, status="not_priced", gap_days=gap,
+                         note=T(" ".join(n.en for n in notes), "".join(n.zh for n in notes)))
+    return EventMove(event_date=event_date, before_expiry=b_exp, after_expiry=pts[after].expiry, status="ok", move=math.sqrt(extra), gap_days=gap,
+                     note=T(" ".join(n.en for n in notes), "".join(n.zh for n in notes)) if notes else None)
+
+
+# ---------------------------------------------------------------- user scenario
+
+def scenario(*, spot: float, target: float, vol: float, rate: float, years: float, event_years: float,
+             up: float, down: float, p_success: float, touch: bool, market_p: Optional[float] = None) -> ScenarioResult:
+    """Probability with one dated jump: +up on success, +down (negative) on failure, ordinary volatility otherwise.
+
+    End: exact for lognormal diffusion plus one jump (the jump's timing does not matter for the final price).
+    Touch: P(touch before the event) + P(no touch before) x P(touch after, starting from today's price moved by the jump);
+    an approximation, because the price on the event date is taken as today's.
+    """
+    event_years = min(max(event_years, 0.0), years)
+    rest = years - event_years
+
+    def after(start: float) -> float:
+        if start >= target and touch:
+            return 1.0
+        if touch:
+            return p_touch(start, target, vol, rest, rate) if rest > 0 else 0.0
+        return p_end_above(start, target, vol, years, rate)
+
+    pre = p_touch(spot, target, vol, event_years, rate) if touch and event_years > 0 else 0.0
+    ps = pre + (1 - pre) * after(spot * (1 + up))
+    pf = pre + (1 - pre) * after(spot * (1 + down))
+    p = max(0.0, min(1.0, p_success))
+    slope = ps - pf
+    prob = pf + p * slope
+    break_even = None
+    if pf >= 0.5:
+        break_even = 0.0
+    elif slope > 0 and ps >= 0.5:
+        break_even = (0.5 - pf) / slope
+    implied = None
+    if market_p is not None and slope > 1e-12 and pf <= market_p <= ps:
+        implied = (market_p - pf) / slope
+    return ScenarioResult(probability=prob, p_if_success=ps, p_if_failure=pf, break_even=break_even, market_implied=implied)

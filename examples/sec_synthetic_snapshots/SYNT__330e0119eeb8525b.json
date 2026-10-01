@@ -4,7 +4,7 @@
  "origin": "synthetic_fixture",
  "request": {
   "method": "GET",
-  "url": "https://query2.finance.yahoo.com/v7/finance/options/SYNT"
+  "url": "https://query2.finance.yahoo.com/v7/finance/options/SYNT?date=1795132800"
  },
  "response": {
   "optionChain": {

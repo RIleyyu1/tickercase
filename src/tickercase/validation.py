@@ -51,6 +51,7 @@ POSITIVE_NUMBERS = (
     "valuation_multiple",
 )
 SHARE_MODES = ("trend", "flat", "rate", "absolute")
+PRICE_CONDITIONS = ("end", "touch")
 SHARE_RATE_MIN, SHARE_RATE_MAX = Decimal("-0.5"), Decimal("1")
 SHARE_RATE_WARN_LOW, SHARE_RATE_WARN_HIGH = Decimal("-0.10"), Decimal("0.20")
 
@@ -73,7 +74,7 @@ def normalized_draft(draft: ClaimDraft) -> dict[str, Optional[str]]:
         text = _clean_text(None if value is None else str(value))
         if text is not None and name in ("ticker", "currency", "base_metric_currency"):
             text = text.upper()
-        if text is not None and name == "valuation_method":
+        if text is not None and name in ("valuation_method", "price_condition"):
             text = text.lower()
         out[name] = text
     return out
@@ -169,6 +170,10 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
     if share_mode is not None and share_mode not in SHARE_MODES:
         issues.append(ValidationIssue(field="share_change_mode", code="unsupported_mode", message=f"share_change_mode must be one of {SHARE_MODES}"))
         share_mode = None
+    condition = norm["price_condition"] or "end"
+    if condition not in PRICE_CONDITIONS:
+        issues.append(ValidationIssue(field="price_condition", code="unsupported_mode", message=f"price_condition must be one of {PRICE_CONDITIONS}"))
+        condition = "end"
     target_shares, shares_derived = _target_shares(numbers, share_rate, share_mode, norm, missing, warnings)
 
     drift = parse_decimal("probability_drift", norm["probability_drift"], issues, positive=False)
@@ -267,6 +272,7 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
         share_change_rate=share_rate,
         share_change_mode=share_mode,
         target_shares_derived=shares_derived,
+        price_condition=condition,
         probability_volatility=prob_vol,
         field_sources={k: v.strip() for k, v in sources.items() if isinstance(v, str) and v.strip() and norm.get(k) is not None},
     )

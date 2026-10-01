@@ -1,0 +1,340 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://data.sec.gov/api/xbrl/frames/us-gaap/Revenues/USD/CY2023.json"
+ },
+ "response": {
+  "ccp": "CY2023",
+  "data": [
+   {
+    "accn": "0009990000-24-000001",
+    "cik": 9990000,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 000 (fictional)",
+    "loc": "US-DE",
+    "val": 740436520
+   },
+   {
+    "accn": "0009990001-24-000001",
+    "cik": 9990001,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 001 (fictional)",
+    "loc": "US-DE",
+    "val": 776583694
+   },
+   {
+    "accn": "0009990002-24-000001",
+    "cik": 9990002,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 002 (fictional)",
+    "loc": "US-DE",
+    "val": 259268986
+   },
+   {
+    "accn": "0009990003-24-000001",
+    "cik": 9990003,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 003 (fictional)",
+    "loc": "US-DE",
+    "val": 404341572
+   },
+   {
+    "accn": "0009990004-24-000001",
+    "cik": 9990004,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 004 (fictional)",
+    "loc": "US-DE",
+    "val": 727150601
+   },
+   {
+    "accn": "0009990005-24-000001",
+    "cik": 9990005,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 005 (fictional)",
+    "loc": "US-DE",
+    "val": 582729904
+   },
+   {
+    "accn": "0009990006-24-000001",
+    "cik": 9990006,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 006 (fictional)",
+    "loc": "US-DE",
+    "val": 718894384
+   },
+   {
+    "accn": "0009990007-24-000001",
+    "cik": 9990007,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 007 (fictional)",
+    "loc": "US-DE",
+    "val": 548930239
+   },
+   {
+    "accn": "0009990008-24-000001",
+    "cik": 9990008,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 008 (fictional)",
+    "loc": "US-DE",
+    "val": 979806753
+   },
+   {
+    "accn": "0009990009-24-000001",
+    "cik": 9990009,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 009 (fictional)",
+    "loc": "US-DE",
+    "val": 560707423
+   },
+   {
+    "accn": "0009990010-24-000001",
+    "cik": 9990010,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 010 (fictional)",
+    "loc": "US-DE",
+    "val": 341064071
+   },
+   {
+    "accn": "0009990011-24-000001",
+    "cik": 9990011,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 011 (fictional)",
+    "loc": "US-DE",
+    "val": 790533055
+   },
+   {
+    "accn": "0009990012-24-000001",
+    "cik": 9990012,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 012 (fictional)",
+    "loc": "US-DE",
+    "val": 786262851
+   },
+   {
+    "accn": "0009990013-24-000001",
+    "cik": 9990013,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 013 (fictional)",
+    "loc": "US-DE",
+    "val": 163458452
+   },
+   {
+    "accn": "0009990014-24-000001",
+    "cik": 9990014,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 014 (fictional)",
+    "loc": "US-DE",
+    "val": 433298869
+   },
+   {
+    "accn": "0009990015-24-000001",
+    "cik": 9990015,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 015 (fictional)",
+    "loc": "US-DE",
+    "val": 593327970
+   },
+   {
+    "accn": "0009990016-24-000001",
+    "cik": 9990016,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 016 (fictional)",
+    "loc": "US-DE",
+    "val": 318397335
+   },
+   {
+    "accn": "0009990017-24-000001",
+    "cik": 9990017,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 017 (fictional)",
+    "loc": "US-DE",
+    "val": 191548449
+   },
+   {
+    "accn": "0009990018-24-000001",
+    "cik": 9990018,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 018 (fictional)",
+    "loc": "US-DE",
+    "val": 195556523
+   },
+   {
+    "accn": "0009990019-24-000001",
+    "cik": 9990019,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 019 (fictional)",
+    "loc": "US-DE",
+    "val": 114911924
+   },
+   {
+    "accn": "0009990020-24-000001",
+    "cik": 9990020,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 020 (fictional)",
+    "loc": "US-DE",
+    "val": 86605401
+   },
+   {
+    "accn": "0009990021-24-000001",
+    "cik": 9990021,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 021 (fictional)",
+    "loc": "US-DE",
+    "val": 672900476
+   },
+   {
+    "accn": "0009990022-24-000001",
+    "cik": 9990022,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 022 (fictional)",
+    "loc": "US-DE",
+    "val": 279449979
+   },
+   {
+    "accn": "0009990023-24-000001",
+    "cik": 9990023,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 023 (fictional)",
+    "loc": "US-DE",
+    "val": 487861593
+   },
+   {
+    "accn": "0009990024-24-000001",
+    "cik": 9990024,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 024 (fictional)",
+    "loc": "US-DE",
+    "val": 603832424
+   },
+   {
+    "accn": "0009990025-24-000001",
+    "cik": 9990025,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 025 (fictional)",
+    "loc": "US-DE",
+    "val": 606547979
+   },
+   {
+    "accn": "0009990026-24-000001",
+    "cik": 9990026,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 026 (fictional)",
+    "loc": "US-DE",
+    "val": 180831454
+   },
+   {
+    "accn": "0009990027-24-000001",
+    "cik": 9990027,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 027 (fictional)",
+    "loc": "US-DE",
+    "val": 275692332
+   },
+   {
+    "accn": "0009990028-24-000001",
+    "cik": 9990028,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 028 (fictional)",
+    "loc": "US-DE",
+    "val": 445047330
+   },
+   {
+    "accn": "0009990029-24-000001",
+    "cik": 9990029,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 029 (fictional)",
+    "loc": "US-DE",
+    "val": 714127595
+   },
+   {
+    "accn": "0009990030-24-000001",
+    "cik": 9990030,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 030 (fictional)",
+    "loc": "US-DE",
+    "val": 216767570
+   },
+   {
+    "accn": "0009990031-24-000001",
+    "cik": 9990031,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 031 (fictional)",
+    "loc": "US-DE",
+    "val": 789874406
+   },
+   {
+    "accn": "0009990032-24-000001",
+    "cik": 9990032,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 032 (fictional)",
+    "loc": "US-DE",
+    "val": 490191831
+   },
+   {
+    "accn": "0009990033-24-000001",
+    "cik": 9990033,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 033 (fictional)",
+    "loc": "US-DE",
+    "val": 123105769
+   },
+   {
+    "accn": "0009990034-24-000001",
+    "cik": 9990034,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 034 (fictional)",
+    "loc": "US-DE",
+    "val": 807061108
+   },
+   {
+    "accn": "0009990035-24-000001",
+    "cik": 9990035,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 035 (fictional)",
+    "loc": "US-DE",
+    "val": 421260420
+   },
+   {
+    "accn": "0009990036-24-000001",
+    "cik": 9990036,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 036 (fictional)",
+    "loc": "US-DE",
+    "val": 245552685
+   },
+   {
+    "accn": "0009990037-24-000001",
+    "cik": 9990037,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 037 (fictional)",
+    "loc": "US-DE",
+    "val": 101787817
+   },
+   {
+    "accn": "0009990038-24-000001",
+    "cik": 9990038,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 038 (fictional)",
+    "loc": "US-DE",
+    "val": 483045544
+   },
+   {
+    "accn": "0009990039-24-000001",
+    "cik": 9990039,
+    "end": "2023-12-31",
+    "entityName": "Synthetic Filer 039 (fictional)",
+    "loc": "US-DE",
+    "val": 118800108
+   }
+  ],
+  "label": "Revenues",
+  "pts": 40,
+  "tag": "Revenues",
+  "taxonomy": "us-gaap",
+  "uom": "USD"
+ },
+ "schema": "tickercase.snapshot/1"
+}

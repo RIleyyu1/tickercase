@@ -71,6 +71,8 @@ class ClaimDraft(BaseModel):
     # optional extra: price-probability reference (model output, never the verdict)
     probability_drift: RawNumber = None
     probability_volatility: RawNumber = None
+    # what counts as the claim coming true: "end" = at or above the target on the date, "touch" = reaches it at any time before
+    price_condition: Optional[str] = None
     # field name -> public source the current value was filled from (set by the page's prefill step)
     field_sources: Optional[dict[str, str]] = None
 
@@ -143,6 +145,7 @@ class ValidatedClaim(BaseModel):
     share_change_rate: Optional[DecimalStr] = None
     share_change_mode: Optional[str] = None
     target_shares_derived: bool = False  # True when target_assumed_shares = current_shares x (1 + rate) ** horizon
+    price_condition: Literal["end", "touch"] = "end"
     field_sources: dict[str, str] = Field(default_factory=dict)
 
 
@@ -410,6 +413,8 @@ class ClaimExtraction(BaseModel):
     target_date: Optional[date] = None
     horizon_text: Optional[str] = None
     currency: Optional[str] = None
+    condition: Optional[Literal["end", "touch"]] = None  # "冲到 / 触及 / within 3 years" -> touch; "3 年后 / by 2030" -> end
+    condition_text: Optional[str] = None
     notes_en: list[str] = Field(default_factory=list)
     notes_zh: list[str] = Field(default_factory=list)
 
@@ -481,6 +486,13 @@ class OptionQuote(BaseModel):
     last: Optional[float] = None
 
 
+class TermPoint(BaseModel):
+    """At-the-money implied volatility of one expiry (the option market's volatility term structure)."""
+
+    expiry: date
+    atm_iv: float
+
+
 class OptionsSnapshot(_Sourced):
     """Call chain of the expiry closest to (and preferably after) the claim's target date."""
 
@@ -497,6 +509,7 @@ class OptionsSnapshot(_Sourced):
     oi_at_or_above_target: int = 0
     total_call_oi: int = 0
     calls: list[OptionQuote] = Field(default_factory=list)
+    term: list[TermPoint] = Field(default_factory=list)  # ATM IV by expiry, for event-move estimates
 
 
 class BaseRate(BaseModel):
@@ -533,6 +546,7 @@ class PriceBaseRate(_Sourced):
     median_return: Optional[DecimalStr] = None
     best_return: Optional[DecimalStr] = None
     history_start: date
+    touch_hits: Optional[int] = None  # windows whose highest month-end close reached the target
 
 
 class BenchmarkReturn(BaseModel):
@@ -619,6 +633,8 @@ class LadderRow(BaseModel):
     label: "Text"
     options_p: Optional[float] = None
     model_p: Optional[float] = None
+    options_touch: Optional[float] = None
+    model_touch: Optional[float] = None
 
 
 class OracleSummary(BaseModel):
@@ -634,6 +650,32 @@ class OracleSummary(BaseModel):
     ladder: list[LadderRow] = Field(default_factory=list)
     agreement: "Text"
     risk_free_rate: Optional[DecimalStr] = None
+    condition: Literal["end", "touch"] = "end"  # which probability the range uses
+    spot: Optional[float] = None
+    base_volatility: Optional[float] = None  # historical volatility, used by the scenario panel
+    implied_volatility: Optional[float] = None
+
+
+class EventMove(BaseModel):
+    """Extra move the option market prices around one dated event, from the jump in ATM implied variance."""
+
+    event_date: date
+    before_expiry: Optional[date] = None
+    after_expiry: Optional[date] = None
+    status: Literal["ok", "not_priced", "not_computable"]
+    move: Optional[float] = None  # one-standard-deviation move attributed to the event (0.25 = about ±25%)
+    gap_days: Optional[int] = None
+    note: Optional["Text"] = None
+
+
+class ScenarioResult(BaseModel):
+    """Probability under the user's event scenario: one dated jump on top of ordinary volatility."""
+
+    probability: float
+    p_if_success: float
+    p_if_failure: float
+    break_even: Optional[float] = None  # success probability needed for 50%; None if out of reach
+    market_implied: Optional[float] = None  # success probability that reproduces the option-implied value
 
 
 class Fact(BaseModel):

@@ -9,6 +9,10 @@ longest available when the target date is beyond every listed expiry.
 Implied volatility at the target strike is interpolated linearly between the
 two nearest strikes with a usable quote; beyond the highest strike the
 highest strike's IV is used and the result is marked as extrapolated.
+
+For event estimates the provider also reads the at-the-money IV of up to
+TERM_MAX other expiries (about monthly for the first half year, then every 2-6 months to 24 months).
+Each is one extra request; an expiry that fails is skipped.
 """
 
 from __future__ import annotations
@@ -18,12 +22,14 @@ from decimal import Decimal
 from typing import Any, Mapping, Optional
 
 from ..http_client import FetchedJson, JsonFetcher
-from ..models import OptionQuote, OptionsSnapshot
+from ..models import OptionQuote, OptionsSnapshot, TermPoint
 from .base import Provider, ProviderError, ProviderParseError
 from .market import yahoo_symbol
 
 OPTIONS_URL = "https://query2.finance.yahoo.com/v7/finance/options/{symbol}"
 MIN_IV, MAX_IV = 0.01, 5.0
+TERM_DAYS = (30, 60, 91, 121, 152, 182, 243, 304, 365, 456, 547, 730)
+TERM_MAX = 12
 
 
 def _f(value: Any) -> Optional[float]:
@@ -74,7 +80,40 @@ class YahooOptionsProvider(Provider):
             raise ProviderError("no_options", "this ticker has no listed options", url=fetched.url)
         return results[0]
 
-    def fetch_chain(self, ticker: str, target_date: date, target_price: Decimal) -> OptionsSnapshot:
+    @staticmethod
+    def _calls(res: Mapping[str, Any]) -> list[OptionQuote]:
+        options = res.get("options")
+        if not isinstance(options, list) or not options or not isinstance(options[0], Mapping):
+            return []
+        calls: list[OptionQuote] = []
+        for c in options[0].get("calls", []) or []:
+            if not isinstance(c, Mapping) or _f(c.get("strike")) is None:
+                continue
+            calls.append(OptionQuote(
+                strike=Decimal(str(c["strike"])), implied_volatility=_f(c.get("impliedVolatility")),
+                open_interest=int(c.get("openInterest") or 0), bid=_f(c.get("bid")), ask=_f(c.get("ask")), last=_f(c.get("lastPrice")),
+            ))
+        calls.sort(key=lambda q: q.strike)
+        return calls
+
+    def _term(self, symbol: str, expiries: list[date], stamp_by_day: dict, today: date, spot: float, have: dict[date, float]) -> list[TermPoint]:
+        wanted: list[date] = []
+        for days in TERM_DAYS:
+            d = next((e for e in expiries if (e - today).days >= days), None)
+            if d is not None and d not in wanted and d not in have:
+                wanted.append(d)
+        points = dict(have)
+        for d in wanted[:TERM_MAX]:
+            try:
+                res = self._result(self.client.get_json(f"{OPTIONS_URL.format(symbol=symbol)}?date={stamp_by_day[d]}"))
+            except Exception:  # one missing expiry only thins the term structure
+                continue
+            iv, _ = iv_at(self._calls(res), spot)
+            if iv:
+                points[d] = iv
+        return [TermPoint(expiry=d, atm_iv=v) for d, v in sorted(points.items())]
+
+    def fetch_chain(self, ticker: str, target_date: date, target_price: Decimal, *, today: Optional[date] = None) -> OptionsSnapshot:
         symbol = yahoo_symbol(ticker)
         first = self.client.get_json(OPTIONS_URL.format(symbol=symbol))
         res = self._result(first)
@@ -91,20 +130,13 @@ class YahooOptionsProvider(Provider):
         options = res.get("options")
         if not isinstance(options, list) or not options or not isinstance(options[0], Mapping):
             raise ProviderParseError("parse_error", "options: expected a non-empty array", url=fetched.url)
-        calls: list[OptionQuote] = []
-        for c in options[0].get("calls", []) or []:
-            if not isinstance(c, Mapping) or _f(c.get("strike")) is None:
-                continue
-            calls.append(OptionQuote(
-                strike=Decimal(str(c["strike"])), implied_volatility=_f(c.get("impliedVolatility")),
-                open_interest=int(c.get("openInterest") or 0), bid=_f(c.get("bid")), ask=_f(c.get("ask")), last=_f(c.get("lastPrice")),
-            ))
+        calls = self._calls(res)
         if not calls:
             raise ProviderError("no_options", f"no calls listed for the {chosen} expiry", url=fetched.url)
-        calls.sort(key=lambda q: q.strike)
         target_iv, extrapolated = iv_at(calls, float(target_price))
         atm_iv, _ = iv_at(calls, spot) if spot else (None, False)
         retrieved = fetched.retrieved_at
+        term = self._term(symbol, expiries, stamp_by_day, today or retrieved.date(), spot, {chosen: atm_iv} if atm_iv else {}) if spot else []
         return OptionsSnapshot(
             symbol=symbol,
             underlying_price=Decimal(str(round(spot, 4))) if spot else None,
@@ -118,6 +150,7 @@ class YahooOptionsProvider(Provider):
             oi_at_or_above_target=sum(q.open_interest for q in calls if q.strike >= target_price),
             total_call_oi=sum(q.open_interest for q in calls),
             calls=calls,
+            term=term,
             source_url=fetched.url,
             retrieved_at=retrieved,
             source_captured_at=fetched.source_captured_at,

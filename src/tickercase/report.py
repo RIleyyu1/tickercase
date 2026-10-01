@@ -544,10 +544,17 @@ def build_report(
             reason_en = f" The business would need {metric.en} growth of {pct(req)} a year; it has managed {pct(hist, True)}."
             reason_zh = f"业绩上，{metric.zh}需要每年增长 {pct(req)}，过去是每年 {pct(hist, True)}。"
         lo_s, hi_s = prob_text(oracle.low), prob_text(oracle.high)
-        headline = T(f"Probability that {name} is at or above {target_s} {when.en}: about {lo_s}–{hi_s}, "
-                     f"{oracle.tier_label.en}.{reason_en} {oracle.agreement.en}",
-                     f"{name} {when.zh}达到 {target_s} 的概率约 {lo_s}–{hi_s}，属于「{oracle.tier_label.zh}」。"
-                     f"{reason_zh}{oracle.agreement.zh}")
+        if oracle.condition == "touch":
+            # a spike does not need the business to grow into the price, so the growth sentence is left out
+            headline = T(f"Probability that {name} touches {target_s} at some point before {target_date:%b %Y}: about {lo_s}–{hi_s}, "
+                         f"{oracle.tier_label.en}. {oracle.agreement.en}",
+                         f"{name} 在 {target_date.year} 年 {target_date.month} 月之前任意时点触及 {target_s} 的概率约 {lo_s}–{hi_s}，"
+                         f"属于「{oracle.tier_label.zh}」。{oracle.agreement.zh}")
+        else:
+            headline = T(f"Probability that {name} is at or above {target_s} {when.en}: about {lo_s}–{hi_s}, "
+                         f"{oracle.tier_label.en}.{reason_en} {oracle.agreement.en}",
+                         f"{name} {when.zh}达到 {target_s} 的概率约 {lo_s}–{hi_s}，属于「{oracle.tier_label.zh}」。"
+                         f"{reason_zh}{oracle.agreement.zh}")
         m1 = next((m for m in oracle.methods if m.id == "M1" and m.status == "ok"), None)
         m3 = next((m for m in oracle.methods if m.id == "M3" and m.status == "ok"), None)
         if m1 and m3 and m3.probability is not None and m1.probability > 3 * max(m3.probability, 1e-9):

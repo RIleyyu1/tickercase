@@ -251,3 +251,48 @@ def test_one_sentence_is_enough(app_env):
     assert result.confirmed_claim.value_provenance["ticker"].startswith("claim_text:")
     page = " ".join(m.value for m in at.markdown)
     assert "第 1 层" in page and "情景推演" in page and "需要关注的信号" in page
+
+
+def test_touch_claim_and_scenario_panel(app_env):
+    at = run(AppTest.from_file(APP))
+    at.radio(key="sec_mode").set_value("synthetic")
+    at.text_area(key="f_claim_text").set_value("SYNT 3年内冲到100")
+    run(at)
+    button(at, "btn_prefill").click()
+    run(at)
+    assert at.session_state["f_price_condition"] == "touch"
+    button(at, "btn_confirm").click()
+    run(at)
+    button(at, "btn_run").click()
+    run(at)
+    result = at.session_state["result"]
+    assert result.oracle.condition == "touch" and result.confirmed_claim.value_provenance["price_condition"].startswith("claim_text:")
+    page = " ".join(m.value for m in at.markdown)
+    assert "任意时点触及" in page and "要让概率达到 50%" in page or "即使" in page
+    assert at.slider(key="sc_p_current").value == 50
+    at.slider(key="sc_p_current").set_value(90)
+    run(at)
+    assert at.slider(key="sc_p_current").value == 90
+
+
+def _cjk(text: str) -> list[str]:
+    return [ch for ch in text if "一" <= ch <= "鿿"]
+
+
+def test_english_page_shows_no_chinese(app_env):
+    at = run(AppTest.from_file(APP))
+    at.radio(key="lang").set_value("en")
+    at.radio(key="sec_mode").set_value("synthetic")
+    at.text_area(key="f_claim_text").set_value("SYNT will hit $100 within 3 years")
+    run(at)
+    button(at, "btn_prefill").click()
+    run(at)
+    button(at, "btn_confirm").click()
+    run(at)
+    button(at, "btn_run").click()
+    run(at)
+    shown = [m.value for m in at.markdown] + [c.value for c in at.caption] + [b.label for b in at.button] + [str(x.value) for x in at.info]
+    shown += [x.label for x in at.radio] + [x.label for x in at.text_input] + [x.label for x in at.slider] + [x.label for x in at.expander]
+    shown += [o for x in at.radio if x.key != "lang" for o in x.options]  # the language switch names each language in itself
+    leaks = [s for s in shown if _cjk(s)]
+    assert not leaks, leaks[:5]
