@@ -21,6 +21,7 @@ import streamlit as st
 from tickercase.config import REPO_ROOT, load_settings, write_env_value
 from tickercase.http_client import validate_user_agent
 from tickercase.models import VERDICT_DISPLAY_ZH, CaseResult, ClaimDraft, Confirmation, PlainReport, ReferenceSnapshot, Text
+from tickercase.narrative import estimate_cost
 from tickercase.oracle import MIN_INDEPENDENT_WINDOWS, event_move, independent_windows, p_end_above, p_touch, scenario
 from tickercase.providers.options import iv_at
 from tickercase.service import CLAIM_TEXT_PREFIX, DEFAULT_PREFIX, CaseService
@@ -116,8 +117,12 @@ S = {
     "ai_title": ("AI 叙述", "AI narrative"),
     "ai_intro": ("由 Claude 根据本报告的事实表撰写，每句话的数字都会逐个核对出处。", "Written by Claude from this report's fact table; every number in every sentence is checked against its source."),
     "ai_button": ("生成 AI 叙述", "Write AI narrative"),
-    "ai_button_help": ("调用一次 Claude（claude-opus-5-5），按用量计费，通常每次不到 1 美元。", "One Claude call (claude-opus-5-5), billed by usage, usually under $1."),
-    "ai_summary": ("{ok}/{total} 句通过核对 · {bad} 句含无出处数字 · {model} · 约 ${cost:.3f}", "{ok}/{total} sentences pass · {bad} with unsourced numbers · {model} · about ${cost:.3f}"),
+    "ai_button_help": ("只写当前语言。同样的事实已经写过时直接复用，不再调用；否则调用一次 Claude（{model}，effort {effort}），按用量计费。",
+                       "Writes the current language only. Reuses a narrative already written for the same facts; otherwise one Claude call ({model}, effort {effort}), billed by usage."),
+    "ai_retry_help": ("忽略已有结果，重新调用一次 Claude（{model}，effort {effort}），按用量计费。", "Ignores the saved narrative and makes a new Claude call ({model}, effort {effort}), billed by usage."),
+    "ai_summary": ("{ok}/{total} 句通过核对 · {bad} 句含无出处数字 · {model}", "{ok}/{total} sentences pass · {bad} with unsourced numbers · {model}"),
+    "ai_usage": ("输入 {inp:,} · 输出 {out:,} token · 约 ${cost:.3f}", "{inp:,} input · {out:,} output tokens · about ${cost:.3f}"),
+    "ai_reused": ("复用案例 {case} 中相同事实的叙述，这次没有调用 API", "Reused from case {case} with the same facts; no API call this time"),
     "ai_failed": ("AI 叙述未生成：", "AI narrative not written: "),
     "ai_facts": ("事实表与核对明细", "Fact table and check details"),
     "ai_legend": ("✔ 数字与引用的事实一致 · ○ 无数字的解释 · ⚠ 数字存在但引用了别的事实 · ✖ 数字找不到出处",
@@ -756,11 +761,11 @@ def _save_ai_key() -> None:
     _msg("ai_msg", "success", ("已保存。", "Saved."))
 
 
-def _narrate(key_suffix: str) -> None:
+def _narrate(key_suffix: str, force: bool = False) -> None:
     result = st.session_state["history_selected"] if key_suffix != "current" else st.session_state["result"]
     if result is None:
         return
-    get_service().narrate(result)
+    get_service().narrate(result, language=lang(), force=force)
 
 
 def current_draft() -> ClaimDraft:
@@ -968,23 +973,32 @@ def render_hero(result: CaseResult) -> None:
 
 
 def render_narrative(result: CaseResult, key_suffix: str) -> None:
-    n = result.narrative
+    n = result.narratives.get(lang())
+    if n is None and result.narrative is not None and result.narrative.language == "both":  # written before v0.8
+        n = result.narrative
+    settings = get_service().settings
+    model_kw = dict(model=settings.narrative_model, effort=settings.narrative_effort)
     with st.container(border=True):
         st.markdown(f"**{t('ai_title')}**")
         if n is None or n.status != "ok":
             st.caption(t("ai_intro"))
             if n is not None:
                 st.warning(t("ai_failed") + (n.error or n.status))
-            st.button(t("ai_button") if n is None else t("ai_retry"), key=f"btn_narrate_{key_suffix}", help=t("ai_button_help"),
+            st.button(t("ai_button") if n is None else t("ai_retry"), key=f"btn_narrate_{key_suffix}", help=t("ai_button_help", **model_kw),
                       on_click=_narrate, args=(key_suffix,), type="primary")
             return
-        cost = n.usage.get("input_tokens", 0) * 4 / 1e6 + n.usage.get("output_tokens", 0) * 20 / 1e6
-        st.caption(t("ai_summary", ok=n.verified, total=n.total, bad=n.unsupported, model=n.model, cost=cost))
+        summary = t("ai_summary", ok=n.verified, total=n.total, bad=n.unsupported, model=n.model + (f" · effort {n.effort}" if n.effort else ""))
+        cost = estimate_cost(n.model, n.usage)
+        if n.reused_from:
+            summary += " · " + t("ai_reused", case=n.reused_from[:8])
+        elif cost is not None:
+            summary += " · " + t("ai_usage", inp=n.usage.get("input_tokens", 0), out=n.usage.get("output_tokens", 0), cost=cost)
+        st.caption(summary)
         for key in NARR_TITLES:
             sentences = n.sections.get(key) or []
             if not sentences:
                 continue
-            items = "".join(f"<li>{NARR_BADGE[x.status]} {esc(x.zh if zh() else x.en)} "
+            items = "".join(f"<li>{NARR_BADGE[x.status]} {esc((x.zh if zh() else x.en) or x.zh or x.en)} "
                             f"<span class='tc-sub' style='font-size:.75rem'>[{esc(' '.join(x.fact_ids))}]</span></li>" for x in sentences)
             html_block(f'<div class="tc-layer">{esc(NARR_TITLES[key][0 if zh() else 1])}</div><ul class="tc-list" style="list-style:none;padding-left:0">{items}</ul>')
         st.caption(t("ai_legend"))
@@ -993,7 +1007,7 @@ def render_narrative(result: CaseResult, key_suffix: str) -> None:
                 st.markdown(f"- {NARR_BADGE[x.status]} **{NARR_TITLES[k][0 if zh() else 1]}**: {'；'.join(x.problems)}")
             st.dataframe([{"id": f.id, "label": f.label_zh if zh() else f.label_en, "value": f.value, "unit": f.unit, "source": f.source} for f in n.facts],
                          hide_index=True, use_container_width=True)
-        st.button(t("ai_retry"), key=f"btn_narrate_{key_suffix}", on_click=_narrate, args=(key_suffix,), help=t("ai_button_help"))
+        st.button(t("ai_retry"), key=f"btn_narrate_{key_suffix}", on_click=_narrate, args=(key_suffix, True), help=t("ai_retry_help", **model_kw))
 
 
 def render_report(report: Optional[PlainReport]) -> None:

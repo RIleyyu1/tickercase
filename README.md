@@ -13,6 +13,15 @@
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## Fewer tokens for the AI narrative (v0.8)
+
+The data never needed a model: every source is a plain HTTP fetch and every probability is computed by code. The only paid call is the optional AI narrative, and v0.8 makes it cheaper:
+
+- **One language per call.** The narrative is written in the page's language only, with a fact table labelled in that language and written one fact per line. Switching language and pressing the button writes the other one; both are kept in the case (`narratives.zh`, `narratives.en`).
+- **Model and effort are settings.** `TICKERCASE_NARRATIVE_MODEL` (default `claude-opus-5-5`) and `TICKERCASE_NARRATIVE_EFFORT` (default `medium`, was `high`). `claude-sonnet-5-5` and `claude-haiku-4-5` also work; Haiku takes no effort setting and no server-side fallback, so neither is sent.
+- **No second call for the same facts.** Each narrative stores a `cache_key` (prompt version, model, effort, language, fact table). "Write AI narrative" reuses a stored narrative with the same key, from this case or any stored case, and says so; "Write again" always calls.
+- **Measured, not guessed.** Usage now records input, output and cache tokens, and the page shows the tokens and the list-price cost per model. `python scripts/narrative_usage.py` prints the prompt size of every stored case; `--count` adds exact input tokens (free `count_tokens`), `--call` makes real calls and prints usage, cost and the number check, so models and effort levels can be compared on the same cases.
+
 ## Touch claims, event pricing and scenarios (v0.7)
 
 - **What counts as coming true.** A claim such as "冲到 200", "脉冲到 200", "hit $300" or "3年内达到 300" is about touching the price at any time before the deadline; "收在 500 以上", "closes above", "2027年底" is about the price on the date. The extractor reads this from the wording (`ClaimExtraction.condition`), the page shows it as a choice the user confirms (`price_condition`), and the probability range follows it: for touch claims M1 and M2 use the first-passage formula, M4 counts windows whose highest month-end close reached the target, and M3 (business base rate) is shown as context only, because a spike does not need the business to grow into the price.
@@ -24,7 +33,7 @@ A live RKLB run ("RKLB 3年内脉冲到200") fetches all eleven steps plus the t
 
 ## AI narrative with number checking (v0.6)
 
-On the result page, "生成 AI 叙述" (Write AI narrative) makes one call to Claude (`claude-opus-5-5`, effort `high`, structured JSON output, server-side refusal fallback `fallbacks: "default"`). Claude receives only a numbered fact table built from the case (every value fetched or computed, with its source) and returns six sections (core logic, agreeing signals, divergences, conclusion, upside, downside), each sentence in Chinese and English with the fact ids it uses. `narrative.verify` then checks every number in every sentence against the cited facts, allowing unit changes and rounding (%, 亿, 万亿, B, M): ✔ matches, ○ no numbers, ⚠ the number exists but under another fact, ✖ the number has no source. The counts and the token cost are shown with the narrative and stored in the case.
+On the result page, "生成 AI 叙述" (Write AI narrative) makes one call to Claude (since v0.8: model and effort from settings, one language per call; structured JSON output, server-side refusal fallback `fallbacks: "default"`). Claude receives only a numbered fact table built from the case (every value fetched or computed, with its source) and returns six sections (core logic, agreeing signals, divergences, conclusion, upside, downside), each sentence with the fact ids it uses. `narrative.verify` then checks every number in every sentence against the cited facts, allowing unit changes and rounding (%, 亿, 万亿, B, M): ✔ matches, ○ no numbers, ⚠ the number exists but under another fact, ✖ the number has no source. The counts and the token cost are shown with the narrative and stored in the case.
 
 Setup: put `ANTHROPIC_API_KEY` in `.env` (the sidebar form does this), or log in with `ant auth login`. The call is billed per token (Claude Opus 5.5: $4 / $20 per million input / output tokens); one narrative typically uses a few thousand input and output tokens. The narrative is only written when the button is pressed. Without a key the page reports "not configured" and everything else works.
 
@@ -207,6 +216,7 @@ src/tickercase/extract.py           rule-based ticker / target / horizon extract
 src/tickercase/report.py            layered plain-language report
 src/tickercase/oracle.py            probability methods and cross-check
 src/tickercase/narrative.py         Claude narrative and number verifier
+scripts/narrative_usage.py          narrative prompt size, token count and cost per stored case
 src/tickercase/http_client.py       live / record / replay / fake network boundary
 src/tickercase/providers/sec.py     SEC submissions adapter
 src/tickercase/providers/sec_facts.py SEC XBRL company facts adapter

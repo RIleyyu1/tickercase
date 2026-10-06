@@ -391,21 +391,45 @@ class CaseService:
 
     # ---------------------------------------------------------------- AI narrative
 
-    def narrate(self, result: CaseResult, *, client=None) -> CaseResult:
-        """Add a Claude-written, number-checked narrative to a finished case (one paid API call) and store it."""
-        from .narrative import MODEL, write_narrative
+    def narrate(self, result: CaseResult, *, client=None, language: str = "zh", force: bool = False) -> CaseResult:
+        """Add a Claude-written, number-checked narrative in one language to a finished case and store it.
 
-        if client is None:
+        A narrative already written for the same facts, model, effort and language (in this case or any
+        stored case) is reused without an API call unless ``force`` is set. Otherwise one paid call.
+        """
+        from .narrative import write_narrative
+
+        model, effort = self.settings.narrative_model, self.settings.narrative_effort
+        narrative = None if force else self._reusable_narrative(result, model=model, effort=effort, language=language)
+        if narrative is None and client is None:
             try:
                 import anthropic
 
                 client = anthropic.Anthropic(api_key=self.settings.anthropic_api_key) if self.settings.anthropic_api_key else anthropic.Anthropic()
             except Exception as exc:  # no SDK or no credentials
-                result.narrative = Narrative(status="not_configured", model=MODEL, created_at=self.now(),
-                                             error=f"Claude API is not configured: {type(exc).__name__}: {exc}")
-                return self._finish(result)
-        result.narrative = write_narrative(result, client=client, now=self.now)
+                narrative = Narrative(status="not_configured", model=model, created_at=self.now(), language=language,
+                                      error=f"Claude API is not configured: {type(exc).__name__}: {exc}")
+        if narrative is None:
+            narrative = write_narrative(result, client=client, now=self.now, model=model, effort=effort, language=language)
+        result.narratives[language] = narrative
+        result.narrative = narrative
         return self._finish(result)
+
+    def _reusable_narrative(self, result: CaseResult, *, model: str, effort: str, language: str) -> Optional[Narrative]:
+        from .narrative import build_facts, cache_key
+
+        facts = build_facts(result)
+        if not facts:
+            return None
+        key = cache_key(facts, model=model, effort=effort, language=language)
+        own = result.narratives.get(language)
+        if own is not None and own.status == "ok" and own.cache_key == key:
+            return own
+        for other in self.store.list_cases() if self.store is not None else []:
+            found = other.narratives.get(language)
+            if other.case_id != result.case_id and found is not None and found.status == "ok" and found.cache_key == key:
+                return found.model_copy(update={"reused_from": other.case_id})
+        return None
 
     # ---------------------------------------------------------------- extraction
 

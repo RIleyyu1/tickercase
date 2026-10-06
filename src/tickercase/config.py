@@ -14,6 +14,7 @@ from typing import Mapping, MutableMapping, Optional
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SEC_MODES = ("live", "record", "replay", "synthetic")  # data modes; apply to every external source
 DEFAULT_SYNTHETIC_DIR = REPO_ROOT / "examples" / "sec_synthetic_snapshots"
+NARRATIVE_EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
 
 def read_dotenv(path: Path) -> dict[str, str]:
@@ -68,6 +69,8 @@ class Settings:
     market_user_agent: str = "TickerCase/0.2"
     anthropic_api_key: Optional[str] = None
     market_min_interval_seconds: float = 0.5
+    narrative_model: str = "claude-opus-5-5"
+    narrative_effort: str = "medium"
 
 
 def _path(value: str) -> Path:
@@ -82,6 +85,9 @@ def load_settings(env: Optional[Mapping[str, str]] = None, dotenv_path: Optional
     mode = merged.get("TICKERCASE_SEC_MODE", "live").strip().lower() or "live"
     if mode not in SEC_MODES:
         raise ValueError(f"TICKERCASE_SEC_MODE must be one of {SEC_MODES}, got '{mode}'")
+    effort = (merged.get("TICKERCASE_NARRATIVE_EFFORT") or "").strip().lower() or "medium"
+    if effort not in NARRATIVE_EFFORTS:
+        raise ValueError(f"TICKERCASE_NARRATIVE_EFFORT must be one of {NARRATIVE_EFFORTS}, got '{effort}'")
     return Settings(
         sec_user_agent=(merged.get("SEC_USER_AGENT") or "").strip() or None,
         sec_mode=mode,
@@ -95,4 +101,6 @@ def load_settings(env: Optional[Mapping[str, str]] = None, dotenv_path: Optional
         market_user_agent=(merged.get("TICKERCASE_MARKET_USER_AGENT") or "").strip() or "TickerCase/0.2",
         market_min_interval_seconds=float(merged.get("TICKERCASE_MARKET_MIN_INTERVAL_SECONDS", "0.5")),
         anthropic_api_key=(merged.get("ANTHROPIC_API_KEY") or "").strip() or None,
+        narrative_model=(merged.get("TICKERCASE_NARRATIVE_MODEL") or "").strip() or "claude-opus-5-5",
+        narrative_effort=effort,
     )

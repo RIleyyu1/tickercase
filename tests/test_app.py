@@ -296,3 +296,26 @@ def test_english_page_shows_no_chinese(app_env):
     shown += [o for x in at.radio if x.key != "lang" for o in x.options]  # the language switch names each language in itself
     leaks = [s for s in shown if _cjk(s)]
     assert not leaks, leaks[:5]
+
+
+def test_narrative_shows_current_language_and_reuse(app_env):
+    from datetime import datetime, timezone
+
+    from tickercase.models import Narrative, NarrativeSentence
+
+    at = run(AppTest.from_file(APP))
+    button(at, "btn_example_ps").click()
+    run(at)
+    button(at, "btn_confirm").click()
+    run(at)
+    button(at, "btn_run").click()
+    run(at)
+    assert any(b.key == "btn_narrate_current" for b in at.button)  # nothing written yet: the write button
+    when = datetime(2026, 10, 6, tzinfo=timezone.utc)
+    zh_n = Narrative(status="ok", model="claude-opus-5-5", effort="medium", created_at=when, language="zh", total=1, verified=1,
+                     sections={"conclusion": [NarrativeSentence(zh="中文结论句。")]}, reused_from="a" * 32,
+                     usage={"input_tokens": 4000, "output_tokens": 1500})
+    at.session_state["result"].narratives["zh"] = zh_n
+    run(at)
+    page = "\n".join(str(m.value) for m in at.markdown) + "\n".join(str(c.value) for c in at.caption)
+    assert "中文结论句" in page and "复用案例 aaaaaaaa" in page

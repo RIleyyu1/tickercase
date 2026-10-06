@@ -5,8 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from tickercase.narrative import MODEL, SECTIONS, build_facts, write_narrative
+from tickercase.narrative import MODEL, SECTIONS, build_facts, cache_key, estimate_cost, write_narrative
 from tickercase.service import CaseService
+from tickercase.storage import CaseStore
 from tickercase.validation import confirm
 
 from conftest import FIXED_NOW, FIXED_TODAY, make_settings, ps_draft
@@ -52,23 +53,46 @@ def test_narrative_request_and_verification(case):
     target = _fact(facts, "target price")
     payload = {name: [] for name in SECTIONS}
     payload["logic_chain"] = [
-        {"zh": f"目标价 {target.value}，概率下限约 {float(low.value) * 100:.1f}%。", "en": f"Target {target.value}; lower bound about {float(low.value) * 100:.1f}%.",
-         "fact_ids": [target.id, low.id]},
-        {"zh": "市场情绪的含义需要结合其他信号看。", "en": "Market mood needs the other signals for context.", "fact_ids": []},
+        {"text": f"目标价 {target.value}，概率下限约 {float(low.value) * 100:.1f}%。", "fact_ids": [target.id, low.id]},
+        {"text": "市场情绪的含义需要结合其他信号看。", "fact_ids": []},
     ]
-    payload["conclusion"] = [{"zh": "概率是 37.5%。", "en": "The probability is 37.5%.", "fact_ids": [low.id]}]  # invented number
+    payload["conclusion"] = [{"text": "概率是 37.5%。", "fact_ids": [low.id]}]  # invented number
     client = FakeClient(payload)
     n = write_narrative(result, client=client, now=lambda: FIXED_NOW)
     call = client.calls[0]
     assert call["model"] == "claude-opus-5-5" and call["fallbacks"] == "default"
     assert call["betas"] == ["server-side-fallback-2026-07-01"]
-    assert call["output_config"]["format"]["type"] == "json_schema"
-    assert "Fact table" in call["messages"][0]["content"]
-    assert n.status == "ok" and n.total == 3
+    assert call["output_config"]["format"]["type"] == "json_schema" and call["output_config"]["effort"] == "medium"
+    assert "Simplified Chinese" in call["system"] and "{language_rule}" not in call["system"]
+    content = call["messages"][0]["content"]
+    assert "Fact table" in content and low.label_zh in content and low.label_en not in content  # one language's labels only
+    assert n.status == "ok" and n.total == 3 and n.language == "zh" and n.effort == "medium" and n.cache_key
+    assert n.sections["logic_chain"][0].en == ""
     statuses = [s.status for s in n.sections["logic_chain"]] + [s.status for s in n.sections["conclusion"]]
     assert statuses == ["verified", "qualitative", "unsupported"]
     assert n.unsupported == 1 and n.verified == 2
-    assert n.usage == {"input_tokens": 5000, "output_tokens": 3000}
+    assert n.usage == {"input_tokens": 5000, "output_tokens": 3000, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
+    assert estimate_cost("claude-opus-5-5", n.usage) == pytest.approx(0.08)
+
+
+def test_request_follows_model_and_language(case):
+    _, result = case
+    payload = {name: [] for name in SECTIONS}
+    sonnet = FakeClient(payload)
+    n = write_narrative(result, client=sonnet, now=lambda: FIXED_NOW, model="claude-sonnet-5-5", effort="low", language="en")
+    call = sonnet.calls[0]
+    assert call["model"] == "claude-sonnet-5-5" and call["output_config"]["effort"] == "low" and call["fallbacks"] == "default"
+    assert "natural English" in call["system"]
+    haiku = FakeClient(payload)
+    n = write_narrative(result, client=haiku, now=lambda: FIXED_NOW, model="claude-haiku-4-5", effort="low", language="en")
+    call = haiku.calls[0]
+    assert "effort" not in call["output_config"] and "fallbacks" not in call and "betas" not in call
+    assert n.effort is None
+    facts = build_facts(result)
+    keys = {cache_key(facts, model=m, effort=e, language=lang) for m, e, lang in
+            (("claude-opus-5-5", "medium", "zh"), ("claude-opus-5-5", "low", "zh"), ("claude-opus-5-5", "medium", "en"), ("claude-sonnet-5-5", "medium", "zh"))}
+    assert len(keys) == 4
+    assert cache_key(facts, model="claude-haiku-4-5", effort="low", language="zh") == cache_key(facts, model="claude-haiku-4-5", effort="high", language="zh")
 
 
 def test_refusal_and_bad_json_are_reported(case):
@@ -83,11 +107,55 @@ def test_service_stores_narrative_and_handles_missing_credentials(case, monkeypa
     svc, result = case
     payload = {name: [] for name in SECTIONS}
     updated = svc.narrate(result, client=FakeClient(payload))
-    assert updated.narrative.status == "ok"
+    assert updated.narrative.status == "ok" and updated.narratives["zh"] is updated.narrative
     import anthropic
 
     def boom(*a, **k):
         raise RuntimeError("no credentials")
     monkeypatch.setattr(anthropic, "Anthropic", boom)
-    again = svc.narrate(result)
-    assert again.narrative.status == "not_configured" and "no credentials" in again.narrative.error
+    again = svc.narrate(result, language="en")
+    assert again.narratives["en"].status == "not_configured" and "no credentials" in again.narratives["en"].error
+    assert again.narratives["zh"].status == "ok"  # the other language is kept
+
+
+def test_service_reuses_narrative_for_same_facts(case, tmp_path):
+    svc, result = case
+    svc.store = CaseStore(tmp_path / "cases")
+    payload = {name: [] for name in SECTIONS}
+    payload["conclusion"] = [{"text": "结论。", "fact_ids": []}]
+    first = FakeClient(payload)
+    svc.narrate(result, client=first)
+    assert len(first.calls) == 1
+
+    same = FakeClient(payload)  # the same narrative asked again: no call
+    svc.narrate(result, client=same)
+    assert same.calls == [] and result.narratives["zh"].reused_from is None
+
+    twin = result.model_copy(deep=True, update={"case_id": "f" * 32, "narratives": {}, "narrative": None})
+    svc.narrate(twin, client=same)  # another case with identical facts reuses the stored one
+    assert same.calls == [] and twin.narratives["zh"].reused_from == result.case_id
+
+    svc.narrate(twin, client=same, language="en")  # a different language is a new call
+    svc.narrate(twin, client=same, force=True)  # and "write again" always calls
+    assert len(same.calls) == 2 and twin.narratives["zh"].reused_from is None
+
+
+def test_verifier_reads_english_scale_words_labels_sources_and_claim_context():
+    from tickercase.models import Fact, NarrativeSentence
+    from tickercase.narrative import verify
+
+    facts = [
+        Fact(id="F01", label_en="target price", label_zh="目标价", value="300", source="claim"),
+        Fact(id="F02", label_en="target market cap", label_zh="目标市值", value="7040802746700"),
+        Fact(id="F03", label_en="option-implied P(touch 358.35) (+50%)", label_zh="期权隐含", value="0.53911"),
+        Fact(id="F04", label_en="M4 P(touch)", label_zh="M4", value="0.919192", source="208 of 297 windows since 1999-02-01 rose at least 26%"),
+        Fact(id="F05", label_en="option-implied P(end >= 119.45)", label_zh="期权隐含", value="0.648854"),
+    ]
+    sentences = [
+        NarrativeSentence(en="At $300 the company would be worth about $7.04 trillion.", fact_ids=["F02"]),  # $300 is claim context
+        NarrativeSentence(en="Options give about 53.9% for touching roughly $358 (+50%).", fact_ids=["F03"]),
+        NarrativeSentence(en="208 of 297 windows since 1999 rose at least 26%, a 91.9% touch rate.", fact_ids=["F04"]),
+        NarrativeSentence(en="About a 35% chance of ending below half of today's price.", fact_ids=["F05"]),  # derived: 1 - 0.649
+    ]
+    verify(sentences, facts)
+    assert [s.status for s in sentences] == ["verified", "verified", "verified", "unsupported"]

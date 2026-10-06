@@ -690,8 +690,8 @@ class Fact(BaseModel):
 
 
 class NarrativeSentence(BaseModel):
-    zh: str
-    en: str
+    zh: str = ""  # since v0.8 a narrative is written in one language; the other field stays empty
+    en: str = ""
     fact_ids: list[str] = Field(default_factory=list)
     status: Literal["verified", "qualitative", "cited_elsewhere", "unsupported"] = "qualitative"
     problems: list[str] = Field(default_factory=list)
@@ -710,6 +710,10 @@ class Narrative(BaseModel):
     unsupported: int = 0
     usage: dict[str, int] = Field(default_factory=dict)
     error: Optional[str] = None
+    language: Literal["zh", "en", "both"] = "both"  # "both": written before v0.8 with zh and en together
+    effort: Optional[str] = None
+    cache_key: Optional[str] = None  # hash of prompt version, model, effort, language and fact table
+    reused_from: Optional[str] = None  # case id whose narrative was reused instead of calling the API
 
 
 class ReferenceSuggestion(BaseModel):
@@ -768,7 +772,8 @@ class CaseResult(BaseModel):
     sentiment: Optional[SentimentSnapshot] = None
     oracle: Optional[OracleSummary] = None
     data_steps: dict[str, str] = Field(default_factory=dict)  # step -> "ok" | "failed"
-    narrative: Optional[Narrative] = None
+    narrative: Optional[Narrative] = None  # the latest narrative written, any language
+    narratives: dict[str, Narrative] = Field(default_factory=dict)  # by language ("zh", "en")
     provider_errors: list[ProviderErrorRecord] = Field(default_factory=list)
     validation_issues: list[ValidationIssue] = Field(default_factory=list)
     missing_fields: list[MissingField] = Field(default_factory=list)

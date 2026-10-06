@@ -2,18 +2,23 @@
 
 1. ``build_facts`` turns a CaseResult into a numbered fact table (F01, F02, ...);
    every value was fetched or computed by TickerCase and carries its source.
-2. ``write_narrative`` asks Claude for a bilingual narrative as structured JSON:
-   sections of sentences, each listing the fact ids it relies on.
+2. ``write_narrative`` asks Claude for a narrative in one language as structured
+   JSON: sections of sentences, each listing the fact ids it relies on.
 3. ``verify`` checks every number in every sentence against the facts it cites
    (allowing the unit changes a writer makes: %, 亿, 万亿, B, M, x). A number
    with no matching fact marks the sentence "unsupported"; the page shows it.
 
 The model only phrases and connects the facts. It may not introduce numbers,
 and the verifier makes any it does introduce visible.
+
+Token use is kept down on purpose: one language per call, a compact fact table,
+effort set from settings, and ``cache_key`` lets the service reuse a narrative
+already written for the same facts instead of calling again.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime
@@ -25,6 +30,13 @@ from pydantic import BaseModel, Field, ValidationError
 from .models import CaseResult, Fact, Narrative, NarrativeSentence
 
 MODEL = "claude-opus-5-5"
+EFFORT = "medium"
+LANGUAGES = ("zh", "en")
+PROMPT_VERSION = "2"  # part of the cache key; bump when the prompt, schema or fact table format changes
+FALLBACK_MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-opus-5", "claude-fable-5-1")  # accept fallbacks="default"
+# USD per million tokens: input, output, cache read (Claude API list prices, 2026-09); cache writes cost 1.25x input
+PRICES = {"claude-opus-5-5": (4.0, 20.0, 0.20), "claude-sonnet-5-5": (2.0, 10.0, 0.20), "claude-haiku-4-5": (1.0, 5.0, 0.10)}
+USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
 SECTIONS = ("logic_chain", "resonance", "divergences", "conclusion", "upside", "downside")
 SECTION_TITLES = {
     "logic_chain": ("Core logic", "核心逻辑链"), "resonance": ("Signals that agree", "共振信号"),
@@ -40,14 +52,16 @@ Rules:
 - Every sentence lists in fact_ids the ids of every fact whose number or claim it uses. A sentence with no number may list the facts it interprets.
 - The probability statements must be the computed ones (range, methods). Do not give your own probability.
 - Explain what each signal means in plain words, where signals agree, where they disagree and why (they often measure different things), and what would change the picture.
-- Write each sentence twice: natural Chinese (zh) and natural English (en) with the same content.
+- {language_rule}
 - Keep it tight: logic_chain 3-5 sentences, the other sections 2-4 sentences each.
 - This is research, not investment advice; do not tell the reader to buy or sell."""
 
 
+LANGUAGE_RULE = {"zh": "Write every sentence in natural Simplified Chinese.", "en": "Write every sentence in natural English."}
+
+
 class _OutSentence(BaseModel):
-    zh: str
-    en: str
+    text: str
     fact_ids: list[str]
 
 
@@ -61,9 +75,8 @@ class _Out(BaseModel):
 
 
 def _schema() -> dict:
-    sentence = {"type": "object", "properties": {"zh": {"type": "string"}, "en": {"type": "string"},
-                                                 "fact_ids": {"type": "array", "items": {"type": "string"}}},
-                "required": ["zh", "en", "fact_ids"], "additionalProperties": False}
+    sentence = {"type": "object", "properties": {"text": {"type": "string"}, "fact_ids": {"type": "array", "items": {"type": "string"}}},
+                "required": ["text", "fact_ids"], "additionalProperties": False}
     return {"type": "object", "properties": {s: {"type": "array", "items": sentence} for s in SECTIONS},
             "required": list(SECTIONS), "additionalProperties": False}
 
@@ -183,9 +196,12 @@ def build_facts(r: CaseResult) -> list[Fact]:
 
 # ------------------------------------------------------------------ verification
 
-NUM_RE = re.compile(r"(?<![A-Za-z0-9_])[-+−]?\d[\d,]*(?:\.\d+)?\s*(万亿|亿|万|[KkMBT](?![a-zA-Z])|%|x|倍)?")
+NUM_RE = re.compile(r"(?<![A-Za-z0-9_])[-+−]?\d[\d,]*(?:\.\d+)?\s*(万亿|亿|万|trillion|billion|million|thousand|[KkMBT](?![a-zA-Z])|%|x|倍)?")
 SCALES = {"万亿": Decimal("1e12"), "亿": Decimal("1e8"), "万": Decimal("1e4"), "K": Decimal("1e3"), "k": Decimal("1e3"),
-          "M": Decimal("1e6"), "B": Decimal("1e9"), "T": Decimal("1e12")}
+          "M": Decimal("1e6"), "B": Decimal("1e9"), "T": Decimal("1e12"),
+          "thousand": Decimal("1e3"), "million": Decimal("1e6"), "billion": Decimal("1e9"), "trillion": Decimal("1e12")}
+# the claim itself (target, horizon, date): every sentence may use these numbers without citing them
+CONTEXT_LABELS = ("claim", "target price", "horizon", "target date")
 
 
 def numbers_in(text: str) -> list[tuple[str, Decimal, str]]:
@@ -202,9 +218,12 @@ def numbers_in(text: str) -> list[tuple[str, Decimal, str]]:
 
 
 def _fact_numbers(fact: Fact) -> list[Decimal]:
+    """Numbers a sentence citing this fact may use: its value, plus numbers in its label and source
+    (e.g. "touch 358.35 (+50%)", "208 of 297 windows since 1999 rose at least 26%")."""
     values = []
-    for raw, value, unit in numbers_in(fact.value):
-        values.append(value * SCALES.get(unit, Decimal(1)))
+    for text in (fact.value, fact.label_en, fact.label_zh, fact.source):
+        for raw, value, unit in numbers_in(text):
+            values.append(value * SCALES.get(unit, Decimal(1)))
     try:
         values.append(Decimal(fact.value))
     except InvalidOperation:
@@ -237,12 +256,13 @@ def _matches(value: Decimal, unit: str, candidates: list[Decimal]) -> bool:
 def verify(sentences: list[NarrativeSentence], facts: list[Fact]) -> None:
     by_id = {f.id: f for f in facts}
     all_numbers = [n for f in facts for n in _fact_numbers(f)]
+    context = [n for f in facts if f.label_en in CONTEXT_LABELS for n in _fact_numbers(f)]
     for s in sentences:
         problems: list[str] = []
         bad_ids = [i for i in s.fact_ids if i not in by_id]
         if bad_ids:
             problems.append(f"cites unknown fact ids: {', '.join(bad_ids)}")
-        cited = [n for i in s.fact_ids if i in by_id for n in _fact_numbers(by_id[i])]
+        cited = [n for i in s.fact_ids if i in by_id for n in _fact_numbers(by_id[i])] + context
         found_any = False
         elsewhere = False
         for text in (s.zh, s.en):
@@ -269,30 +289,65 @@ def verify(sentences: list[NarrativeSentence], facts: list[Fact]) -> None:
 # ------------------------------------------------------------------ Claude call
 
 
-def write_narrative(result: CaseResult, *, client: Any, now: Callable[[], datetime], model: str = MODEL) -> Narrative:
-    """Ask Claude for the narrative, then verify it. Errors and refusals come back as a Narrative with a status."""
+def uses_effort(model: str) -> bool:
+    return not model.startswith("claude-haiku")  # Haiku 4.5 rejects the effort setting
+
+
+def fact_table(facts: list[Fact], language: str) -> str:
+    """The facts as JSON, one fact per line, labels in the narrative's language only."""
+    rows = [json.dumps({"id": f.id, "label": f.label_zh if language == "zh" else f.label_en, "value": f.value, "unit": f.unit, "source": f.source},
+                       ensure_ascii=False) for f in facts]
+    return "[\n" + ",\n".join(rows) + "\n]"
+
+
+def cache_key(facts: list[Fact], *, model: str, effort: str, language: str) -> str:
+    parts = (PROMPT_VERSION, model, effort if uses_effort(model) else "-", language, fact_table(facts, language))
+    return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
+
+
+def request_params(facts: list[Fact], *, model: str, effort: str, language: str) -> dict:
+    params: dict[str, Any] = dict(
+        model=model,
+        max_tokens=16000,
+        system=SYSTEM_PROMPT.format(language_rule=LANGUAGE_RULE[language]),
+        messages=[{"role": "user", "content": "Fact table (JSON, one fact per line):\n" + fact_table(facts, language) +
+                   "\n\nWrite the narrative sections for this claim using only these facts."}],
+        output_config={"format": {"type": "json_schema", "schema": _schema()}},
+    )
+    if uses_effort(model):
+        params["output_config"]["effort"] = effort
+    if model in FALLBACK_MODELS:
+        params["betas"] = ["server-side-fallback-2026-07-01"]
+        params["fallbacks"] = "default"
+    return params
+
+
+def estimate_cost(model: str, usage: dict[str, int]) -> Optional[float]:
+    """USD at list price; None for a model without a known price."""
+    price = PRICES.get(model)
+    if price is None:
+        return None
+    inp, out, read = price
+    return (usage.get("input_tokens", 0) * inp + usage.get("output_tokens", 0) * out
+            + usage.get("cache_read_input_tokens", 0) * read + usage.get("cache_creation_input_tokens", 0) * inp * 1.25) / 1e6
+
+
+def write_narrative(result: CaseResult, *, client: Any, now: Callable[[], datetime], model: str = MODEL,
+                    effort: str = EFFORT, language: str = "zh") -> Narrative:
+    """Ask Claude for the narrative in one language, then verify it. Errors and refusals come back as a Narrative with a status."""
+    if language not in LANGUAGES:
+        raise ValueError(f"language must be one of {LANGUAGES}, got '{language}'")
     facts = build_facts(result)
-    base = dict(model=model, created_at=now(), facts=facts)
+    base = dict(model=model, created_at=now(), facts=facts, language=language, effort=effort if uses_effort(model) else None)
     if not facts:
         return Narrative(status="error", error="no confirmed case to describe", **base)
-    table = [{"id": f.id, "label": f.label_en, "label_zh": f.label_zh, "value": f.value, "unit": f.unit, "source": f.source} for f in facts]
-    user = ("Fact table (JSON):\n" + json.dumps(table, ensure_ascii=False, indent=1) +
-            "\n\nWrite the narrative sections for this claim using only these facts.")
+    base["cache_key"] = cache_key(facts, model=model, effort=effort, language=language)
     try:
-        response = client.beta.messages.create(
-            model=model,
-            max_tokens=16000,
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            output_config={"effort": "high", "format": {"type": "json_schema", "schema": _schema()}},
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user}],
-        )
+        response = client.beta.messages.create(**request_params(facts, model=model, effort=effort, language=language))
     except Exception as exc:  # typed SDK errors are reported as text; the case itself is unaffected
         return Narrative(status="error", error=f"{type(exc).__name__}: {getattr(exc, 'message', exc)}", **base)
     usage = getattr(response, "usage", None)
-    usage_d = {k: int(getattr(usage, k) or 0) for k in ("input_tokens", "output_tokens") if usage is not None and hasattr(usage, k)}
-    base["usage"] = usage_d
+    base["usage"] = {k: int(getattr(usage, k, 0) or 0) for k in USAGE_FIELDS} if usage is not None else {}
     base["model"] = getattr(response, "model", model) or model
     if getattr(response, "stop_reason", None) == "refusal":
         return Narrative(status="refused", error="the model declined to write this narrative", **base)
@@ -301,7 +356,7 @@ def write_narrative(result: CaseResult, *, client: Any, now: Callable[[], dateti
         parsed = _Out.model_validate_json(text)
     except ValidationError as exc:
         return Narrative(status="error", error=f"response did not match the schema: {exc.errors()[:1]}", **base)
-    sections = {name: [NarrativeSentence(zh=s.zh, en=s.en, fact_ids=s.fact_ids) for s in getattr(parsed, name)] for name in SECTIONS}
+    sections = {name: [NarrativeSentence(**{language: s.text}, fact_ids=s.fact_ids) for s in getattr(parsed, name)] for name in SECTIONS}
     for sentences in sections.values():
         verify(sentences, facts)
     flat = [s for v in sections.values() for s in v]
