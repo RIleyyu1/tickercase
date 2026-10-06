@@ -550,6 +550,73 @@ def footer(zh: bool) -> str:
             f'<span style="background:#A8623A;width:14px"></span><span style="background:#7E3B2A;width:8px"></span></span>{dymo("SYSEN 5151 · TEAM 12")}</span></div>')
 
 
+# ------------------------------------------------------------------ start-up screen (the first page of a session)
+
+
+EMBLEM_XL = (  # the "lit candle K-line" emblem drawn at 200 px; the flame lights, then the two K-line bars rise
+    '<span class="tc-embx" aria-hidden="true"><span class="x-leaf"></span>'
+    '<span class="x-patch" style="left:6px;top:106px"></span><span class="x-patch" style="left:106px;top:144px;background:#A58A55"></span>'
+    '<span class="x-patch" style="left:56px;top:6px;background:#BBA16B"></span>'
+    '<span class="x-art"><span class="x-rise-l"><span class="x-wick" style="left:40px;top:69px;height:81px"></span>'
+    '<span class="x-yin" style="left:30px;top:88px;width:25px;height:41px"></span></span>'
+    '<span class="x-rise-r"><span class="x-wick" style="left:153px;top:44px;height:94px"></span>'
+    '<span class="x-yang" style="left:143px;top:59px;width:25px;height:50px"></span></span></span>'
+    '<span class="x-mist" style="left:6px;top:138px;width:76px"></span><span class="x-mist" style="left:118px;top:150px;width:76px"></span>'
+    '<span class="x-art"><span class="x-wick" style="left:97px;top:53px;height:24px"></span><span class="x-wax"></span>'
+    '<span class="x-wick" style="left:97px;top:158px;height:24px"></span>'
+    '<span class="x-ignite"><span class="x-flame"><span class="x-fl"></span><span class="x-core"></span></span></span></span></span>'
+)
+
+
+def boot_rows(zh: bool, *, version: str, mode: str, mode_label: str, sec_set: bool, ai_set: bool, tapes: int) -> list[tuple[str, str, str]]:
+    """The self-test lines as (label, status, tone). Every status is read from the real configuration; nothing is probed."""
+    ready = mode not in ("live", "record") or sec_set
+    return [
+        (L(zh, f"TC-8 自检 · TICKERCASE v{version}", f"TC-8 SELF-TEST · TICKERCASE v{version}"), L(zh, "开始", "START"), "am"),
+        (L(zh, "数据源 08 路 · SEC YAHOO PMKT CNN", "DATA 08 CH · SEC YAHOO PMKT CNN"), L(zh, "就绪", "READY") if ready else L(zh, "受限", "LIMITED"), "am"),
+        (L(zh, "方法 M1–M4 · 期权 波动率 同业 本股", "METHODS M1–M4 · OPT VOL PEER HIST"), L(zh, "就绪", "READY"), "am"),
+        (L(zh, "SEC 联系邮箱", "SEC CONTACT EMAIL"), L(zh, "已设置", "SET") if sec_set else L(zh, "未设置", "NOT SET"), "am"),
+        (L(zh, "CLAUDE KEY · AI 叙述（可选）", "CLAUDE KEY · AI NARRATIVE (OPTIONAL)"), L(zh, "已设置", "SET") if ai_set else L(zh, "未设置", "NOT SET"),
+         "am" if ai_set else "dim"),
+        (L(zh, "磁带库", "TAPE LIBRARY"), L(zh, f"{tapes} 盘", f"{tapes} TAPES"), "am"),
+        (L(zh, "数据源模式", "DATA MODE"), mode_label, "am"),
+    ]
+
+
+def boot_top(zh: bool, *, link: str, warn: bool, clock: str) -> str:
+    """Title label, the four lamps lighting in turn, and the clock."""
+    lamps = [("amber", "PWR", ".1s"), (link, "LINK", ".9s"), ("green", "SYS", "1.3s"), ("red" if warn else "off", "WARN", "1.1s")]
+    lamp_html = "".join(f'<span class="tc-lampcol">{lamp(k, "" if k == "off" else "tc-pop", "" if k == "off" else f"animation-delay:{d}")}{dymo(t, small=True)}</span>'
+                        for k, t, d in lamps)
+    return (f'<div class="tc-boottop">{dymo(L(zh, "TC-8 · 观点概率控制台 · 开机", "TC-8 · claim probability console · power on"))}'
+            f'<span class="tc-grow"></span><span class="tc-lamps">{lamp_html}</span>{chip(clock)}</div>')
+
+
+def boot_main(zh: bool, rows: Iterable[tuple[str, str, str]]) -> str:
+    """The nameplate with the emblem, and the screen where the self-test types out (about 1.5 s in all)."""
+    post = "".join(
+        f'<div class="tc-post tc-type" style="animation-delay:{0.35 + i * 0.13:.2f}s"><span class="tc-dim lbl">{esc(label)}</span>'
+        f'<span class="lead" aria-hidden="true">{"·" * 80}</span><span class="{"tc-am" if tone == "am" else "tc-dim"} st">{esc(status)}</span></div>'
+        for i, (label, status, tone) in enumerate(rows))
+    screws = "".join(f'<span class="tc-screw tc-screw-s" style="{pos};--r:{r}deg"></span>'
+                     for pos, r in (("top:5px;left:5px", 30), ("top:5px;right:5px", 100), ("bottom:5px;left:5px", 160), ("bottom:5px;right:5px", 70)))
+    plate = (f'<section class="tc-nameplate" aria-label="TickerCase">'
+             f'<span class="tc-screw" style="top:8px;left:8px;--r:45deg"></span><span class="tc-screw" style="top:8px;right:8px;--r:135deg"></span>'
+             f'<div class="tc-tile">{screws}{EMBLEM_XL}</div>'
+             f'<div class="tc-col" style="align-items:center;gap:8px"><span class="tc-wm">TICKERCASE</span>'
+             f'<span class="tc-wm-sub">{esc(L(zh, "灯明 · 观点概率控制台", "TC-8 · claim probability console"))}</span></div>'
+             f'<span class="tc-stripes tc-stripes-v" aria-hidden="true"><span style="background:#C49A4A;width:46px"></span>'
+             f'<span style="background:#A8623A;width:30px"></span><span style="background:#7E3B2A;width:18px"></span></span></section>')
+    screen = (f'<div class="tc-bezel tc-bootscreen"><div class="tc-crt tc-boot" style="animation-delay:.35s;height:100%"><span class="tc-noise"></span>'
+              f'<div class="tc-crt-in tc-ph" style="gap:2px">{post}'
+              f'<div class="tc-pop tc-bootlead" style="animation-delay:1.3s">'
+              f'<span class="tc-bootline">{esc(L(zh, "一句股价观点，算成一个概率。", "One sentence about a stock, turned into a probability."))}</span>'
+              f'<span class="tc-am tc-line">{esc(L(zh, "每个数字都附来源与时间。", "Every number carries its source and time."))}</span>'
+              f'<span class="tc-line">{esc(L(zh, "按 ENTER ▸ 进入控制台", "PRESS ENTER ▸ OPEN THE CONSOLE"))} <span class="tc-cur" aria-hidden="true"></span></span>'
+              f'</div></div></div></div>')
+    return f'<div class="tc-bootmain">{plate}{screen}</div>'
+
+
 # ------------------------------------------------------------------ CSS
 
 
@@ -567,6 +634,65 @@ AMBER_CSS = """<style>
 :root{--ph:#FFB23E;--ph-rgb:255,178,62;--am:#FFE4A8;--am-rgb:255,228,168;--dim:#C9933F;--z1:#1E160C;--z2:#291E0F;--z3:#342612;--z4:#3F2E15;
   --seg:#2E2210;--scr-text:#F1DFC0;--scr-line:#6B4E22;--scr-faint:#3A2A14}
 </style>"""
+
+# the start-up screen: the casing narrows to one centred panel without the data bus
+BOOT_CSS = """<style>
+[data-testid="stMainBlockContainer"]{max-width:1240px!important;margin:clamp(16px,6vh,72px) auto 40px!important;padding:22px 26px 26px!important}
+[data-testid="stMainBlockContainer"]::before{display:none}
+.tc-boottop{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
+.tc-bootmain{display:flex;flex-wrap:wrap;gap:22px;align-items:stretch}
+.tc-nameplate{position:relative;flex:1 1 330px;max-width:100%;box-sizing:border-box;padding:26px 24px 24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+  border:3px solid var(--ink);background-color:#3A3733;background-image:url(__GRAIN__);background-size:160px 160px;background-blend-mode:soft-light;color:#E3DAC0;
+  box-shadow:inset 0 4px 0 #524E48,inset 0 -9px 0 #26241F,6px 6px 0 #0C0B09}
+.tc-nameplate::before{content:"";position:absolute;top:9px;left:30px;width:48px;height:5px;background:rgba(255,250,235,.5);transform:skewX(-35deg);pointer-events:none}
+.tc-screw{position:absolute;width:14px;height:14px;border-radius:50%;background:#A39B86;border:2px solid var(--ink);box-sizing:border-box;box-shadow:inset -2px -3px 0 #6F6858}
+.tc-screw::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:2px;background:var(--ink);transform:translate(-50%,-50%) rotate(var(--r,35deg))}
+.tc-screw-s{width:12px;height:12px;background:#8E8672}
+.tc-tile{position:relative;background:#141311;border:3px solid var(--ink);padding:24px;box-shadow:inset 0 3px 0 #26241F,inset 0 -5px 0 #0B0A09,6px 6px 0 #0C0B09}
+.tc-embx{display:block;position:relative;width:200px;height:200px}
+.tc-embx span{position:absolute}
+.tc-embx .x-leaf{inset:0;border:3px solid var(--ink);box-sizing:border-box;background-color:#B09460;
+  background-image:linear-gradient(90deg,rgba(70,52,22,.3) 2px,transparent 2px),linear-gradient(0deg,rgba(70,52,22,.3) 2px,transparent 2px);background-size:50px 50px;
+  box-shadow:inset 0 5px 0 rgba(255,236,190,.35),inset 0 -7px 0 rgba(70,52,22,.35)}
+.tc-embx .x-patch{width:46px;height:46px;background:#C6AD78}
+.tc-embx .x-mist{height:16px;border-radius:8px;background:#DCD2B8;border:2px solid var(--ink);box-sizing:border-box;box-shadow:3px 3px 0 rgba(12,11,9,.45)}
+.tc-embx .x-art{inset:0;filter:drop-shadow(4px 4px 0 rgba(12,11,9,.85))}
+.tc-embx .x-wick{width:5px;background:#1B1917}
+.tc-embx .x-yin{background:#1B1917}
+.tc-embx .x-yang{background:#E9DFC6;border:4px solid #1B1917;box-sizing:border-box}
+.tc-embx .x-wax{left:78px;top:75px;width:44px;height:84px;background:#B65A3E;box-shadow:inset -9px 0 0 #8A4330,inset 6px 0 0 #C9714F;clip-path:polygon(0 0,100% 0,84% 100%,16% 100%)}
+.tc-embx .x-flame{left:84px;top:9px;width:32px;height:50px;transform-origin:50% 100%;animation:tc-flame 1s steps(1,end) infinite}
+.tc-embx .x-fl{left:1px;top:9px;width:30px;height:30px;background:#C49A4A;border:3px solid var(--ink);box-sizing:border-box;border-radius:0 50% 50% 50%;transform:rotate(45deg)}
+.tc-embx .x-core{left:10px;top:24px;width:12px;height:12px;background:#EFE7D2;border-radius:0 50% 50% 50%;transform:rotate(45deg)}
+.tc-embx .x-ignite{inset:0;transform-origin:100px 59px;animation:tc-ignite .42s steps(5,end) .25s both}
+.tc-embx .x-rise-l{inset:0;transform-origin:42px 150px;animation:tc-rise .34s steps(4,end) .5s both}
+.tc-embx .x-rise-r{inset:0;transform-origin:155px 138px;animation:tc-rise .34s steps(4,end) .62s both}
+.tc-wm{font-family:'IBM Plex Mono',monospace;font-size:clamp(24px,2.4vw,32px);font-weight:700;letter-spacing:.24em;padding-left:.24em;color:#F1EBDC;text-shadow:0 2px 0 var(--ink)}
+.tc-wm-sub{font-family:'Noto Serif SC',serif;font-size:15px;font-weight:700;letter-spacing:.2em;color:#CFC4A6}
+.tc-bootscreen{flex:999 1 560px;min-width:0}
+.tc-post{display:flex;align-items:baseline;gap:12px;font-size:24px;line-height:32px;white-space:nowrap}
+.tc-post .lbl{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tc-post .lead{flex:1 1 40px;min-width:24px;overflow:hidden;color:#2E6B44!important;text-shadow:none!important}
+.tc-post .st{flex:0 0 auto}
+.tc-type{animation:tc-type .25s steps(3,end) both}
+.tc-bootlead{margin-top:18px;padding-top:16px;border-top:2px dashed var(--scr-line);display:flex;flex-direction:column;gap:8px}
+.tc-bootline{font-size:clamp(30px,3.6vw,48px);line-height:1.25}
+.tc-cur{display:inline-block;width:12px;height:24px;background:currentColor;vertical-align:-4px;animation:tc-blink 1s steps(1,end) infinite}
+p.tc-bootnote{max-width:560px;margin:0;color:var(--ink)!important;font-family:'Noto Serif SC',serif;font-size:14px;line-height:1.6;font-weight:700}
+[class*="st-key-boot-"]{gap:26px!important}
+.st-key-btn_boot_enter button{min-height:76px!important;min-width:280px}
+.st-key-btn_boot_enter button p{font-size:20px!important}
+.st-key-btn_boot_enter kbd{display:none}
+@keyframes tc-ignite{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes tc-rise{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes tc-type{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@media (max-width:820px){
+  [data-testid="stMainBlockContainer"]{padding:12px 12px 18px!important;margin:8px auto 30px!important}
+  .tc-post{font-size:16px;line-height:24px;white-space:normal}.tc-post .lead{display:none}
+  .st-key-btn_boot_enter button{min-width:0;width:100%}
+}
+@media (prefers-reduced-motion:reduce){.tc-type{clip-path:none!important}}
+</style>""".replace("__GRAIN__", GRAIN)
 
 CSS = """<style>
 @font-face{font-family:'FusionPixel';src:url(__PIX__) format('woff2');font-display:swap}

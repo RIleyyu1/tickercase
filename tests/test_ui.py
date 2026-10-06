@@ -6,8 +6,10 @@ from datetime import date, timedelta
 
 import pytest
 
+from tickercase.config import load_settings
 from tickercase.models import Candle, KLine, Narrative, NarrativeSentence
 from tickercase.service import CaseService
+from tickercase.storage import CaseStore
 from tickercase.ui import cockpit as ck
 from tickercase.ui.kline import kline_html
 from tickercase.validation import confirm
@@ -114,6 +116,33 @@ def test_printer_paper_stamps_every_sentence():
     assert "结论" in zh and "结论句。" in zh and ">核<" in zh and "tc-seal-bad" in zh and "[F1]" in zh and "tc-feed" in zh
     en = ck.nar_paper(n.model_copy(update={"sections": {"conclusion": [NarrativeSentence(en="A sentence.", status="verified")]}}), False, anim=False)
     assert ">OK<" in en and "Conclusion" in en and not _cjk(_text(en))
+
+
+def test_start_up_rows_follow_the_configuration():
+    ok = ck.boot_rows(True, version="0.9.0", mode="live", mode_label="LIVE 实时", sec_set=True, ai_set=True, tapes=33)
+    assert [s for _, s, _ in ok] == ["开始", "就绪", "就绪", "已设置", "已设置", "33 盘", "LIVE 实时"]
+    gated = ck.boot_rows(False, version="0.9.0", mode="live", mode_label="LIVE", sec_set=False, ai_set=False, tapes=0)
+    assert [s for _, s, _ in gated][1:5] == ["LIMITED", "READY", "NOT SET", "NOT SET"] and gated[4][2] == "dim"
+    offline = ck.boot_rows(False, version="0.9.0", mode="replay", mode_label="PLAY · replay", sec_set=False, ai_set=False, tapes=0)
+    assert offline[1][1] == "READY"  # replay needs no SEC email
+    en = ck.boot_top(False, link="off", warn=False, clock="TC 2026-10-07 · 02:24 UTC") + ck.boot_main(False, gated)
+    assert not _cjk(_text(en)) and "SELF-TEST" in en and "tc-l-red" not in en
+    assert "tc-l-red" in ck.boot_top(True, link="amber", warn=True, clock="TC")
+    zh = ck.boot_main(True, ok)
+    assert "灯明" in zh and zh.count("tc-post") == 7 and "tc-embx" in zh and 'class="tc-tile"' in zh
+
+
+def test_case_count_and_boot_setting(tmp_path):
+    store = CaseStore(tmp_path / "cases")
+    assert store.count() == 0
+    (tmp_path / "cases").mkdir()
+    (tmp_path / "cases" / ("a" * 32 + ".json")).write_text("{}", encoding="utf-8")
+    (tmp_path / "cases" / "notes.json").write_text("{}", encoding="utf-8")
+    assert store.count() == 1  # only files named like a case id; nothing is parsed
+    none = tmp_path / "missing.env"
+    assert load_settings(env={}, dotenv_path=none).boot_screen is True
+    assert load_settings(env={"TICKERCASE_BOOT_SCREEN": "0"}, dotenv_path=none).boot_screen is False
+    assert load_settings(env={"TICKERCASE_BOOT_SCREEN": "off"}, dotenv_path=none).boot_screen is False
 
 
 def _cfg(page: str) -> dict:

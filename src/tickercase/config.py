@@ -71,6 +71,7 @@ class Settings:
     market_min_interval_seconds: float = 0.5
     narrative_model: str = "claude-opus-5-5"
     narrative_effort: str = "medium"
+    boot_screen: bool = True  # the page opens on the start-up screen; TICKERCASE_BOOT_SCREEN=0 goes straight to the console
 
 
 def _path(value: str) -> Path:
@@ -103,4 +104,5 @@ def load_settings(env: Optional[Mapping[str, str]] = None, dotenv_path: Optional
         anthropic_api_key=(merged.get("ANTHROPIC_API_KEY") or "").strip() or None,
         narrative_model=(merged.get("TICKERCASE_NARRATIVE_MODEL") or "").strip() or "claude-opus-5-5",
         narrative_effort=effort,
+        boot_screen=(merged.get("TICKERCASE_BOOT_SCREEN") or "1").strip().lower() not in ("0", "false", "no", "off"),
     )

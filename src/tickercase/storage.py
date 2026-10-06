@@ -39,6 +39,12 @@ class CaseStore:
             raise
         return target
 
+    def count(self) -> int:
+        """Number of stored case files, without reading them."""
+        if not self.directory.is_dir():
+            return 0
+        return sum(1 for path in self.directory.glob("*.json") if CASE_ID_RE.match(path.stem))
+
     def list_cases(self) -> list[CaseResult]:
         """All readable stored cases, newest first. Unreadable or foreign files are skipped."""
         if not self.directory.is_dir():

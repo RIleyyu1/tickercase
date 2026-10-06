@@ -19,6 +19,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from tickercase import __version__
 from tickercase.config import REPO_ROOT, load_settings, write_env_value
 from tickercase.http_client import validate_user_agent
 from tickercase.models import VERDICT_DISPLAY_ZH, CaseResult, ClaimDraft, Confirmation, PlainReport, ReferenceSnapshot, Text
@@ -34,6 +35,11 @@ from tickercase.validation import ConfirmationError, confirm, confirmation_state
 # ------------------------------------------------------------------ text (zh, en)
 
 S = {
+    # start-up screen
+    "boot_enter": ("ENTER ▸ 进入控制台", "ENTER ▸ open the console"),
+    "boot_replay": ("⟲ 重播开机", "⟲ Replay start-up"),
+    "boot_note": ("也可以直接按 ↵。开机过程约 1.5 秒，每次打开页面时播放一次，任何时候都能直接进入。",
+                  "You can also press ↵. The start-up takes about 1.5 s, plays once each time the page opens, and can be skipped at any moment."),
     "language": ("语言", "Language"),
     "view": ("页面", "Page"), "view_new": ("CASE 观点", "CASE"), "view_history": ("HIST 历史", "HIST"),
     "tube": ("荧光颜色", "Phosphor"),
@@ -478,6 +484,8 @@ def _init_state() -> None:
     st.session_state.setdefault("lang", "zh")
     st.session_state.setdefault("view", "new")
     st.session_state.setdefault("tube", "grn")
+    st.session_state.setdefault("booted", False)  # the start-up screen shows once per session
+    st.session_state.setdefault("boot_n", 0)  # bumped by "replay": a new container key replays the start-up motion
     st.session_state.setdefault("page", "home")  # "home" (console) or "result" (report) inside the "new" view
     st.session_state.setdefault("ai_auto", False)
     st.session_state.setdefault("animated", set())  # case ids whose report has already played its first-view motion
@@ -740,6 +748,14 @@ def _go(page: str) -> None:
     st.session_state["page"] = page
 
 
+def _enter_console() -> None:
+    st.session_state["booted"] = True
+
+
+def _replay_boot() -> None:
+    st.session_state["boot_n"] += 1
+
+
 def _open_tape(case_id: str) -> None:
     st.session_state["view"] = "history"
     st.session_state["open_case"] = case_id
@@ -779,6 +795,33 @@ def show_msg(key: str, container=None) -> None:
     kind, (zh_text, en_text) = msg
     target = container or st
     {"success": target.success, "warning": target.warning, "error": target.error, "info": target.info}[kind](zh_text if zh() else en_text)
+
+
+# ------------------------------------------------------------------ start-up screen
+
+
+def view_boot() -> None:
+    """First page of a session: the console powers on (about 1.5 s of stepped motion), then ENTER opens it."""
+    z = zh()
+    mode = st.session_state["sec_mode"]
+    settings = get_service().settings
+    store = get_service().store
+    rows = ck.boot_rows(z, version=__version__, mode=mode, mode_label=MODES[mode][0 if z else 1], sec_set=not sec_gate(),
+                        ai_set=bool(settings.anthropic_api_key), tapes=store.count() if store is not None else 0)
+    link = ("amber" if sec_gate() else "green") if mode in ("live", "record") else "off"
+    st.html(ck.BOOT_CSS)
+    with st.container(key=f"boot-{st.session_state['boot_n']}"):
+        top, switch = st.columns([6, 1], vertical_alignment="center")
+        top.markdown(ck.boot_top(z, link=link, warn=sec_gate() and mode in ("live", "record"), clock=f"TC {get_service().now():%Y-%m-%d · %H:%M} UTC"),
+                     unsafe_allow_html=True)
+        switch.radio(t("language"), options=["zh", "en"], format_func=lambda x: "中" if x == "zh" else "EN", key="lang", horizontal=True,
+                     label_visibility="collapsed")
+        html_block(ck.boot_main(z, rows))
+        with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
+            st.button(t("boot_enter"), key="btn_boot_enter", type="primary", on_click=_enter_console, shortcut="Enter")
+            html_block(ck.para(t("boot_note"), "tc-bootnote"))
+            st.space("stretch")
+            st.button(t("boot_replay"), key="btn_boot_replay", on_click=_replay_boot)
 
 
 # ------------------------------------------------------------------ bridge and footer (every page)
@@ -1727,6 +1770,9 @@ def main() -> None:
     st.html(ck.CSS)
     if st.session_state["tube"] == "amb":
         st.html(ck.AMBER_CSS)
+    if not st.session_state["booted"] and get_service().settings.boot_screen:
+        view_boot()
+        return
     if st.session_state["view"] == "history":
         view_history()
     else:

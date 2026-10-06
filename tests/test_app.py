@@ -16,6 +16,7 @@ def app_env(tmp_path, monkeypatch):
     monkeypatch.setenv("TICKERCASE_SNAPSHOT_DIR", str(tmp_path / "snap"))
     monkeypatch.setenv("TICKERCASE_CASE_DIR", str(tmp_path / "cases"))
     monkeypatch.setenv("TICKERCASE_SEC_MODE", "live")
+    monkeypatch.setenv("TICKERCASE_BOOT_SCREEN", "0")  # these tests start on the console; the start-up screen has its own tests
     # the cached service must not leak between tests
     import streamlit as st
 
@@ -332,6 +333,36 @@ def test_tape_on_the_console_opens_its_report(app_env):
     assert at.session_state["view"] == "history"
     assert any("部分支持" in m.value for m in at.markdown)  # the report units of that tape
     assert any(b.key == f"btn_narrate_{case_id}" for b in at.button)
+
+
+def test_start_up_screen_comes_first_and_enter_opens_the_console(app_env, monkeypatch):
+    monkeypatch.setenv("TICKERCASE_BOOT_SCREEN", "1")
+    at = run(AppTest.from_file(APP))
+    keys = {b.key for b in at.button}
+    assert "btn_boot_enter" in keys and "btn_prefill" not in keys
+    page = " ".join(m.value for m in at.markdown)
+    assert "TICKERCASE" in page and "自检" in page and "0 盘" in page  # empty case store in the test folder
+    assert "未设置" in page and "受限" in page and "tc-l-red" in page  # live mode without an SEC email: the warning lamp is red
+    button(at, "btn_boot_replay").click()
+    run(at)
+    assert at.session_state["boot_n"] == 1 and any(b.key == "btn_boot_enter" for b in at.button)
+    button(at, "btn_boot_enter").click()
+    run(at)
+    keys = {b.key for b in at.button}
+    assert "btn_prefill" in keys and "btn_boot_enter" not in keys
+    run(at)  # the start-up screen shows once per session
+    assert not any(b.key == "btn_boot_enter" for b in at.button)
+
+
+def test_start_up_screen_in_english(app_env, monkeypatch):
+    monkeypatch.setenv("TICKERCASE_BOOT_SCREEN", "1")
+    at = run(AppTest.from_file(APP))
+    at.radio(key="lang").set_value("en")
+    run(at)
+    shown = [m.value for m in at.markdown] + [b.label for b in at.button] + [at.radio(key="lang").label]
+    assert any("SELF-TEST" in s for s in shown)
+    leaks = [s for s in shown if _cjk(s)]
+    assert not leaks, leaks[:3]
 
 
 def test_narrative_shows_current_language_and_reuse(app_env):
