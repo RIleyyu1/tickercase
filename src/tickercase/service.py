@@ -416,7 +416,7 @@ class CaseService:
         return self._finish(result)
 
     def _reusable_narrative(self, result: CaseResult, *, model: str, effort: str, language: str) -> Optional[Narrative]:
-        from .narrative import build_facts, cache_key
+        from .narrative import build_facts, cache_key, recheck
 
         facts = build_facts(result)
         if not facts:
@@ -424,11 +424,11 @@ class CaseService:
         key = cache_key(facts, model=model, effort=effort, language=language)
         own = result.narratives.get(language)
         if own is not None and own.status == "ok" and own.cache_key == key:
-            return own
+            return recheck(own)
         for other in self.store.list_cases() if self.store is not None else []:
             found = other.narratives.get(language)
             if other.case_id != result.case_id and found is not None and found.status == "ok" and found.cache_key == key:
-                return found.model_copy(update={"reused_from": other.case_id})
+                return recheck(found).model_copy(update={"reused_from": other.case_id})  # a reused narrative gets today's verdicts
         return None
 
     # ---------------------------------------------------------------- extraction

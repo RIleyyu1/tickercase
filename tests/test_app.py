@@ -386,3 +386,26 @@ def test_narrative_shows_current_language_and_reuse(app_env):
     run(at)
     page = "\n".join(str(m.value) for m in at.markdown) + "\n".join(str(c.value) for c in at.caption)
     assert "中文结论句" in page and "复用案例 aaaaaaaa" in page
+
+
+def test_stored_narrative_is_shown_with_todays_verdicts(app_env):
+    from datetime import datetime, timezone
+
+    from tickercase.models import Fact, Narrative, NarrativeSentence
+
+    at = run(AppTest.from_file(APP))
+    button(at, "btn_example_ps").click()
+    run(at)
+    button(at, "btn_confirm").click()
+    run(at)
+    button(at, "btn_run").click()
+    run(at)
+    facts = [Fact(id="F01", label_en="insider open-market sale value", label_zh="内部人卖出金额", value="1430996244.02", unit="USD")]
+    old = Narrative(status="ok", model="claude-opus-5-5", created_at=datetime(2026, 10, 5, tzinfo=timezone.utc), language="zh",
+                    sections={"divergences": [NarrativeSentence(zh="内部人卖出约 14.3 亿美元。", fact_ids=["F01"], status="unsupported",
+                                                                problems=["old rules"])]},
+                    facts=facts, total=1, verified=0, unsupported=1)
+    at.session_state["result"].narratives["zh"] = old
+    run(at)
+    page = " ".join(str(m.value) for m in at.markdown)
+    assert "1/1 句通过核对 · 0 句含无出处数字" in page and "已按当前核对规则重新核对（写成时为 0/1）" in page

@@ -23,7 +23,7 @@ from tickercase import __version__
 from tickercase.config import REPO_ROOT, load_settings, write_env_value
 from tickercase.http_client import validate_user_agent
 from tickercase.models import VERDICT_DISPLAY_ZH, CaseResult, ClaimDraft, Confirmation, PlainReport, ReferenceSnapshot, Text
-from tickercase.narrative import estimate_cost
+from tickercase.narrative import estimate_cost, recheck
 from tickercase.oracle import event_move, p_end_above, p_touch, scenario
 from tickercase.providers.options import iv_at
 from tickercase.service import CLAIM_TEXT_PREFIX, DEFAULT_PREFIX, CaseService
@@ -158,6 +158,7 @@ S = {
     "ai_summary": ("{ok}/{total} 句通过核对 · {bad} 句含无出处数字 · {model}", "{ok}/{total} sentences pass · {bad} with unsourced numbers · {model}"),
     "ai_usage": ("输入 {inp:,} · 输出 {out:,} token · 约 ${cost:.3f}", "{inp:,} input · {out:,} output tokens · about ${cost:.3f}"),
     "ai_reused": ("复用案例 {case} 中相同事实的叙述，这次没有调用 API", "Reused from case {case} with the same facts; no API call this time"),
+    "ai_rechecked": ("已按当前核对规则重新核对（写成时为 {ok}/{total}）", "checked again with today's rules (it scored {ok}/{total} when written)"),
     "ai_failed": ("AI 叙述未生成：", "AI narrative not written: "),
     "ai_facts": ("事实表与核对明细", "Fact table and check details"),
     "ai_legend": ("核 数字与引用的事实一致 · ○ 无数字的解释 · ⚠ 数字存在但引用了别的事实 · ✖ 数字找不到出处",
@@ -1575,6 +1576,10 @@ def render_nar(result: CaseResult, key_suffix: str, anim: bool) -> None:
     n = result.narratives.get(lang())
     if n is None and result.narrative is not None and result.narrative.language == "both":  # written before v0.8
         n = result.narrative
+    stored = n
+    if n is not None:
+        n = recheck(n)  # stored verdicts can predate today's rules; checking again costs no API call
+    rechecked = n is not None and stored is not None and (n.verified, n.unsupported) != (stored.verified, stored.unsupported)
     settings = get_service().settings
     model_kw = dict(model=settings.narrative_model, effort=settings.narrative_effort)
     if n is None or n.status != "ok":
@@ -1593,6 +1598,8 @@ def render_nar(result: CaseResult, key_suffix: str, anim: bool) -> None:
         st.caption(t("ai_button_help", **model_kw))
         return
     summary = t("ai_summary", ok=n.verified, total=n.total, bad=n.unsupported, model=n.model + (f" · effort {n.effort}" if n.effort else ""))
+    if rechecked:
+        summary += " · " + t("ai_rechecked", ok=stored.verified, total=stored.total)
     cost = estimate_cost(n.model, n.usage)
     if n.reused_from:
         summary += " · " + t("ai_reused", case=n.reused_from[:8])

@@ -5,8 +5,11 @@
 2. ``write_narrative`` asks Claude for a narrative in one language as structured
    JSON: sections of sentences, each listing the fact ids it relies on.
 3. ``verify`` checks every number in every sentence against the facts it cites
-   (allowing the unit changes a writer makes: %, 亿, 万亿, B, M, x). A number
+   (allowing the unit changes a writer makes: %, 亿, 万亿, B, M, billion, x, and a
+   loss or fall written as a positive amount when the sentence says so). A number
    with no matching fact marks the sentence "unsupported"; the page shows it.
+4. ``recheck`` runs the same check again on a stored narrative, so a narrative
+   written under older rules is shown with today's verdicts.
 
 The model only phrases and connects the facts. It may not introduce numbers,
 and the verifier makes any it does introduce visible.
@@ -202,6 +205,9 @@ SCALES = {"万亿": Decimal("1e12"), "亿": Decimal("1e8"), "万": Decimal("1e4"
           "thousand": Decimal("1e3"), "million": Decimal("1e6"), "billion": Decimal("1e9"), "trillion": Decimal("1e12")}
 # the claim itself (target, horizon, date): every sentence may use these numbers without citing them
 CONTEXT_LABELS = ("claim", "target price", "horizon", "target date")
+# words that say a number is a loss or a fall; with one of them a sentence may give a negative fact as a positive amount
+NEGATIVE_WORDS = re.compile(r"\b(?:loss(?:es)?|lost|losing|deficit|declin\w*|fell|fall(?:s|ing)?|drop(?:s|ped|ping)?|down|lower|"
+                            r"shr[iau]nk\w*|decreas\w*|negative|minus)\b|亏损|亏|下降|下跌|跌|减少|缩减|萎缩|回落|为负|负值", re.IGNORECASE)
 
 
 def numbers_in(text: str) -> list[tuple[str, Decimal, str]]:
@@ -231,7 +237,11 @@ def _fact_numbers(fact: Fact) -> list[Decimal]:
     return values
 
 
-def _matches(value: Decimal, unit: str, candidates: list[Decimal]) -> bool:
+def _matches(value: Decimal, unit: str, candidates: list[Decimal], magnitudes: bool = False) -> bool:
+    """True when the written number fits one of the candidates. With magnitudes, a negative candidate also
+    matches its size written as a positive amount ("a net loss of 1.83亿" for net income -183,000,000)."""
+    if magnitudes:
+        candidates = candidates + [-c for c in candidates if c < 0]
     if unit in SCALES:
         forms = [value * SCALES[unit]]
     elif unit == "%":
@@ -266,11 +276,12 @@ def verify(sentences: list[NarrativeSentence], facts: list[Fact]) -> None:
         found_any = False
         elsewhere = False
         for text in (s.zh, s.en):
+            loss_words = bool(NEGATIVE_WORDS.search(text))
             for raw, value, unit in numbers_in(text):
                 found_any = True
-                if _matches(value, unit, cited):
+                if _matches(value, unit, cited, loss_words):
                     continue
-                if _matches(value, unit, all_numbers):
+                if _matches(value, unit, all_numbers, loss_words):
                     elsewhere = True
                     problems.append(f"{raw}: matches a fact the sentence does not cite")
                 else:
@@ -284,6 +295,27 @@ def verify(sentences: list[NarrativeSentence], facts: list[Fact]) -> None:
             s.status = "verified"
         else:
             s.status = "qualitative"
+
+
+def _counts(sections: dict[str, list[NarrativeSentence]]) -> dict[str, int]:
+    flat = [s for v in sections.values() for s in v]
+    return {"total": len(flat), "verified": sum(1 for s in flat if s.status in ("verified", "qualitative")),
+            "unsupported": sum(1 for s in flat if s.status == "unsupported")}
+
+
+def recheck(narrative: Narrative) -> Narrative:
+    """The narrative with every sentence checked again by today's rules against its own fact table.
+
+    Verdicts are stored when a narrative is written, so an older narrative keeps the verdicts of older rules
+    (before v0.8 the check did not read million/billion/trillion and made every sentence cite the claim's own
+    numbers). Checking again costs no API call and gives the same answer for the same rules.
+    """
+    if narrative.status != "ok" or not narrative.facts:
+        return narrative
+    sections = {k: [s.model_copy(update={"problems": []}) for s in v] for k, v in narrative.sections.items()}
+    for sentences in sections.values():
+        verify(sentences, narrative.facts)
+    return narrative.model_copy(update={"sections": sections, **_counts(sections)})
 
 
 # ------------------------------------------------------------------ Claude call
@@ -359,7 +391,4 @@ def write_narrative(result: CaseResult, *, client: Any, now: Callable[[], dateti
     sections = {name: [NarrativeSentence(**{language: s.text}, fact_ids=s.fact_ids) for s in getattr(parsed, name)] for name in SECTIONS}
     for sentences in sections.values():
         verify(sentences, facts)
-    flat = [s for v in sections.values() for s in v]
-    return Narrative(status="ok", sections=sections, total=len(flat),
-                     verified=sum(1 for s in flat if s.status in ("verified", "qualitative")),
-                     unsupported=sum(1 for s in flat if s.status == "unsupported"), **base)
+    return Narrative(status="ok", sections=sections, **_counts(sections), **base)

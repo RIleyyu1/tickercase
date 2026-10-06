@@ -159,3 +159,55 @@ def test_verifier_reads_english_scale_words_labels_sources_and_claim_context():
     ]
     verify(sentences, facts)
     assert [s.status for s in sentences] == ["verified", "verified", "verified", "unsupported"]
+
+
+def test_verifier_reads_losses_and_falls_written_as_positive_amounts():
+    from tickercase.models import Fact, NarrativeSentence
+    from tickercase.narrative import verify
+
+    facts = [
+        Fact(id="F01", label_en="annual net income FY ending 2024-12-31", label_zh="年净利润（截至 2024-12-31）", value="-182600000", unit="USD"),
+        Fact(id="F02", label_en="E1 reported annual change", label_zh="E1 已披露年变化", value="-0.17"),
+    ]
+    sentences = [
+        NarrativeSentence(zh="公司仍在亏损，净亏损约 1.83 亿美元。", fact_ids=["F01"]),
+        NarrativeSentence(en="Revenue fell 17% a year.", fact_ids=["F02"]),
+        NarrativeSentence(en="Net income was $182.6 million.", fact_ids=["F01"]),  # no loss word: the sign must match
+        NarrativeSentence(en="Revenue grew 17% a year.", fact_ids=["F02"]),  # the wrong direction stays flagged
+    ]
+    verify(sentences, facts)
+    assert [s.status for s in sentences] == ["verified", "verified", "unsupported", "unsupported"]
+
+
+def test_recheck_gives_older_narratives_todays_verdicts():
+    from datetime import datetime, timezone
+
+    from tickercase.models import Fact, Narrative, NarrativeSentence
+    from tickercase.narrative import recheck
+
+    facts = [Fact(id="F01", label_en="target price", label_zh="目标价", value="300", source="claim"),
+             Fact(id="F02", label_en="insider open-market sale value", label_zh="内部人卖出金额", value="1430996244.02", unit="USD")]
+    stale = [NarrativeSentence(en="Insiders sold about $1.43 billion; the claim is $300.", fact_ids=["F02"], status="unsupported",
+                               problems=["1.43: no matching fact", "300: matches a fact the sentence does not cite"])]
+    old = Narrative(status="ok", model="claude-opus-5-5", created_at=datetime(2026, 10, 5, tzinfo=timezone.utc), language="en",
+                    sections={"divergences": stale}, facts=facts, total=1, verified=0, unsupported=1)
+    new = recheck(old)
+    assert (new.verified, new.unsupported, new.total) == (1, 0, 1)
+    assert new.sections["divergences"][0].status == "verified" and not new.sections["divergences"][0].problems
+    assert old.sections["divergences"][0].status == "unsupported"  # the stored narrative itself is not changed
+    assert recheck(old.model_copy(update={"facts": []})) is not None and recheck(old.model_copy(update={"status": "error"})).verified == 0
+
+
+def test_reused_narrative_is_checked_again(case):
+    svc, result = case
+    target = _fact(build_facts(result), "target price")
+    payload = {name: [] for name in SECTIONS}
+    payload["conclusion"] = [{"text": f"目标价 {target.value}。", "fact_ids": [target.id]}]
+    svc.narrate(result, client=FakeClient(payload))
+    stored = result.narratives["zh"]
+    stale = stored.model_copy(update={"verified": 0, "unsupported": 1, "sections": {
+        "conclusion": [stored.sections["conclusion"][0].model_copy(update={"status": "unsupported", "problems": ["old rules"]})]}})
+    result.narratives["zh"] = stale
+    again = FakeClient(payload)
+    svc.narrate(result, client=again)  # same facts: reused without a call, but with today's verdicts
+    assert again.calls == [] and result.narratives["zh"].verified == 1 and result.narratives["zh"].unsupported == 0
