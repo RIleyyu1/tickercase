@@ -8,6 +8,10 @@ provider error and no other price source is substituted.
 
 Volatility is the sample standard deviation of daily log returns of the
 adjusted close, scaled by sqrt(252). It describes the past, not the future.
+
+When the response carries open, high, low and volume, the same bars are kept as
+candles for the K-line chart (daily, weekly and monthly, aggregated here). A
+response with closes only gives no candles; nothing is filled in.
 """
 
 from __future__ import annotations
@@ -18,12 +22,13 @@ from decimal import Decimal
 from typing import Any, Mapping, Optional
 
 from ..http_client import FetchedJson, JsonFetcher
-from ..models import MarketSnapshot, PricePoint
+from ..models import Candle, KLine, MarketSnapshot, PricePoint
 from .base import Provider, ProviderError, ProviderParseError
 
 CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=5y&interval=1d"
 TRADING_DAYS = 252
 MIN_RETURNS_FOR_VOLATILITY = 60
+KLINE_DAYS, KLINE_WEEKS, KLINE_MONTHS = 130, 110, 61
 
 
 def yahoo_symbol(ticker: str) -> str:
@@ -50,6 +55,43 @@ def annualized_volatility(closes: list[float]) -> Optional[float]:
     mean = sum(returns) / len(returns)
     var = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
     return math.sqrt(var) * math.sqrt(TRADING_DAYS)
+
+
+def _volume(value: Any) -> Optional[int]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        return None
+    return int(value)
+
+
+def _bar(day: date, o: float, h: float, low: float, c: float, v: Optional[int]) -> Candle:
+    return Candle(day=day, open=round(o, 4), high=round(h, 4), low=round(low, 4), close=round(c, 4), volume=v)
+
+
+def aggregate(bars: list[Candle], key) -> list[Candle]:
+    """Group consecutive daily bars by key (ISO week or month): first open, highest high, lowest low, last close, summed volume."""
+    out: list[Candle] = []
+    group: list[Candle] = []
+    for bar in bars:
+        if group and key(bar.day) != key(group[-1].day):
+            out.append(_merge(group))
+            group = []
+        group.append(bar)
+    if group:
+        out.append(_merge(group))
+    return out
+
+
+def _merge(group: list[Candle]) -> Candle:
+    vols = [b.volume for b in group if b.volume is not None]
+    return _bar(group[-1].day, group[0].open, max(b.high for b in group), min(b.low for b in group), group[-1].close,
+                sum(vols) if vols else None)
+
+
+def build_kline(bars: list[Candle]) -> Optional[KLine]:
+    if not bars:
+        return None
+    return KLine(daily=bars[-KLINE_DAYS:], weekly=aggregate(bars, lambda d: d.isocalendar()[:2])[-KLINE_WEEKS:],
+                 monthly=aggregate(bars, lambda d: (d.year, d.month))[-KLINE_MONTHS:])
 
 
 class YahooChartProvider(Provider):
@@ -96,7 +138,10 @@ class YahooChartProvider(Provider):
             adjcloses = closes
         offset = meta.get("gmtoffset") if isinstance(meta.get("gmtoffset"), int) else 0
 
+        opens, highs, lows, vols = (quote.get(k) if isinstance(quote, Mapping) else None for k in ("open", "high", "low", "volume"))
+        has_ohlc = all(isinstance(x, list) and len(x) == len(stamps) for x in (opens, highs, lows))
         rows: list[tuple[date, float, float]] = []
+        bars: list[Candle] = []
         for i, ts in enumerate(stamps):
             if isinstance(ts, bool) or not isinstance(ts, int) or i >= len(closes):
                 continue
@@ -105,6 +150,11 @@ class YahooChartProvider(Provider):
                 continue
             day = (datetime.fromtimestamp(ts, tz=timezone.utc) + timedelta(seconds=offset)).date()
             rows.append((day, close, adj_close or close))
+            if has_ohlc:
+                o, h, low = _num(opens[i]), _num(highs[i]), _num(lows[i])
+                if None not in (o, h, low) and low <= min(o, close) and h >= max(o, close):
+                    v = _volume(vols[i]) if isinstance(vols, list) and i < len(vols) else None
+                    bars.append(_bar(day, o, h, low, close, v))
         if not rows:
             raise ProviderError("no_prices", f"quote source returned no usable closing prices for '{symbol}'", url=url)
 
@@ -125,6 +175,7 @@ class YahooChartProvider(Provider):
             annualized_volatility=Decimal(str(round(vol, 6))) if vol is not None else None,
             volatility_window=f"daily log returns of adjusted close, {rows[0][0]} to {last_day} ({len(rows) - 1} returns)",
             price_series=[PricePoint(day=d, close=_plain(c, 4)) for d, c, _ in weekly],
+            kline=build_kline(bars),
             source_url=url,
             retrieved_at=fetched.retrieved_at,
             source_captured_at=fetched.source_captured_at,

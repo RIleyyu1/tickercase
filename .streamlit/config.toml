@@ -1,49 +1,36 @@
+# Cockpit look (v0.9): one dark theme; the casing, panels and screens are drawn by the page CSS (tickercase/ui/cockpit.py).
 [theme]
-font = "sans-serif"
-baseRadius = "0.6rem"
+base = "dark"
+# labels and keys in IBM Plex Mono, Chinese in Noto Serif SC (both Google Fonts, OFL). Streamlit takes one source URL
+# per property, so the body font loads IBM Plex Mono and the heading font loads Noto Serif SC; the body falls back to it.
+font = "'IBM Plex Mono', 'Noto Serif SC', monospace:https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
+headingFont = "'Noto Serif SC', serif:https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700;900&display=swap"
+codeFont = "'IBM Plex Mono', monospace"
+baseRadius = "0rem"
 showWidgetBorder = true
+primaryColor = "#C49A4A"
+backgroundColor = "#1C1A17"
+secondaryBackgroundColor = "#2F2C29"
+textColor = "#E3DAC0"
+linkColor = "#FFB23E"
+redColor = "#D9392C"
+orangeColor = "#C49A4A"
+yellowColor = "#FFB23E"
+greenColor = "#74FF9A"
+blueColor = "#5E7279"
 
-[theme.light]
-primaryColor = "#4c6a92"
-backgroundColor = "#f7f6f3"
-secondaryBackgroundColor = "#efede8"
-textColor = "#23262b"
-linkColor = "#4c6a92"
-redColor = "#a35f68"
-orangeColor = "#b07a4a"
-yellowColor = "#a8844a"
-greenColor = "#5b8a6a"
-blueColor = "#4c6a92"
-redBackgroundColor = "#f6ecec"
-orangeBackgroundColor = "#f6eee6"
-yellowBackgroundColor = "#f6f1e4"
-greenBackgroundColor = "#e9f1eb"
-blueBackgroundColor = "#e9eef5"
-redTextColor = "#8e4a53"
-yellowTextColor = "#7f6230"
-greenTextColor = "#466f53"
-blueTextColor = "#3d5a80"
+# screen fonts, served from ./static (both OFL; licences next to the files)
+[[theme.fontFaces]]
+family = "FusionPixel"
+url = "app/static/fonts/fusion-pixel-12px-monospaced-zh_hans.otf.woff2"
 
-[theme.dark]
-primaryColor = "#8aa6cc"
-backgroundColor = "#16181c"
-secondaryBackgroundColor = "#1f2228"
-textColor = "#e6e4df"
-linkColor = "#8aa6cc"
-redColor = "#cf8f97"
-orangeColor = "#d2a07a"
-yellowColor = "#cfae78"
-greenColor = "#8fb89a"
-blueColor = "#8aa6cc"
-redBackgroundColor = "#352629"
-orangeBackgroundColor = "#352c24"
-yellowBackgroundColor = "#332e22"
-greenBackgroundColor = "#233027"
-blueBackgroundColor = "#232c38"
-redTextColor = "#e0aab0"
-yellowTextColor = "#e0c695"
-greenTextColor = "#a9cdb2"
-blueTextColor = "#aac0de"
+[[theme.fontFaces]]
+family = "VT323"
+url = "app/static/fonts/VT323-Regular.woff2"
+
+[server]
+# fonts and textures under ./static, served at /app/static/
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false

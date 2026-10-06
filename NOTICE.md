@@ -22,3 +22,12 @@ Used as an engineering reference only (architecture and testing approach, no cop
 | `src/tickercase/probability.py` | the reference's probability-oriented reporting | showing a probability next to the analysis | a lognormal model output under user assumptions, kept outside the verdict; no market-implied probabilities |
 
 Not adopted: price-signal-only methodology and probability as the main output (TickerCase keeps the evidence-as-of verdict of its operational concept), multi-provider fan-out, `gather` concurrency (its timeout does not stop running threads; this version has a single dependent call chain), proxy rotation, and the reference's SKILL.md installation steps.
+
+## Fonts (SIL Open Font License 1.1)
+
+Bundled in `static/fonts` with their licence files, unmodified:
+
+- Fusion Pixel Font, 12px monospaced, Simplified Chinese build (`fusion-pixel-12px-monospaced-zh_hans.otf.woff2`): Copyright (c) 2022, TakWolf, https://github.com/TakWolf/fusion-pixel-font. Licence: `static/fonts/OFL-FusionPixel.txt`.
+- VT323, Latin subset (`VT323-Regular.woff2`): Copyright 2011, The VT323 Project Authors. Licence: `static/fonts/OFL-VT323.txt`.
+
+IBM Plex Mono and Noto Serif SC are loaded from Google Fonts at run time (both OFL) and are not bundled.

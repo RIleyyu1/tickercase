@@ -13,6 +13,15 @@
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## Console page and K-line (v0.9)
+
+The page is redrawn as a cassette-futurist console (design "驾驶舱 v1.1"). Logic, inputs, stored cases, the API and the CLI are unchanged.
+
+- **Two pages.** The console: the claim box (UNIT 01 · CLM) with READ; the system unit (data source, SEC contact email, Claude key, and an optional "write the narrative after each RUN", off by default); the check-and-confirm unit (UNIT 02 · CNF), where every input shows where it came from (✎ claim, ⓘ public data, ◇ default assumption, · typed by you) and ARM confirms; the eight data channels and four methods a case uses; the three most recent tapes. RUN shows each data step on a pipeline screen, then opens the report: a status bar that stays on screen (range, the other condition, warnings, jump keys), the claim (UNIT 01), the K-line (02), the probability screen with the four method strips (03), the eight source readings (04), the report as five channels (05: report, scenario, levels and methods, fundamentals, raw data), signals and the fundamentals verdict (06), and the AI narrative printed on continuous paper (07). "◀ NEW" returns to the console with every input kept; an edit there makes the report stale (it stays under HIST).
+- **K-line.** The daily price request now keeps open, high, low and volume as well (no extra request) and builds daily (about 6 months), weekly (2 years) and monthly (5 years) candles, stored as `MarketSnapshot.kline`. The chart has a timeframe switch, a cursor (hover or ◀ ▶), the target line and a zone up to the deadline that holds only the computed probabilities, never a forecast path. Up bars are hollow and down bars solid, so red is not used for prices. A source with closes only, and cases saved before v0.9, get a close line instead.
+- **Rules of the look.** Light only inside screens (phosphor green, or amber with the GRN / AMB switch); cel shading only on hardware; red only for system warnings (failed sources, filing coverage gaps), while market divergences are amber; motion in steps, only on the first view of a new report, and off under reduced motion. Fonts: Fusion Pixel 12px and VT323 (both OFL, in `static/fonts`), IBM Plex Mono and Noto Serif SC (Google Fonts). On narrow screens the units stack and the data bus folds away.
+- **Where.** `src/tickercase/ui/cockpit.py` holds the page CSS and the HTML of each unit, `src/tickercase/ui/kline.py` the chart page; native widgets keep their keys and are only restyled.
+
 ## Fewer tokens for the AI narrative (v0.8)
 
 The data never needed a model: every source is a plain HTTP fetch and every probability is computed by code. The only paid call is the optional AI narrative, and v0.8 makes it cheaper:
@@ -35,7 +44,7 @@ A live RKLB run ("RKLB 3年内脉冲到200") fetches all eleven steps plus the t
 
 On the result page, "生成 AI 叙述" (Write AI narrative) makes one call to Claude (since v0.8: model and effort from settings, one language per call; structured JSON output, server-side refusal fallback `fallbacks: "default"`). Claude receives only a numbered fact table built from the case (every value fetched or computed, with its source) and returns six sections (core logic, agreeing signals, divergences, conclusion, upside, downside), each sentence with the fact ids it uses. `narrative.verify` then checks every number in every sentence against the cited facts, allowing unit changes and rounding (%, 亿, 万亿, B, M): ✔ matches, ○ no numbers, ⚠ the number exists but under another fact, ✖ the number has no source. The counts and the token cost are shown with the narrative and stored in the case.
 
-Setup: put `ANTHROPIC_API_KEY` in `.env` (the sidebar form does this), or log in with `ant auth login`. The call is billed per token (Claude Opus 5.5: $4 / $20 per million input / output tokens); one narrative typically uses a few thousand input and output tokens. The narrative is only written when the button is pressed. Without a key the page reports "not configured" and everything else works.
+Setup: put `ANTHROPIC_API_KEY` in `.env` (the SYS unit on the console does this), or log in with `ant auth login`. The call is billed per token (Claude Opus 5.5: $4 / $20 per million input / output tokens); one narrative typically uses a few thousand input and output tokens. The narrative is only written when the button is pressed. Without a key the page reports "not configured" and everything else works.
 
 TickerCase turns a stock claim ("SYNT will be $100 in five years") into an inspectable investment case: explicit assumptions, reproducible numbers, dated public evidence, an evidence-as-of verdict and the conditions that should trigger a new review. It follows UC.1 *Evaluate a Stock Claim* from the Team 12 operational concept.
 
@@ -79,9 +88,9 @@ Page:
 streamlit run app.py
 ```
 
-The page is in Chinese and English (switch in the sidebar). In the sidebar click "合成示例 · P/S" (or P/E), then "确认以上输入", then "运行评估". The examples use the fictional company `SYNT` and synthetic data.
+The page is in Chinese and English (中 / EN on the bridge at the top). On the console press "EX-1 合成示例 P/S" (or EX-2 for P/E), then "ARM 确认输入", then "RUN 生成报告". The examples use the fictional company `SYNT` and synthetic data.
 
-For a real company choose `live`. If no SEC contact is configured, the sidebar asks for an email and saves `SEC_USER_AGENT` to the local `.env`. Fill in the claim box, click "补全其余项" (Fill in the rest), check the values and default assumptions, confirm and run. After a run the inputs collapse into a one-line summary above the case. Past cases are listed under "历史 · History", where two or more can be compared side by side.
+For a real company choose LIVE in the SYS unit. If no SEC contact is configured, the SYS unit asks for an email and saves `SEC_USER_AGENT` to the local `.env`. Write the claim, press READ, check the values and their sources in UNIT 02, then ARM and RUN. "◀ NEW" goes back to the console. Past cases are under HIST, where two or more can be compared side by side; ▶ PLAY on a tape on the console opens one directly.
 
 API:
 
@@ -145,7 +154,7 @@ Acceptance example (synthetic): reference 50, target 100, 5 years, 100,000,000 t
 | --- | --- | --- | --- |
 | SEC EDGAR submissions `data.sec.gov/submissions` | 10-K / 10-Q / 8-K filing list, links | free, no key | requires a User-Agent with contact email (`SEC_USER_AGENT`); max 10 requests/s |
 | SEC XBRL company facts `data.sec.gov/api/xbrl/companyfacts` | annual revenue, annual net income, shares outstanding | free, no key | same User-Agent rule; reported values as tagged by the filer |
-| Yahoo Finance chart `query1.finance.yahoo.com/v8/finance/chart` | daily and monthly closes, historical volatility, ^TNX, SPY, QQQ | free, no key | unofficial endpoint without published terms or service guarantee; may rate-limit; sent with `TickerCase/0.2` as User-Agent, no email |
+| Yahoo Finance chart `query1.finance.yahoo.com/v8/finance/chart` | daily and monthly closes, K-line candles (from the same response), historical volatility, ^TNX, SPY, QQQ | free, no key | unofficial endpoint without published terms or service guarantee; may rate-limit; sent with `TickerCase/0.2` as User-Agent, no email |
 | Yahoo Finance options `query2.finance.yahoo.com/v7/finance/options` | option chains, implied volatility | free, no key | needs a session cookie and crumb (handled by `YahooAuthedClient`); unofficial |
 | SEC XBRL frames `data.sec.gov/api/xbrl/frames` | revenue / net income of all filers for a calendar year | free, no key | SEC User-Agent rule |
 | SEC Archives Form 4 XML | insider transactions | free, no key | SEC User-Agent rule; at most 40 filings per run |
@@ -206,7 +215,11 @@ Statuses: `evaluated`, `evaluated_with_provider_errors`, `blocked_invalid_input`
 ## Layout
 
 ```
-app.py                              Streamlit page
+app.py                              Streamlit page (console and report)
+src/tickercase/ui/cockpit.py        console look: page CSS and the HTML of each unit
+src/tickercase/ui/kline.py          K-line chart page (iframe)
+static/                             screen fonts (OFL) and textures, served at /app/static
+.streamlit/config.toml              theme, fonts and static file serving
 src/tickercase/models.py            typed inputs, results, evidence, verdict
 src/tickercase/validation.py        validation, missing fields, confirmation fingerprint
 src/tickercase/calculations.py      pure Decimal calculations

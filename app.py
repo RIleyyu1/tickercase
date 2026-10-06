@@ -1,15 +1,16 @@
 """TickerCase Streamlit page: one claim sentence -> public data -> probability report with layered evidence.
 
 Run: streamlit run app.py
-The page is either Chinese or English; the switch is at the top of the sidebar.
+One script, two pages laid out as a console (v0.9): the console page (write the claim, check and confirm
+every input, see which data and methods are used) and the report page (status bar, claim, K-line,
+probability, data readings, report channels, signals, narrative). The page is either Chinese or English;
+the switch is on the bridge at the top. The look lives in tickercase/ui.
 """
 
 from __future__ import annotations
 
-import html
 import json
-import math
-from datetime import date, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Optional
@@ -22,47 +23,52 @@ from tickercase.config import REPO_ROOT, load_settings, write_env_value
 from tickercase.http_client import validate_user_agent
 from tickercase.models import VERDICT_DISPLAY_ZH, CaseResult, ClaimDraft, Confirmation, PlainReport, ReferenceSnapshot, Text
 from tickercase.narrative import estimate_cost
-from tickercase.oracle import MIN_INDEPENDENT_WINDOWS, event_move, independent_windows, p_end_above, p_touch, scenario
+from tickercase.oracle import event_move, p_end_above, p_touch, scenario
 from tickercase.providers.options import iv_at
 from tickercase.service import CLAIM_TEXT_PREFIX, DEFAULT_PREFIX, CaseService
 from tickercase.storage import CaseStore
+from tickercase.ui import cockpit as ck
+from tickercase.ui.kline import kline_html
 from tickercase.validation import ConfirmationError, confirm, confirmation_state, fingerprint, validate_draft
 
 # ------------------------------------------------------------------ text (zh, en)
 
 S = {
-    "tagline": ("写一句股票观点，得到可追溯的概率报告：多种方法分别计算，每个数字都有来源。",
-                "Write one sentence about a stock and get a traceable probability report: several methods, every number sourced."),
     "language": ("语言", "Language"),
-    "view": ("页面", "Page"), "view_new": ("新建报告", "New report"), "view_history": ("历史报告", "Past reports"),
-    "mode": ("数据来源", "Data source"),
+    "view": ("页面", "Page"), "view_new": ("CASE 观点", "CASE"), "view_history": ("HIST 历史", "HIST"),
+    "tube": ("荧光颜色", "Phosphor"),
+    "back_new": ("◀ NEW 新观点", "◀ NEW claim"),
+    "data_chip": ("数据源", "DATA"),
+    "mode": ("DATA · 数据源模式", "DATA · data source"),
     "mode_help": ("实时数据会请求 SEC、行情和期权接口；合成示例使用虚构公司 SYNT 的数据。", "Live calls SEC, quote and option sources; the synthetic example uses the fictional company SYNT."),
-    "settings": ("设置", "Settings"),
-    "examples": ("示例", "Examples"), "ex_ps": ("合成示例（P/S）", "Synthetic example (P/S)"), "ex_pe": ("合成示例（P/E）", "Synthetic example (P/E)"),
-    "clear": ("清空", "Clear"), "no_advice": ("不执行交易，不构成投资建议。", "No trading. Not investment advice."),
-    "sec_setup": ("SEC 联系邮箱", "SEC contact email"),
-    "sec_missing": ("实时读取 SEC 数据需要一个联系邮箱（SEC 规定，只发送给 SEC），保存在本机 .env。",
-                    "Live SEC requests need a contact email (SEC rule; sent only to SEC). It is saved to the local .env file."),
-    "sec_email": ("你的邮箱", "Your email"), "sec_save": ("保存", "Save"),
+    "ex_ps": ("EX-1 合成示例 P/S", "EX-1 · synthetic P/S"), "ex_pe": ("EX-2 合成示例 P/E", "EX-2 · synthetic P/E"),
+    "clear": ("CLR 清除", "CLR · clear"),
+    "sec_setup": ("SEC · 联系邮箱", "SEC · contact email"),
+    "sec_missing": ("实时读取 SEC 数据需要一个联系邮箱（SEC 规定，只发送给 SEC），保存在本机 .env。设置之前，READ 和 RUN 只能用回放或示例数据。",
+                    "Live SEC requests need a contact email (SEC rule; sent only to SEC). It is saved to the local .env file. Until then READ and RUN can only use replay or example data."),
+    "sec_email": ("你的邮箱", "Your email"), "sec_save": ("SAVE 保存", "SAVE"),
     "sec_saved": ("已保存。", "Saved."), "sec_ok": ("SEC 联系邮箱已设置", "SEC contact email is set"),
     "sec_bad": ("请输入有效邮箱。", "Enter a valid email."),
-    "ai_setup": ("Claude API（AI 叙述）", "Claude API (AI narrative)"),
+    "ai_setup": ("NAR · AI 叙述", "NAR · AI narrative"),
+    "ai_optional": ("可选。把事实表写成文字，数字逐一核对；调用 Claude，按用量计费。", "Optional. Writes the fact table up as text and checks every number; one Claude call, billed by usage."),
     "ai_missing": ("填写 Anthropic API key 后可生成 AI 叙述。key 只保存在本机 .env。", "Enter an Anthropic API key to write the AI narrative. It is stored only in the local .env."),
     "ai_ok": ("Claude API key 已设置", "Claude API key is set"),
-    "ai_key": ("API key", "API key"), "ai_save": ("保存 key", "Save key"),
-    # input
-    "s1": ("你的观点", "Your claim"),
-    "s1_hint": ("写一句话即可，例如「RKLB 3 年内冲到 200」或「NVDA will hit $300 in 3 years」，然后点「识别并补全」。",
-                "One sentence is enough, e.g. “NVDA will hit $300 in 3 years” or “RKLB to $200 within 3 years”, then click “Read and fill in”."),
-    "prefill": ("识别并补全", "Read and fill in"),
-    "prefill_help": ("从句子里读出代码、目标价、时间和条件，再用公开数据补全价格、股本和财务数据。",
-                     "Reads ticker, target, time and condition from the sentence, then fills price, shares and financials from public data."),
+    "ai_key": ("API key", "API key"), "ai_save": ("SAVE 保存 key", "SAVE key"),
+    "ai_auto": ("RUN 后自动生成叙述", "Write the narrative after each RUN"),
+    "ai_auto_help": ("开启后，每次生成报告都会写一次当前语言的叙述（相同事实直接复用，不再调用）。默认关闭。",
+                     "When on, each report also gets a narrative in the current language (the same facts are reused without a call). Off by default."),
+    "no_advice": ("不执行交易，不构成投资建议。", "No trading. Not investment advice."),
+    # console: claim input
+    "u_clm": ("UNIT 01 · CLM 观点输入", "UNIT 01 · CLM claim input"),
+    "clm_flow": ("READ 识别 → UNIT 02 核对确认 → RUN 生成报告", "READ → UNIT 02 check and confirm → RUN"),
+    "prefill": ("READ 识别并补全 ↵", "READ · read and fill in ↵"),
+    "prefill_help": ("从句子里读出代码、目标价、时间和条件，再用公开数据补全价格、股本和财务数据。改了句子就再按一次。",
+                     "Reads ticker, target, time and condition from the sentence, then fills price, shares and financials from public data. Press again after editing the sentence."),
     "need_text": ("先写一句观点。", "Write the claim first."),
     "need_ticker": ("先填写股票代码。", "Enter a ticker first."),
     "recognized": ("从原文识别：{items}", "Read from the claim: {items}"),
     "recognized_none": ("没有从原文识别出代码、目标价或时间。", "Nothing could be read from the claim."),
     "multiple_target": ("目标价 = 参考价 {ref} × {x}（原文「{text}」）", "Target = reference {ref} × {x} (from “{text}”)"),
-    "detail_fields": ("识别结果（可以直接修改）", "What was read (edit if needed)"),
     "condition": ("怎样算实现", "What counts as coming true"),
     "condition_help": ("期间触及：截止日前任何一天达到目标价就算，适合「冲到」「脉冲」这类说法。到期站上：截止日当天仍在目标价以上。",
                        "Touch: reaching the target on any day before the deadline counts, as in “spike to”. On the date: still at or above the target on the deadline."),
@@ -71,10 +77,17 @@ S = {
     "defaults_used": ("默认假设：{items}。可在下方修改。", "Default assumptions: {items}. You can change them below."),
     "not_fetched": ("未取到：{errors}", "Not fetched: {errors}"),
     "nothing_fetched": ("没有取到公开数据。{errors}", "No public data fetched. {errors}"),
-    "rest": ("其余输入：价格、股本、估值假设", "Other inputs: price, shares, valuation assumptions"),
-    "price_box": ("价格与股本", "Price and shares"), "val_box": ("估值", "Valuation"),
-    "extra_box": ("申报范围与附加项", "Filing window and extras"),
-    "prob_note": ("漂移率和波动率只用于「原始数据」里的旧版概率参考，不影响首页概率。", "Drift and volatility only feed the older model reference under “Raw data”; the headline probability does not use them."),
+    # console: check and confirm
+    "u_cnf": ("UNIT 02 · CNF 核对与确认", "UNIT 02 · CNF check and confirm"),
+    "cnf_stby": ("按 READ 后，这里列出读到的每一项输入和它的来源：✎ 原文、ⓘ 公开数据、◇ 默认假设。核对无误后按 ARM 确认，RUN 才会亮；之后改动任何一项，都需要重新确认。",
+                 "After READ, every input and its source is listed here: ✎ claim, ⓘ public data, ◇ default assumption. Check them and press ARM to confirm; only then does RUN light up. Any later edit needs a new confirmation."),
+    "cnf_hint": ("核对每一项和它的来源，尤其是 ◇ 默认假设。无误后按 ARM 确认，RUN 才会亮。", "Check every input and its source, especially ◇ defaults. Press ARM when they are right; then RUN lights up."),
+    "marks": ("✎ 原文　ⓘ 公开数据　◇ 默认假设　· 你填的", "✎ claim　ⓘ public data　◇ default assumption　· typed by you"),
+    "g_claim": (("观点", "从句子里读出来的几项，最容易读错，请先看这里"), ("Claim", "Read from the sentence; the easiest to misread, so check these first")),
+    "g_price": (("价格与股本", "公开数据，带来源与时间"), ("Price and shares", "Public data, with source and time")),
+    "g_val": (("估值", "用哪种倍数、多少倍来估目标日的公司价值"), ("Valuation", "Which multiple, and how high, values the company at the target date")),
+    "g_extra": (("申报范围与附加项", "可选；漂移率和波动率只用于「原始数据」里的旧版概率参考"), ("Filing window and extras", "Optional; drift and volatility only feed the older model reference under Raw data")),
+    "you_changed": ("你修改了这一项 · 原值 {v}", "you changed this · was {v}"),
     "method": ("估值方法", "Valuation method"), "method_help": ("假设：目标日期用哪种倍数估值。", "Assumption: which multiple values the company at the target date."),
     "m_ps": ("市销率 P/S", "Price-to-sales (P/S)"), "m_pe": ("市盈率 P/E", "Price-to-earnings (P/E)"),
     "share_mode": ("目标期股份数怎么定", "Target-date share count"),
@@ -84,25 +97,42 @@ S = {
     "shares_result": ("目标期股份数 ≈ {n} 股（当前 {c} × (1 {sign} {r}%)^{y} 年）", "Target-date shares ≈ {n} (current {c} × (1 {sign} {r}%)^{y} years)"),
     "shares_need_current": ("需要当前股份数才能推算目标期股份数。", "Current shares are needed to work out the target-date count."),
     "flat_note": ("每年变化 0%：目标期股份数等于当前股份数。", "0% a year: target-date shares equal current shares."),
+    "prob_note": ("漂移率和波动率只用于「原始数据」里的旧版概率参考，不影响首页概率。", "Drift and volatility only feed the older model reference under “Raw data”; the headline probability does not use them."),
+    "checks": ("检查结果 · 核心字段缺失或无效时不能确认", "Checks · inputs cannot be confirmed while core fields are missing or invalid"),
+    "checks_ok": ("核心字段齐全，没有无效输入。", "Core fields are complete; no invalid input."),
     "missing_core": ("还缺：", "Still missing: "), "optional_missing": ("可选项未填：", "Optional inputs empty: "),
-    "confirm": ("确认输入", "Confirm inputs"), "run": ("生成报告", "Build report"),
+    "confirm": ("ARM 确认输入", "ARM · confirm inputs"), "run": ("RUN 生成报告 ↵", "RUN · build report ↵"),
     "confirmed": ("已确认（{t} UTC）。修改任何输入都需要重新确认。", "Confirmed ({t} UTC). Any edit needs a new confirmation."),
     "stale": ("确认后输入已修改，原确认失效，请重新确认。", "Inputs changed after confirmation; confirm again."),
-    "unconfirmed": ("尚未确认。请核对输入，尤其是标 ◇ 的默认假设。", "Not confirmed yet. Check the inputs, especially defaults marked ◇."),
+    "unconfirmed": ("尚未确认。请核对输入，尤其是标 ◇ 的默认假设，然后按 ARM。", "Not confirmed yet. Check the inputs, especially defaults marked ◇, then press ARM."),
     "invalid_confirm": ("输入无效或缺少核心字段，未确认。", "Inputs are invalid or incomplete; not confirmed."),
     "run_failed": ("运行失败：", "Run failed: "),
-    "hidden": ("已有报告对应修改前的输入或数据来源，已隐藏。请重新确认并生成。", "The previous report belongs to older inputs or another data source and is hidden. Confirm and build again."),
-    "edit_inputs": ("修改输入", "Edit inputs"),
-    "pipeline": ("拉取数据", "Fetching data"),
-    "marks": ("✎ 从原文识别　ⓘ 来自公开数据　◇ 默认假设", "✎ read from the claim　ⓘ public data　◇ default assumption"),
-    # report
-    "eyebrow": ("TickerCase 报告", "TickerCase report"),
-    "target": ("目标价", "Target"), "deadline": ("截止", "Deadline"), "now_price": ("现价", "Now"),
+    "run_kept": ("输入和确认都保留着，重试不需要重新填写。", "Your inputs and confirmation are kept; retrying needs no re-entry."),
+    "hidden": ("已有报告对应修改前的输入或数据来源，已隐藏。请重新确认并生成。旧报告仍在 HIST 里。",
+               "The previous report belongs to older inputs or another data source and is hidden. Confirm and build again; the old report stays in HIST."),
+    "open_report": ("▶ 打开当前报告", "▶ Open the current report"),
+    "ready": ("这组输入已经生成过报告。", "These inputs already have a report."),
+    # console: data and methods used, recent tapes
+    "u_feed": ("UNIT 03 · FEED 采用的信息 · 8 CH", "UNIT 03 · FEED data we use · 8 CH"),
+    "u_mth": ("UNIT 04 · MTH 四种方法 · 互相核对", "UNIT 04 · MTH four methods · cross-checked"),
+    "u_hist": ("UNIT 05 · HIST 最近的磁带", "UNIT 05 · HIST recent tapes"),
+    "hist_hint": ("▶ PLAY 直接打开这盘磁带的报告", "▶ PLAY opens that tape's report"),
+    "play": ("▶ PLAY", "▶ PLAY"), "hist_all": ("全部历史 ▶", "All history ▶"),
+    # report page
+    "u_clm_r": ("UNIT 01 · CLM 观点", "UNIT 01 · CLM claim"),
+    "u_kln": ("UNIT 02 · KLN K 线 · {tk}", "UNIT 02 · KLN K-line · {tk}"),
+    "kln_src": ("YAHOO · 截至 {d} 收盘 · 与案例同一份数据", "YAHOO · to the {d} close · the same data as the case"),
+    "kln_none": ("这份报告没有行情数据，画不出 K 线。", "This report has no price data, so there is no K-line."),
+    "u_prb": ("UNIT 03 · PRB 概率 ← MTH 四种方法", "UNIT 03 · PRB probability ← MTH four methods"),
+    "u_feed_r": ("UNIT 04 · FEED 数据源读数 · 8 CH", "UNIT 04 · FEED source readings · 8 CH"),
+    "u_rpt": ("UNIT 05 · RPT 报告 · 5 CH", "UNIT 05 · RPT report · 5 CH"),
+    "rpt_note": ("换台雪花 0.5 秒 · 内容随即出现", "0.5 s of snow per channel, then the content"),
+    "tabs": (["CH1 报告", "CH2 情景推演", "CH3 价位与方法", "CH4 基本面核查", "CH5 原始数据"], ["CH1 Report", "CH2 Scenario", "CH3 Levels & methods", "CH4 Fundamentals", "CH5 Raw data"]),
+    "u_sig": ("UNIT 06 · SIG 信号", "UNIT 06 · SIG signals"),
+    "u_fnd": ("FND · 基本面结论", "FND · FUNDAMENTALS"), "fnd_more": ("CH4 详情 ▲", "CH4 details ▲"),
+    "u_nar": ("UNIT 07 · NAR 叙述 · DOT-MATRIX", "UNIT 07 · NAR narrative · DOT-MATRIX"),
     "prob_none": ("数据不足，无法计算概率", "Not enough data to compute a probability"),
-    "steps_summary": ("数据源：{ok} 项成功，{failed} 项失败", "Data sources: {ok} succeeded, {failed} failed"),
-    "tabs": (["报告", "情景推演", "价位与方法", "基本面核查", "原始数据"], ["Report", "Scenario", "Levels & methods", "Fundamentals check", "Raw data"]),
-    "strip_note": ("横轴按平方根刻度，小概率也能看清。实心点计入区间，空心点只作参考。", "Square-root scale so small odds stay visible. Filled dots are in the range; hollow dots are context only."),
-    "zones": (("彩票级", "不太可能", "有可能", "较可能"), ("Lottery", "Unlikely", "Possible", "Likely")),
+    "target": ("目标价", "Target"), "now_price": ("现价", "Now"),
     "r_layers": ("数据分层", "Evidence by layer"), "r_analysis": ("交叉验证", "Cross-check"),
     "r_agree": ("一致的信号", "Signals that agree"), "r_diverge": ("关键分歧", "Key divergences"),
     "r_time": ("时间维度", "Time view"), "r_scen": ("情景推演", "Scenarios"),
@@ -114,9 +144,8 @@ S = {
     "r_time_cols": (("时间", "要看什么", "说明"), ("When", "What", "Note")),
     "r_none": ("这份报告没有分层内容（由旧版本生成）。", "This report has no layers (made by an older version)."),
     # AI narrative
-    "ai_title": ("AI 叙述", "AI narrative"),
     "ai_intro": ("由 Claude 根据本报告的事实表撰写，每句话的数字都会逐个核对出处。", "Written by Claude from this report's fact table; every number in every sentence is checked against its source."),
-    "ai_button": ("生成 AI 叙述", "Write AI narrative"),
+    "ai_button": ("PRINT 生成 AI 叙述", "PRINT · write AI narrative"),
     "ai_button_help": ("只写当前语言。同样的事实已经写过时直接复用，不再调用；否则调用一次 Claude（{model}，effort {effort}），按用量计费。",
                        "Writes the current language only. Reuses a narrative already written for the same facts; otherwise one Claude call ({model}, effort {effort}), billed by usage."),
     "ai_retry_help": ("忽略已有结果，重新调用一次 Claude（{model}，effort {effort}），按用量计费。", "Ignores the saved narrative and makes a new Claude call ({model}, effort {effort}), billed by usage."),
@@ -125,9 +154,9 @@ S = {
     "ai_reused": ("复用案例 {case} 中相同事实的叙述，这次没有调用 API", "Reused from case {case} with the same facts; no API call this time"),
     "ai_failed": ("AI 叙述未生成：", "AI narrative not written: "),
     "ai_facts": ("事实表与核对明细", "Fact table and check details"),
-    "ai_legend": ("✔ 数字与引用的事实一致 · ○ 无数字的解释 · ⚠ 数字存在但引用了别的事实 · ✖ 数字找不到出处",
-                  "✔ numbers match the cited facts · ○ no numbers · ⚠ number exists but another fact is cited · ✖ number has no source"),
-    "ai_retry": ("重新生成", "Write again"),
+    "ai_legend": ("核 数字与引用的事实一致 · ○ 无数字的解释 · ⚠ 数字存在但引用了别的事实 · ✖ 数字找不到出处",
+                  "OK numbers match the cited facts · ○ no numbers · ⚠ number exists but another fact is cited · ✖ number has no source"),
+    "ai_retry": ("RETRY 重新生成", "RETRY · write again"),
     # scenario
     "sc_intro": ("如果你认为某个事件（发射、财报、审批）会让股价跳一下，在这里把它写成情景：事件日期、成功的可能性、成功或失败时股价大概怎么动。结果随滑块即时更新，不会重新拉数据。",
                  "If you think one event (a launch, earnings, an approval) will move the stock, describe it here: the date, how likely success is, and how the price moves either way. Results update as you drag; nothing is fetched again."),
@@ -209,17 +238,18 @@ S = {
     "prob_na": ("无法计算：", "Not computable: "),
     "assumptions": ("假设", "Assumptions"), "limitations": ("限制", "Limitations"),
     "run_log": ("运行记录", "Run log"), "data_errors": ("数据错误", "Data errors"), "missing_items": ("缺失项", "Missing inputs"),
-    "download": ("下载报告 JSON", "Download report JSON"),
     "notes": ("提示（{n}）", "Notes ({n})"),
+    "download": ("下载报告 JSON", "Download report JSON"),
     # history
+    "u_hist_all": ("UNIT 01 · HIST 全部磁带", "UNIT 01 · HIST all tapes"),
     "history_empty": ("还没有保存的报告。", "No saved reports yet."),
     "history_hint": ("选一行打开报告；选两行或更多进行对比。", "Select one row to open a report; select two or more to compare."),
-    "compare": ("对比", "Comparison"),
+    "compare": ("UNIT 02 · CMP 对比", "UNIT 02 · CMP comparison"),
 }
 
 FIELD_META = {
     # name: (zh label, en label, placeholder, zh help, en help)
-    "claim_text": ("观点原文", "Claim", "例如：RKLB 3 年内冲到 200", "要核验的原始说法，原样记录。", "The claim as stated, recorded verbatim."),
+    "claim_text": ("观点原文", "Claim", ("例如：RKLB 3 年内冲到 200", "e.g. NVDA will hit $300 in 3 years"), "要核验的原始说法，原样记录。", "The claim as stated, recorded verbatim."),
     "ticker": ("股票代码", "Ticker", "AAPL", "美股代码。", "US ticker."),
     "target_price": ("目标价", "Target price", "100", "观点给出的目标价格。", "The price the claim names."),
     "horizon_years": ("时间（年）", "Horizon (years)", "3", "观点在多少年内或多少年后兑现，可填小数。", "Years until the claim should hold; decimals allowed."),
@@ -246,8 +276,14 @@ FIELD_ALIASES = {"share_change_rate": "share_rate_pct", "share_change_mode": "sh
 SHARE_MODES = ("trend", "flat", "rate", "absolute")
 CLAIM_FIELDS = ("claim_text", "ticker", "target_price", "horizon_years")
 METHODS = ("price_to_sales", "price_to_earnings")
-MODES = {"live": ("实时数据", "Live data"), "record": ("实时并录制", "Live + record"), "replay": ("回放录制", "Replay recording"),
-         "synthetic": ("合成示例", "Synthetic example")}
+MODES = {"live": ("LIVE 实时", "LIVE"), "record": ("REC 实时并录制", "REC · live + record"), "replay": ("PLAY 回放", "PLAY · replay"),
+         "synthetic": ("DEMO 合成示例", "DEMO · synthetic")}
+MODE_NOTES = {
+    "live": ("请求 SEC、行情和期权接口；SEC 需要联系邮箱。", "Calls SEC, quote and option sources; SEC needs a contact email."),
+    "record": ("同实时，并把每个响应录制到本机，之后可以回放。", "Same as live, and records every response locally for replay."),
+    "replay": ("只读本机录制的响应，不联网；没有录制的数据会显示为失败。", "Reads recorded responses only, offline; anything not recorded shows as failed."),
+    "synthetic": ("虚构公司 SYNT 的示例数据，不是真实行情，只用来演示。", "Example data for the fictional company SYNT; not real market data, for demos only."),
+}
 EXAMPLES = {"ps": REPO_ROOT / "examples" / "synthetic_claim_ps.json", "pe": REPO_ROOT / "examples" / "synthetic_claim_pe.json"}
 VERDICT_STYLE = {"supported_today": ("✔", "good"), "partially_supported": ("◐", "warn"),
                  "not_supported_today": ("✖", "bad"), "insufficiently_specified": ("?", "neutral")}
@@ -288,94 +324,10 @@ STEP_LABELS = {
     "benchmarks": ("大盘对标", "Benchmarks"), "base_rate": ("同规模公司基准率", "Peer base rate"), "insiders": ("内部人交易", "Insider trades"),
     "prediction_markets": ("预测市场", "Prediction markets"), "fear_greed": ("恐惧贪婪指数", "Fear & Greed"),
 }
-TIER_TONE = {"lottery": "bad", "low": "warn", "possible": "neutral", "likely": "good", "unknown": "neutral"}
 TONE_OF_ROW = {"good": "good", "bad": "bad", "missing": "neutral", "neutral": "neutral"}
 NARR_BADGE = {"verified": "✔", "qualitative": "○", "cited_elsewhere": "⚠", "unsupported": "✖"}
-NARR_TITLES = {"logic_chain": ("核心逻辑链", "Core logic"), "resonance": ("共振信号", "Signals that agree"), "divergences": ("关键分歧", "Key divergences"),
-               "conclusion": ("结论", "Conclusion"), "upside": ("上行风险", "Upside risks"), "downside": ("下行风险", "Downside risks")}
-
-# ------------------------------------------------------------------ look: muted palette, short eased motion
-
-PALETTE = {
-    "light": dict(bg="#f7f6f3", surface="#ffffff", surface2="#f1efea", border="#e2ded5", text="#23262b", muted="#6b6f76",
-                  accent="#4c6a92", accent_soft="rgba(76,106,146,0.10)", good="#5b8a6a", warn="#a8844a", bad="#a35f68", neutral="#7d8590",
-                  second="#b08a5a", grid="#e9e6df"),
-    "dark": dict(bg="#16181c", surface="#1e2126", surface2="#252930", border="#343842", text="#e6e4df", muted="#9aa0a8",
-                 accent="#8aa6cc", accent_soft="rgba(138,166,204,0.14)", good="#8fb89a", warn="#cfae78", bad="#cf8f97", neutral="#9aa0a8",
-                 second="#d2ad7c", grid="#2e323a"),
-}
-
-CSS = """
-<style>
-:root {{
-  --tc-bg:{bg}; --tc-surface:{surface}; --tc-surface2:{surface2}; --tc-border:{border}; --tc-text:{text}; --tc-muted:{muted};
-  --tc-accent:{accent}; --tc-accent-soft:{accent_soft}; --tc-good:{good}; --tc-warn:{warn}; --tc-bad:{bad}; --tc-neutral:{neutral};
-  --tc-ease: cubic-bezier(.2,.7,.2,1);
-}}
-@keyframes tcRise {{ from {{opacity:0; transform:translateY(6px);}} to {{opacity:1; transform:none;}} }}
-@keyframes tcGrow {{ from {{transform:scaleX(0);}} to {{transform:scaleX(1);}} }}
-@keyframes tcPop {{ from {{opacity:0; transform:translate(-50%,-50%) scale(.4);}} to {{opacity:1; transform:translate(-50%,-50%) scale(1);}} }}
-.block-container {{ padding-top: 2.2rem; max-width: 1180px; }}
-.tc-card {{ background:var(--tc-surface); border:1px solid var(--tc-border); border-radius:14px; padding:18px 22px; margin:0 0 14px 0;
-           animation: tcRise .45s var(--tc-ease) both; }}
-.tc-hero {{ padding:24px 28px 20px 28px; }}
-.tc-eyebrow {{ font-size:.8rem; letter-spacing:.02em; color:var(--tc-muted); }}
-.tc-title {{ font-size:1.45rem; font-weight:620; line-height:1.35; margin:6px 0 6px 0; color:var(--tc-text); }}
-.tc-meta {{ color:var(--tc-muted); font-size:.92rem; display:flex; gap:14px; flex-wrap:wrap; align-items:center; }}
-.tc-chip {{ display:inline-block; padding:2px 10px; border-radius:999px; background:var(--tc-accent-soft); color:var(--tc-accent); font-size:.82rem; }}
-.tc-figure {{ display:flex; align-items:baseline; gap:14px; margin:18px 0 6px 0; flex-wrap:wrap; }}
-.tc-big {{ font-size:2.6rem; font-weight:650; letter-spacing:-.01em; color:var(--tc-text); font-variant-numeric: tabular-nums; }}
-.tc-pill {{ display:inline-block; padding:3px 12px; border-radius:999px; font-size:.86rem; font-weight:560; border:1px solid currentColor; }}
-.tc-good {{ color:var(--tc-good); }} .tc-warn {{ color:var(--tc-warn); }} .tc-bad {{ color:var(--tc-bad); }} .tc-neutral {{ color:var(--tc-neutral); }}
-.tc-headline {{ font-size:1.02rem; line-height:1.7; color:var(--tc-text); margin-top:12px; }}
-.tc-strip {{ position:relative; height:58px; margin:14px 4px 4px 4px; }}
-.tc-zone {{ position:absolute; top:14px; height:10px; }}
-.tc-zone span {{ position:absolute; top:-15px; left:4px; font-size:.7rem; color:var(--tc-muted); white-space:nowrap; }}
-.tc-band {{ position:absolute; top:12px; height:14px; border-radius:7px; background:var(--tc-accent); opacity:.28; transform-origin:left center;
-           animation: tcGrow .7s var(--tc-ease) .1s both; }}
-.tc-dot {{ position:absolute; top:19px; width:12px; height:12px; border-radius:50%; transform:translate(-50%,-50%);
-          border:2px solid var(--tc-accent); background:var(--tc-accent); box-shadow:0 0 0 2px var(--tc-surface); animation: tcPop .45s var(--tc-ease) both; }}
-.tc-dot.ctx {{ background:var(--tc-surface); }}
-.tc-dot b {{ position:absolute; top:13px; left:50%; transform:translateX(-50%); font-size:.7rem; font-weight:560; color:var(--tc-muted); white-space:nowrap; }}
-.tc-tick {{ position:absolute; top:40px; font-size:.68rem; color:var(--tc-muted); transform:translateX(-50%); }}
-.tc-axis {{ position:absolute; top:18px; left:0; right:0; height:1px; background:var(--tc-border); }}
-.tc-steps {{ margin:2px 0 0 0; }}
-.tc-step {{ display:inline-block; margin:3px 6px 3px 0; padding:2px 10px; border-radius:999px; border:1px solid var(--tc-border);
-           font-size:.8rem; color:var(--tc-muted); transition: border-color .25s var(--tc-ease), color .25s var(--tc-ease); }}
-.tc-step.ok {{ color:var(--tc-text); }} .tc-step.ok i {{ color:var(--tc-good); font-style:normal; }}
-.tc-step.failed {{ border-color:var(--tc-bad); }} .tc-step.failed i {{ color:var(--tc-bad); font-style:normal; }}
-.tc-step.running i {{ color:var(--tc-accent); font-style:normal; }}
-.tc-h {{ font-size:1.05rem; font-weight:620; margin:22px 0 8px 0; color:var(--tc-text); }}
-.tc-sub {{ color:var(--tc-muted); font-size:.88rem; line-height:1.6; }}
-table.tc-table {{ width:100%; border-collapse:collapse; font-size:.9rem; margin:4px 0 14px 0; animation: tcRise .45s var(--tc-ease) both; }}
-table.tc-table th {{ text-align:left; font-weight:560; color:var(--tc-muted); font-size:.8rem; padding:6px 10px; border-bottom:1px solid var(--tc-border); }}
-table.tc-table td {{ padding:8px 10px; border-bottom:1px solid var(--tc-border); vertical-align:top; line-height:1.5; color:var(--tc-text); }}
-table.tc-table tr {{ transition: background-color .2s var(--tc-ease); }}
-table.tc-table tbody tr:hover {{ background:var(--tc-surface2); }}
-table.tc-table td.num {{ font-variant-numeric: tabular-nums; white-space:nowrap; }}
-table.tc-table th.on, table.tc-table td.on {{ background:var(--tc-accent-soft); }}
-.tc-dotmark {{ display:inline-block; width:8px; height:8px; border-radius:50%; background:currentColor; margin-top:6px; }}
-.tc-layer {{ font-size:.85rem; font-weight:560; color:var(--tc-muted); margin:16px 0 2px 0; }}
-.tc-list {{ margin:0; padding-left:1.1rem; line-height:1.7; }}
-.tc-kpis {{ display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin:8px 0 6px 0; }}
-.tc-kpi {{ background:var(--tc-surface2); border-radius:12px; padding:12px 14px; transition: background-color .3s var(--tc-ease); }}
-.tc-kpi .k {{ font-size:.78rem; color:var(--tc-muted); }}
-.tc-kpi .v {{ font-size:1.5rem; font-weight:620; font-variant-numeric: tabular-nums; color:var(--tc-text); transition: color .3s var(--tc-ease); }}
-.tc-kpi.main {{ background:var(--tc-accent-soft); }} .tc-kpi.main .v {{ color:var(--tc-accent); }}
-.tc-gauge {{ position:relative; height:48px; margin:18px 4px 6px 4px; }}
-.tc-gauge .rail {{ position:absolute; top:14px; left:0; right:0; height:6px; border-radius:3px; background:var(--tc-surface2); }}
-.tc-gauge .fill {{ position:absolute; top:14px; height:6px; border-radius:3px; background:var(--tc-accent); opacity:.35; transition: left .35s var(--tc-ease), width .35s var(--tc-ease); }}
-.tc-gauge .mk {{ position:absolute; top:17px; width:12px; height:12px; border-radius:50%; transform:translate(-50%,-50%); transition: left .35s var(--tc-ease);
-               box-shadow:0 0 0 2px var(--tc-surface); }}
-.tc-gauge .mk b {{ position:absolute; top:-20px; left:50%; transform:translateX(-50%); font-size:.7rem; color:var(--tc-muted); white-space:nowrap; font-weight:500; }}
-.tc-gauge .mk.below b {{ top:14px; }}
-.tc-verdict {{ border-left:4px solid currentColor; }}
-.tc-verdict .lbl {{ font-size:1.25rem; font-weight:620; }}
-.tc-brand {{ font-size:1.25rem; font-weight:650; letter-spacing:-.01em; }}
-div[data-testid="stTabs"] button[role="tab"] {{ transition: color .2s var(--tc-ease); }}
-@media (prefers-reduced-motion: reduce) {{ * {{ animation:none !important; transition:none !important; }} }}
-</style>
-"""
+JUMPS = (("u-clm", "CLM"), ("u-kln", "KLN"), ("u-prb", "PRB"), ("u-feed", "FEED"), ("u-rpt", "RPT"), ("u-sig", "SIG"), ("u-nar", "NAR"))
+KLINE_HEIGHT = 600
 
 
 def lang() -> str:
@@ -396,9 +348,7 @@ def pick(en: str, zh_text: str) -> str:
 
 
 def tr(text: Optional[Text]) -> str:
-    if text is None:
-        return ""
-    return text.zh if zh() else text.en
+    return ck.tr(text, zh())
 
 
 def labels(options: dict[str, tuple[str, str]]):
@@ -407,8 +357,7 @@ def labels(options: dict[str, tuple[str, str]]):
     return lambda x: options[x][i]
 
 
-def esc(x) -> str:
-    return html.escape("" if x is None else str(x))
+esc = ck.esc
 
 
 def label_of(name: str) -> str:
@@ -418,16 +367,19 @@ def label_of(name: str) -> str:
     return meta[0] if zh() else meta[1]
 
 
-def theme() -> dict:
-    try:
-        kind = st.context.theme.type or "light"
-    except Exception:  # older runtimes or tests
-        kind = "light"
-    return PALETTE["dark" if kind == "dark" else "light"]
-
-
 def html_block(markup: str) -> None:
     st.markdown(markup, unsafe_allow_html=True)
+
+
+def chart_colors() -> dict:
+    """Chart colours for the channel screens; they follow the phosphor switch."""
+    if st.session_state.get("tube") == "amb":
+        return dict(accent="#FFB23E", second="#FFE4A8", muted="#C9933F", grid="#3A2A14", surface="#0F120F", text="#F1DFC0")
+    return dict(accent="#74FF9A", second="#FFB23E", muted="#5FCB82", grid="#1E3A26", surface="#0F120F", text="#D6E8D6")
+
+
+def finish(chart: alt.Chart) -> alt.Chart:
+    return chart.configure_view(strokeWidth=0).configure(background="transparent", font="IBM Plex Mono")
 
 
 # ------------------------------------------------------------------ formatting
@@ -502,6 +454,10 @@ def bullets(items: list[str]) -> str:
     return '<ul class="tc-list">' + "".join(f"<li>{esc(x)}</li>" for x in items) + "</ul>"
 
 
+def notes_of(result: CaseResult) -> list[str]:
+    return result.warnings_zh if zh() and len(result.warnings_zh) == len(result.warnings) else result.warnings
+
+
 # ------------------------------------------------------------------ state
 
 
@@ -521,11 +477,22 @@ def _init_state() -> None:
     st.session_state.setdefault("sec_mode", "live")
     st.session_state.setdefault("lang", "zh")
     st.session_state.setdefault("view", "new")
+    st.session_state.setdefault("tube", "grn")
+    st.session_state.setdefault("page", "home")  # "home" (console) or "result" (report) inside the "new" view
+    st.session_state.setdefault("ai_auto", False)
+    st.session_state.setdefault("animated", set())  # case ids whose report has already played its first-view motion
     for key in ("confirmation", "confirm_feedback", "result", "result_mode", "run_error", "prefill_msg", "prefill_snapshot", "sec_msg",
-                "extract_msg", "extraction", "ai_msg"):
+                "extract_msg", "extraction", "ai_msg", "open_case"):
         st.session_state.setdefault(key, None)
     st.session_state.setdefault("prefill_sources", {})
     st.session_state.setdefault("history_selected", None)
+
+
+def _keep_widget_state() -> None:
+    """The console's inputs are not drawn on the report page; writing them back keeps Streamlit from dropping them meanwhile."""
+    for key in [f"f_{n}" for n in TEXT_FIELDS] + ["f_valuation_method", "f_share_mode", "f_price_condition", "sec_mode", "ai_auto"]:
+        if key in st.session_state:
+            st.session_state[key] = st.session_state[key]
 
 
 def _reset_confirmation() -> None:
@@ -544,6 +511,7 @@ def _load_example(key: str) -> None:
     st.session_state["example_values"] = {name: st.session_state[f"f_{name}"] for name in TEXT_FIELDS} | {"share_mode": st.session_state["f_share_mode"]}
     st.session_state["sec_mode"] = "synthetic"
     st.session_state["view"] = "new"
+    st.session_state["page"] = "home"
     st.session_state["prefill_sources"] = {}
     st.session_state["prefill_msg"] = None
     st.session_state["extract_msg"] = None
@@ -768,6 +736,24 @@ def _narrate(key_suffix: str, force: bool = False) -> None:
     get_service().narrate(result, language=lang(), force=force)
 
 
+def _go(page: str) -> None:
+    st.session_state["page"] = page
+
+
+def _open_tape(case_id: str) -> None:
+    st.session_state["view"] = "history"
+    st.session_state["open_case"] = case_id
+
+
+def _show_history() -> None:
+    st.session_state["view"] = "history"
+
+
+def sec_gate() -> bool:
+    """True while live SEC requests are impossible because no valid contact email is set."""
+    return bool(validate_user_agent(get_service().settings.sec_user_agent))
+
+
 def current_draft() -> ClaimDraft:
     values = {name: (st.session_state[f"f_{name}"] or None) for name in DRAFT_FIELDS}
     values["valuation_method"] = st.session_state["f_valuation_method"]
@@ -795,7 +781,33 @@ def show_msg(key: str, container=None) -> None:
     {"success": target.success, "warning": target.warning, "error": target.error, "info": target.info}[kind](zh_text if zh() else en_text)
 
 
-# ------------------------------------------------------------------ inputs
+# ------------------------------------------------------------------ bridge and footer (every page)
+
+
+def bridge_unit(*, result_page: bool, warn: int) -> None:
+    mode = st.session_state["sec_mode"]
+    link = ("amber" if sec_gate() else "green") if mode in ("live", "record") else "off"
+    chips = [f"TC {get_service().now():%Y-%m-%d · %H:%M} UTC", f"{t('data_chip')} · {MODES[mode][0 if zh() else 1]}"]
+    with st.container(key="u-c-bridge"):
+        left, right = st.columns([1, 1], vertical_alignment="center")
+        left.markdown(ck.bridge(zh(), sys_on=result_page, link=link, warn=warn, chips=chips), unsafe_allow_html=True)
+        with right, st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small"):
+            if result_page:
+                st.button(t("back_new"), key="btn_new", on_click=_go, args=("home",))
+            st.radio(t("view"), options=["new", "history"], format_func=labels({"new": S["view_new"], "history": S["view_history"]}), key="view",
+                     horizontal=True, label_visibility="collapsed")
+            st.radio(t("tube"), options=["grn", "amb"], format_func=lambda x: "GRN" if x == "grn" else "AMB", key="tube", horizontal=True,
+                     label_visibility="collapsed")
+            st.radio(t("language"), options=["zh", "en"], format_func=lambda x: "中" if x == "zh" else "EN", key="lang", horizontal=True,
+                     label_visibility="collapsed")
+
+
+def footer_unit() -> None:
+    with st.container(key="u-o-footer"):
+        html_block(ck.footer(zh()))
+
+
+# ------------------------------------------------------------------ console page
 
 
 def field(name: str, container=None) -> None:
@@ -803,40 +815,63 @@ def field(name: str, container=None) -> None:
     label, help_text = (zh_label, help_zh) if zh() else (en_label, help_en)
     target = container or st
     src = st.session_state["prefill_sources"].get(name)
+    line = ""
     if src and st.session_state.get(f"f_{name}") == src[0]:
-        if src[1].startswith(DEFAULT_PREFIX):
-            mark, kind = "◇", ("默认假设" if zh() else "Default assumption")
-        elif src[1].startswith(CLAIM_TEXT_PREFIX):
-            mark, kind = "✎", ("从原文识别" if zh() else "Read from the claim")
-        else:
-            mark, kind = "ⓘ", ("来自公开数据" if zh() else "From public data")
-        label = f"{label} {mark}"
-        help_text = f"{help_text}\n\n{kind}: {src[1].removeprefix(DEFAULT_PREFIX).removeprefix(CLAIM_TEXT_PREFIX)}"
+        kind = "def" if src[1].startswith(DEFAULT_PREFIX) else "claim" if src[1].startswith(CLAIM_TEXT_PREFIX) else "data"
+        text = src[1].removeprefix(DEFAULT_PREFIX).removeprefix(CLAIM_TEXT_PREFIX)
+        label = f"{label} {ck.MARKS[kind]}"
+        line = ck.src_line(kind, (f"「{text}」" if zh() else f"“{text}”") if kind == "claim" else text, zh())
+    elif src and st.session_state.get(f"f_{name}", "").strip():
+        line = ck.src_line("user", t("you_changed", v=src[0]), zh())
     if name == "claim_text":
-        target.text_area(label, key=f"f_{name}", placeholder=placeholder, help=help_text, height=90, label_visibility="collapsed")
+        target.text_area(label, key=f"f_{name}", placeholder=placeholder[0 if zh() else 1], help=help_text, height=110, label_visibility="collapsed")
     else:
         target.text_input(label, key=f"f_{name}", placeholder=placeholder, help=help_text)
+    if line:
+        target.markdown(line, unsafe_allow_html=True)
 
 
-def render_claim_box() -> None:
-    with st.container(border=True):
-        st.markdown(f"**{t('s1')}**")
-        st.caption(t("s1_hint"))
-        field("claim_text")
-        b1, b2 = st.columns([1, 3], vertical_alignment="center")
-        b1.button(t("prefill"), key="btn_prefill", on_click=_extract_and_fill, help=t("prefill_help"), type="primary", use_container_width=True)
-        b2.caption(t("marks"))
-        show_msg("extract_msg")
-        show_msg("prefill_msg")
-        st.caption(t("detail_fields"))
-        c = st.columns([1, 1, 1, 2])
-        field("ticker", c[0])
-        field("target_price", c[1])
-        field("horizon_years", c[2])
-        src = st.session_state["prefill_sources"].get("price_condition")
-        mark = " ✎" if src and src[0] == st.session_state["f_price_condition"] else ""
-        c[3].radio(t("condition") + mark, options=["touch", "end"], format_func=labels({x: S[f"cond_{x}"] for x in ("touch", "end")}), key="f_price_condition",
-                   horizontal=True, help=t("condition_help"))
+def render_clm() -> None:
+    html_block(ck.unit_head(t("u_clm"), ck.chip(t("clm_flow")), "u-clm") + ck.hero(zh()))
+    field("claim_text")
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.button(t("ex_ps"), on_click=_load_example, args=("ps",), key="btn_example_ps")
+        st.button(t("ex_pe"), on_click=_load_example, args=("pe",), key="btn_example_pe")
+        st.button(t("clear"), on_click=_clear_form, key="btn_clear")
+        st.space("stretch")
+        st.button(t("prefill"), key="btn_prefill", on_click=_extract_and_fill, help=t("prefill_help"), type="primary")
+    show_msg("extract_msg")
+    show_msg("prefill_msg")
+
+
+def render_sys() -> None:
+    i = 0 if zh() else 1
+    html_block(ck.unit_head("SYS · " + ("系统" if zh() else "SYSTEM")))
+    st.radio(t("mode"), options=list(MODES), format_func=labels(MODES), key="sec_mode", horizontal=True, help=t("mode_help"))
+    st.caption(MODE_NOTES[st.session_state["sec_mode"]][i])
+    html_block(ck.sub_head(t("sec_setup")))
+    if sec_gate():
+        st.caption(t("sec_missing"))
+        st.text_input(t("sec_email"), key="sec_email_input", placeholder="you@example.org")
+        st.button(t("sec_save"), key="btn_sec_save", on_click=_save_sec_contact)
+    else:
+        html_block(ck.lamp_row("green", t("sec_ok")))
+    show_msg("sec_msg")
+    html_block(ck.sub_head(t("ai_setup")))
+    st.caption(t("ai_optional"))
+    if not get_service().settings.anthropic_api_key:
+        st.caption(t("ai_missing"))
+        st.text_input(t("ai_key"), key="ai_key_input", type="password", placeholder="sk-ant-...")
+        st.button(t("ai_save"), key="btn_ai_save", on_click=_save_ai_key)
+    else:
+        html_block(ck.lamp_row("green", t("ai_ok")))
+        st.toggle(t("ai_auto"), key="ai_auto", help=t("ai_auto_help"))
+    show_msg("ai_msg")
+
+
+def group(key: str) -> None:
+    title, note = S[key][0 if zh() else 1]
+    html_block(ck.group_head(title, note))
 
 
 def render_share_input() -> None:
@@ -861,153 +896,182 @@ def render_share_input() -> None:
     st.caption(t("shares_result", n=f"{n:,.0f}", c=f"{c:,.0f}", sign="+" if r >= 0 else "−", r=f"{abs(r) * 100:.2f}", y=format(y.normalize(), "f")))
 
 
-def render_rest(expanded: bool) -> None:
-    with st.expander(t("rest"), expanded=expanded):
-        left, right = st.columns(2)
-        with left.container(border=True):
-            st.markdown(f"**{t('price_box')}**")
-            c = st.columns(3)
-            field("reference_price", c[0])
-            field("reference_price_date", c[1])
-            field("currency", c[2])
-            field("reference_price_source")
-            c = st.columns(2)
-            field("current_shares", c[0])
-            c[1].selectbox(t("share_mode"), options=list(SHARE_MODES), format_func=labels({x: S[f"sm_{x}"] for x in SHARE_MODES}), key="f_share_mode", help=t("share_mode_help"))
-            render_share_input()
-        with right.container(border=True):
-            st.markdown(f"**{t('val_box')}**")
-            c = st.columns(2)
-            c[0].selectbox(t("method"), options=list(METHODS), format_func=labels({"price_to_sales": S["m_ps"], "price_to_earnings": S["m_pe"]}),
-                           key="f_valuation_method", on_change=_method_changed, help=t("method_help"))
-            field("valuation_multiple", c[1])
-            field("base_annual_metric")
-            c = st.columns(2)
-            field("base_metric_currency", c[0])
-            field("base_metric_period", c[1])
-        with st.container(border=True):
-            st.markdown(f"**{t('extra_box')}**")
-            c = st.columns(3)
-            field("filings_since", c[0])
-            field("probability_drift", c[1])
-            field("probability_volatility", c[2])
-            st.caption(t("prob_note"))
+def render_groups() -> None:
+    a, b = st.columns(2)
+    with a, st.container(key="g-claim"):
+        group("g_claim")
+        src = st.session_state["prefill_sources"].get("price_condition")
+        mark = " ✎" if src and src[0] == st.session_state["f_price_condition"] else ""
+        st.radio(t("condition") + mark, options=["touch", "end"], format_func=labels({x: S[f"cond_{x}"] for x in ("touch", "end")}), key="f_price_condition",
+                 horizontal=True, help=t("condition_help"))
+        c = st.columns(3)
+        field("ticker", c[0])
+        field("target_price", c[1])
+        field("horizon_years", c[2])
+    with b, st.container(key="g-price"):
+        group("g_price")
+        c = st.columns(3)
+        field("reference_price", c[0])
+        field("reference_price_date", c[1])
+        field("currency", c[2])
+        field("reference_price_source")
+        c = st.columns(2)
+        field("current_shares", c[0])
+        c[1].selectbox(t("share_mode"), options=list(SHARE_MODES), format_func=labels({x: S[f"sm_{x}"] for x in SHARE_MODES}), key="f_share_mode",
+                       help=t("share_mode_help"))
+        render_share_input()
+    a, b = st.columns(2)
+    with a, st.container(key="g-val"):
+        group("g_val")
+        c = st.columns(2)
+        c[0].selectbox(t("method"), options=list(METHODS), format_func=labels({"price_to_sales": S["m_ps"], "price_to_earnings": S["m_pe"]}),
+                       key="f_valuation_method", on_change=_method_changed, help=t("method_help"))
+        field("valuation_multiple", c[1])
+        field("base_annual_metric")
+        c = st.columns(2)
+        field("base_metric_currency", c[0])
+        field("base_metric_period", c[1])
+    with b, st.container(key="g-extra"):
+        group("g_extra")
+        field("filings_since")
+        c = st.columns(2)
+        field("probability_drift", c[0])
+        field("probability_volatility", c[1])
+        st.caption(t("prob_note"))
 
 
-# ------------------------------------------------------------------ report: hero
+def render_checks(validation) -> None:
+    html_block(ck.sub_head(t("checks")))
+    for issue in validation.issues:
+        st.error(issue_text(issue))
+    blocking = [m for m in validation.missing_fields if m.blocking]
+    if blocking:
+        st.warning(t("missing_core") + ("、" if zh() else ", ").join(label_of(m.field) for m in blocking))
+    optional = [m for m in validation.missing_fields if not m.blocking]
+    if optional:
+        st.caption(t("optional_missing") + ("；" if zh() else "; ").join(missing_text(m) for m in optional))
+    for w in (validation.warnings_zh if zh() else validation.warnings):
+        st.caption("⚠ " + w)
+    if not validation.issues and not blocking:
+        html_block(ck.lamp_row("green", t("checks_ok")))
 
 
-def step_chips(steps: dict) -> str:
-    chips = []
-    for key, state in steps.items():
-        label = STEP_LABELS.get(key, (key, key))[0 if zh() else 1]
-        icon = {"ok": "✔", "failed": "✖", "running": "…"}.get(state, "·")
-        chips.append(f'<span class="tc-step {esc(state)}"><i>{icon}</i> {esc(label)}</span>')
-    return '<div class="tc-steps">' + "".join(chips) + "</div>"
+def run_case(draft: ClaimDraft, confirmation: Confirmation, board) -> None:
+    """Fetch and evaluate, showing each data step on the pipeline screen, then open the report page."""
+    st.session_state["result"] = None
+    st.session_state["run_error"] = None
+    st.html(ck.page_css([], flowing=True))
+    auto = bool(st.session_state.get("ai_auto")) and bool(get_service().settings.anthropic_api_key)
+    steps_shown = STEP_LABELS | ({"narrative": ("AI 叙述", "AI narrative")} if auto else {})
+    live_steps: dict[str, str] = {}
+
+    def on_step(step: str, step_state: str) -> None:
+        live_steps[step] = step_state
+        board.markdown(ck.pipeline(live_steps, zh(), steps_shown), unsafe_allow_html=True)
+
+    board.markdown(ck.pipeline(live_steps, zh(), steps_shown), unsafe_allow_html=True)
+    try:
+        result = get_service().evaluate(draft, confirmation, sec_mode=st.session_state["sec_mode"], progress=on_step)
+        st.session_state["result"] = result
+        st.session_state["result_mode"] = st.session_state["sec_mode"]
+        if auto and result.oracle is not None:
+            on_step("narrative", "running")
+            try:
+                get_service().narrate(result, language=lang())
+            except Exception as exc:  # the report stands without a narrative
+                _msg("ai_msg", "error", (S["ai_failed"][0] + f"{type(exc).__name__}: {exc}", S["ai_failed"][1] + f"{type(exc).__name__}: {exc}"))
+        st.session_state["page"] = "result"
+    except Exception as exc:  # unexpected failure; keep page usable and show it
+        st.session_state["run_error"] = f"{type(exc).__name__}: {exc}"
+    st.rerun()
 
 
-def _x(p: float) -> float:
-    """Square-root position on the 0-100% strip."""
-    return 100 * math.sqrt(max(0.0, min(1.0, p)))
-
-
-def range_strip(result: CaseResult) -> str:
-    o = result.oracle
-    touch = o.condition == "touch"
-    zone_names = S["zones"][0 if zh() else 1]
-    parts = ['<div class="tc-strip"><div class="tc-axis"></div>']
-    for (lo, hi), name, tone in zip(((0, .05), (.05, .2), (.2, .5), (.5, 1)), zone_names, ("bad", "warn", "neutral", "good")):
-        left, width = _x(lo), _x(hi) - _x(lo)
-        parts.append(f'<div class="tc-zone tc-{tone}" style="left:{left:.2f}%;width:{width:.2f}%;border-left:1px solid var(--tc-border)"><span>{esc(name)}</span></div>')
-    if o.low is not None:
-        parts.append(f'<div class="tc-band" style="left:{_x(o.low):.2f}%;width:{max(_x(o.high) - _x(o.low), 0.8):.2f}%"></div>')
-    for i, m in enumerate(o.methods):
-        p = m.touch_probability if touch else m.probability
-        if m.status != "ok" or p is None:
-            continue
-        counted = o.low is not None and o.low - 1e-12 <= p <= o.high + 1e-12 and _counted(result, m)
-        tip = f"{m.id} {tr(m.name)}: {pct_p(p)}"
-        parts.append(f'<div class="tc-dot{"" if counted else " ctx"}" title="{esc(tip)}" style="left:{_x(p):.2f}%;animation-delay:{.25 + .08 * i:.2f}s"><b>{esc(m.id)}</b></div>')
-    for p, label in ((0, "0"), (.01, "1%"), (.05, "5%"), (.2, "20%"), (.5, "50%"), (1, "100%")):
-        parts.append(f'<div class="tc-tick" style="left:{_x(p):.2f}%">{label}</div>')
-    parts.append("</div>")
-    return "".join(parts)
-
-
-def _counted(result: CaseResult, m) -> bool:
-    o = result.oracle
-    if m.id == "M4" and independent_windows(result.price_base_rate) < MIN_INDEPENDENT_WINDOWS:
-        return False
-    if m.id == "M3" and o.condition == "touch":
-        return False
-    return True
-
-
-def render_hero(result: CaseResult) -> None:
-    o = result.oracle
-    v = result.confirmed_claim.values
-    company = result.reported_facts.company_name if result.reported_facts and result.reported_facts.company_name else ""
-    eyebrow = f"{t('eyebrow')} · {result.created_at:%Y-%m-%d} · {v.ticker}" + (f" · {company}" if company else "")
-    cond = t("cond_touch") if o.condition == "touch" else t("cond_end")
-    spot = f"{o.spot:,.2f}" if o.spot else "—"
-    meta = (f"<span>{esc(t('now_price'))} {spot}</span><span>{esc(t('target'))} {esc(format(v.target_price, ','))}</span>"
-            f"<span>{esc(t('deadline'))} {o.target_date:%Y-%m}</span><span class='tc-chip'>{esc(cond)}</span>")
-    if o.low is None:
-        figure = f'<span class="tc-big" style="font-size:1.4rem">{esc(t("prob_none"))}</span>'
+def render_cnf(current: bool) -> None:
+    filled = any(st.session_state[f"f_{n}"].strip() for n in TEXT_FIELDS if n != "claim_text") or bool(st.session_state["prefill_sources"])
+    head = st.empty()
+    html_block(ck.para(t("cnf_hint") if filled else t("cnf_stby")) + (f'<div class="tc-note" style="margin-top:6px">{esc(t("marks"))}</div>' if filled else ""))
+    render_groups()
+    draft = current_draft()  # widgets above may have changed the values
+    validation = validate_draft(draft, today=get_service().today())
+    if filled:
+        render_checks(validation)
+    row = st.columns([3, 2, 2], vertical_alignment="center")
+    if row[1].button(t("confirm"), key="btn_confirm", width="stretch"):
+        try:
+            st.session_state["confirmation"] = confirm(draft, now=get_service().now, today=get_service().today())
+            st.session_state["confirm_feedback"] = None
+        except ConfirmationError:
+            st.session_state["confirmation"] = None
+            st.session_state["confirm_feedback"] = "invalid"
+    confirmation = st.session_state["confirmation"]
+    state = confirmation_state(draft, confirmation)
+    run_clicked = row[2].button(t("run"), key="btn_run", type="primary", disabled=state != "confirmed", width="stretch")
+    row[0].markdown(ck.keyswitch(state == "confirmed", zh()), unsafe_allow_html=True)
+    if st.session_state["confirm_feedback"]:
+        st.error(t("invalid_confirm"))
+    if state == "confirmed":
+        st.success(t("confirmed", t=f"{confirmation.confirmed_at:%Y-%m-%d %H:%M:%S}"))
+    elif state == "stale":
+        st.warning(t("stale"))
+    elif filled:
+        st.info(t("unconfirmed"))
+    word = {"confirmed": "ARM", "stale": "SAFE · STALE"}.get(state, "SAFE" if filled else "STBY")
+    head.markdown(ck.unit_head(t("u_cnf"), ck.chip(word), "u-cnf"), unsafe_allow_html=True)
+    board = st.empty()
+    if run_clicked:
+        run_case(draft, confirmation, board)
+    if st.session_state["run_error"]:
+        st.error(t("run_failed") + st.session_state["run_error"])
+        st.caption(t("run_kept"))
+    result = st.session_state["result"]
+    if result is None:
+        return
+    if current:
+        html_block(ck.lamp_row("green", t("ready")) + ck.tape(result, zh()))
+        st.button(t("open_report"), key="btn_open", on_click=_go, args=("result",), type="primary")
+    elif result.confirmed_claim is None:  # blocked before any data was fetched
+        for issue in result.validation_issues:
+            st.error(issue_text(issue))
+        for w in notes_of(result):
+            st.warning(w)
     else:
-        figure = (f'<span class="tc-big">{pct_p(o.low)} – {pct_p(o.high)}</span>'
-                  f'<span class="tc-pill tc-{TIER_TONE[o.tier]}">{esc(tr(o.tier_label)[:1].upper() + tr(o.tier_label)[1:])}</span>')
-    headline = f'<div class="tc-headline">{esc(tr(result.report.headline))}</div>' if result.report else ""
-    html_block(f'<div class="tc-card tc-hero"><div class="tc-eyebrow">{esc(eyebrow)}</div>'
-               f'<div class="tc-title">{esc(v.claim_text)}</div><div class="tc-meta">{meta}</div>'
-               f'<div class="tc-figure">{figure}</div>{range_strip(result) if o.low is not None or o.methods else ""}'
-               f'<div class="tc-sub" style="margin-top:4px">{esc(t("strip_note"))}</div>{headline}</div>')
-    if result.data_steps:
-        ok = sum(1 for x in result.data_steps.values() if x == "ok")
-        failed = sum(1 for x in result.data_steps.values() if x == "failed")
-        with st.expander(t("steps_summary", ok=ok, failed=failed), expanded=failed > 0):
-            html_block(step_chips(result.data_steps))
+        st.warning(t("hidden"))
 
 
-# ------------------------------------------------------------------ report tab
+def render_tapes() -> None:
+    html_block(ck.unit_head(t("u_hist"), ck.chip(t("hist_hint")), "u-hist"))
+    store = get_service().store
+    cases = [c for c in (store.list_cases() if store is not None else []) if c.confirmed_claim is not None][:3]
+    if not cases:
+        st.caption(t("history_empty"))
+        return
+    for c in cases:
+        a, b = st.columns([7, 1], vertical_alignment="center")
+        a.markdown(ck.tape(c, zh()), unsafe_allow_html=True)
+        b.button(t("play"), key=f"btn_tape_{c.case_id}", on_click=_open_tape, args=(c.case_id,), width="stretch")
+    st.button(t("hist_all"), key="btn_hist_all", on_click=_show_history)
 
 
-def render_narrative(result: CaseResult, key_suffix: str) -> None:
-    n = result.narratives.get(lang())
-    if n is None and result.narrative is not None and result.narrative.language == "both":  # written before v0.8
-        n = result.narrative
-    settings = get_service().settings
-    model_kw = dict(model=settings.narrative_model, effort=settings.narrative_effort)
-    with st.container(border=True):
-        st.markdown(f"**{t('ai_title')}**")
-        if n is None or n.status != "ok":
-            st.caption(t("ai_intro"))
-            if n is not None:
-                st.warning(t("ai_failed") + (n.error or n.status))
-            st.button(t("ai_button") if n is None else t("ai_retry"), key=f"btn_narrate_{key_suffix}", help=t("ai_button_help", **model_kw),
-                      on_click=_narrate, args=(key_suffix,), type="primary")
-            return
-        summary = t("ai_summary", ok=n.verified, total=n.total, bad=n.unsupported, model=n.model + (f" · effort {n.effort}" if n.effort else ""))
-        cost = estimate_cost(n.model, n.usage)
-        if n.reused_from:
-            summary += " · " + t("ai_reused", case=n.reused_from[:8])
-        elif cost is not None:
-            summary += " · " + t("ai_usage", inp=n.usage.get("input_tokens", 0), out=n.usage.get("output_tokens", 0), cost=cost)
-        st.caption(summary)
-        for key in NARR_TITLES:
-            sentences = n.sections.get(key) or []
-            if not sentences:
-                continue
-            items = "".join(f"<li>{NARR_BADGE[x.status]} {esc((x.zh if zh() else x.en) or x.zh or x.en)} "
-                            f"<span class='tc-sub' style='font-size:.75rem'>[{esc(' '.join(x.fact_ids))}]</span></li>" for x in sentences)
-            html_block(f'<div class="tc-layer">{esc(NARR_TITLES[key][0 if zh() else 1])}</div><ul class="tc-list" style="list-style:none;padding-left:0">{items}</ul>')
-        st.caption(t("ai_legend"))
-        with st.expander(t("ai_facts")):
-            for k, x in [(k, x) for k, v in n.sections.items() for x in v if x.problems]:
-                st.markdown(f"- {NARR_BADGE[x.status]} **{NARR_TITLES[k][0 if zh() else 1]}**: {'；'.join(x.problems)}")
-            st.dataframe([{"id": f.id, "label": f.label_zh if zh() else f.label_en, "value": f.value, "unit": f.unit, "source": f.source} for f in n.facts],
-                         hide_index=True, use_container_width=True)
-        st.button(t("ai_retry"), key=f"btn_narrate_{key_suffix}", on_click=_narrate, args=(key_suffix, True), help=t("ai_retry_help", **model_kw))
+def view_home(current: bool) -> None:
+    bridge_unit(result_page=False, warn=1 if sec_gate() and st.session_state["sec_mode"] in ("live", "record") else 0)
+    left, right = st.columns([2, 1])
+    with left, st.container(key="u-c-clm"):
+        render_clm()
+    with right, st.container(key="u-o-sys"):
+        render_sys()
+    with st.container(key="u-b-cnf"):
+        render_cnf(current)
+    with st.container(key="u-o-feed"):
+        html_block(ck.feed_info(zh(), t("u_feed")))
+    with st.container(key="u-b-mth"):
+        html_block(ck.methods_info(zh(), t("u_mth")))
+    with st.container(key="u-c-hist"):
+        render_tapes()
+    footer_unit()
+    st.html(ck.page_css([("u-c-clm", 1), ("u-b-cnf", 2), ("u-o-feed", 3), ("u-b-mth", 4), ("u-c-hist", 5)]))
+
+
+# ------------------------------------------------------------------ report channel 1: layered report
 
 
 def render_report(report: Optional[PlainReport]) -> None:
@@ -1031,7 +1095,7 @@ def render_report(report: Optional[PlainReport]) -> None:
                    + table(S["r_scen_cols"][i], [(tr(x.name), tr(x.assumptions), x.price or "—", x.vs_target or "—", tr(x.meaning))
                                                  for x in report.scenarios], nums=(2, 3)))
         st.caption(tr(report.scenario_note))
-    html_block(f'<div class="tc-h">{esc(t("r_concl"))}</div><div class="tc-sub" style="font-size:.95rem;color:var(--tc-text)">{esc(tr(report.verdict_meaning))}</div>')
+    html_block(f'<div class="tc-h">{esc(t("r_concl"))}</div><div class="tc-sub" style="font-size:.95rem;opacity:1">{esc(tr(report.verdict_meaning))}</div>')
     c1, c2 = st.columns(2)
     c1.markdown(f'<div class="tc-card"><b class="tc-good">↑ {esc(t("r_up"))}</b>{bullets([tr(x) for x in report.upside])}</div>', unsafe_allow_html=True)
     c2.markdown(f'<div class="tc-card"><b class="tc-bad">↓ {esc(t("r_down"))}</b>{bullets([tr(x) for x in report.downside])}</div>', unsafe_allow_html=True)
@@ -1040,7 +1104,7 @@ def render_report(report: Optional[PlainReport]) -> None:
                    + table(S["r_mon_cols"][i], [(tr(m.signal), tr(m.current), tr(m.threshold), tr(m.meaning)) for m in report.monitor]))
 
 
-# ------------------------------------------------------------------ scenario tab
+# ------------------------------------------------------------------ report channel 2: scenario
 
 
 def _years_left(result: CaseResult) -> float:
@@ -1109,12 +1173,12 @@ def tab_scenario(result: CaseResult, key_suffix: str) -> None:
                    event_years=(ev_date - today).days / 365.25, up=up / 100, down=down / 100, p_success=p_succ / 100, touch=touch, market_p=market_p)
     html_block('<div class="tc-kpis">' + kpi(t("sc_result"), pct_p(res.probability), main=True) + kpi(t("sc_if_up"), pct_p(res.p_if_success))
                + kpi(t("sc_if_down"), pct_p(res.p_if_failure)) + (kpi(t("sc_market_p"), pct_p(market_p)) if market_p is not None else "") + "</div>")
-    th = theme()
-    lo, hi = _x(res.p_if_failure), _x(res.p_if_success)
-    marks = [(res.probability, th["accent"], f'{t("sc_result")} {pct_p(res.probability)}', ""), (0.5, th["muted"], "50%", "below")]
+    th = chart_colors()
+    lo, hi = ck.sqrt_x(res.p_if_failure), ck.sqrt_x(res.p_if_success)
+    marks = [(res.probability, th["second"], f'{t("sc_result")} {pct_p(res.probability)}', ""), (0.5, th["muted"], "50%", "below")]
     if market_p is not None:
-        marks.append((market_p, th["second"], f"M1 {pct_p(market_p)}", "below"))
-    mk = "".join(f'<div class="mk {cls}" style="left:{_x(p):.2f}%;background:{col}"><b>{esc(lbl)}</b></div>' for p, col, lbl, cls in marks)
+        marks.append((market_p, th["accent"], f"M1 {pct_p(market_p)}", "below"))
+    mk = "".join(f'<div class="mk {cls}" style="left:{ck.sqrt_x(p):.2f}%;background:{col}"><b>{esc(lbl)}</b></div>' for p, col, lbl, cls in marks)
     html_block(f'<div class="tc-gauge"><div class="rail"></div><div class="fill" style="left:{lo:.2f}%;width:{max(hi - lo, .5):.2f}%"></div>{mk}</div>')
     if res.break_even == 0:
         st.markdown(t("sc_break_zero"))
@@ -1127,12 +1191,12 @@ def tab_scenario(result: CaseResult, key_suffix: str) -> None:
     st.caption(t("sc_note"))
 
 
-# ------------------------------------------------------------------ levels and methods tab
+# ------------------------------------------------------------------ report channel 3: levels and methods
 
 
 def tab_levels(result: CaseResult) -> None:
     o = result.oracle
-    th = theme()
+    th = chart_colors()
     i = 0 if zh() else 1
     touch = o.condition == "touch"
     if o.spot:
@@ -1162,7 +1226,7 @@ def tab_levels(result: CaseResult) -> None:
                 color=alt.Color("kind:N", scale=alt.Scale(domain=[t("lv_end"), t("lv_touch")], range=[th["accent"], th["second"]]),
                                 legend=alt.Legend(orient="top", title=None, labelColor=th["text"])),
             )
-            lines = base.mark_line(strokeWidth=2.2, interpolate="monotone")
+            lines = base.mark_line(strokeWidth=2.2)
             points = base.mark_point(size=70, filled=True, stroke=th["surface"], strokeWidth=2).encode(
                 opacity=alt.condition(hover, alt.value(1), alt.value(0)),
                 tooltip=[alt.Tooltip("level:Q", title=t("lv_level"), format=",.2f"), alt.Tooltip("kind:N", title=" "),
@@ -1170,15 +1234,14 @@ def tab_levels(result: CaseResult) -> None:
             rules = alt.Chart(pd.DataFrame({"v": [target, o.spot], "lbl": [f"{t('target')} {target:g}", f"{t('now_price')} {o.spot:,.2f}"]}))
             rule = rules.mark_rule(strokeDash=[4, 3], color=th["muted"], strokeWidth=1).encode(x="v:Q")
             text = rules.mark_text(align="left", dx=4, y=10, color=th["muted"], fontSize=11).encode(x="v:Q", text="lbl:N")
-            chart = (lines + points + rule + text).properties(height=300).configure_view(strokeWidth=0).configure(background="transparent")
-            st.altair_chart(chart, use_container_width=True)
+            st.altair_chart(finish((lines + points + rule + text).properties(height=300)), width="stretch")
             st.caption(t("lv_note"))
 
     html_block(f'<div class="tc-h">{esc(t("m_title"))}</div>')
     rows = []
     for m in o.methods:
         p = m.touch_probability if touch else m.probability
-        used = m.status == "ok" and p is not None and o.low is not None and o.low - 1e-12 <= p <= o.high + 1e-12 and _counted(result, m)
+        used = m.status == "ok" and p is not None and o.low is not None and o.low - 1e-12 <= p <= o.high + 1e-12 and ck.counted(result, m)
         rows.append((f"{m.id} {tr(m.name)}", pct_p(m.probability) if m.status == "ok" else "—", pct_p(m.touch_probability) if m.status == "ok" else "—",
                      tr(m.measures), t("m_yes") if used else (t("m_no") if m.status == "ok" else "—")))
     html_block(table(S["m_cols"][i], rows, nums=(1, 2), on=2 if touch else 1))
@@ -1196,7 +1259,7 @@ def tab_levels(result: CaseResult) -> None:
         st.markdown(t("why_trust_body"))
 
 
-# ------------------------------------------------------------------ fundamentals tab
+# ------------------------------------------------------------------ report channel 4: fundamentals
 
 
 def render_verdict(result: CaseResult) -> None:
@@ -1274,7 +1337,7 @@ def render_sensitivity(result: CaseResult) -> None:
         st.caption(t("sens_none"))
         return
     hist = Decimal(sens.reported_cagr) if sens.reported_cagr else None
-    th = theme()
+    th = chart_colors()
 
     def cell(v: Optional[str]) -> str:
         if v is None:
@@ -1289,7 +1352,8 @@ def render_sensitivity(result: CaseResult) -> None:
     df = pd.DataFrame([[cell(v) for v in row] for row in sens.required_cagr], index=rows, columns=cols)
     a_row = sens.multiples.index(sens.assumed_multiple) if sens.assumed_multiple in sens.multiples else None
     a_col = sens.horizons.index(sens.assumed_horizon) if sens.assumed_horizon in sens.horizons else None
-    tone = {"✔": "rgba(91,138,106,0.14)", "◐": "rgba(168,132,74,0.16)", "✖": "rgba(163,95,104,0.14)"}
+    # no red: within reach is green, a stretch is pale amber, far out of reach is strong amber
+    tone = {"✔": "rgba(116,255,154,0.16)", "◐": "rgba(255,178,62,0.14)", "✖": "rgba(255,178,62,0.32)"}
 
     def style(frame: pd.DataFrame) -> pd.DataFrame:
         out = pd.DataFrame("", index=frame.index, columns=frame.columns)
@@ -1303,7 +1367,7 @@ def render_sensitivity(result: CaseResult) -> None:
                 out.iat[rr, cc] = css
         return out
 
-    st.dataframe(df.style.apply(style, axis=None), use_container_width=True)
+    st.dataframe(df.style.apply(style, axis=None))
     st.caption(t("sens_note", b=f"{fmt_amount(sens.base_value)} ({sens.base_label})", h=fmt_pct(hist) if hist is not None else "—"))
 
 
@@ -1322,10 +1386,10 @@ def render_calculations(result: CaseResult) -> None:
         }
         for c in result.calculations
     ]
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, hide_index=True)
     with st.expander(t("provenance")):
         st.dataframe([{("字段" if zh() else "Field"): label_of(k), ("来源" if zh() else "Source"): v}
-                      for k, v in result.confirmed_claim.value_provenance.items()], hide_index=True, use_container_width=True)
+                      for k, v in result.confirmed_claim.value_provenance.items()], hide_index=True)
 
 
 def tab_fundamentals(result: CaseResult) -> None:
@@ -1341,7 +1405,7 @@ def tab_fundamentals(result: CaseResult) -> None:
         st.markdown(t("verdict_kinds_body"))
 
 
-# ------------------------------------------------------------------ raw data tab
+# ------------------------------------------------------------------ report channel 5: raw data
 
 
 def _rule(value: float, text: str, color: str) -> alt.Chart:
@@ -1352,7 +1416,7 @@ def _rule(value: float, text: str, color: str) -> alt.Chart:
 
 
 def tab_raw(result: CaseResult, key_suffix: str) -> None:
-    th = theme()
+    th = chart_colors()
     facts, market = result.reported_facts, result.market
     claim = result.confirmed_claim.values
     axis = dict(labelColor=th["muted"], titleColor=th["muted"], gridColor=th["grid"], domain=False)
@@ -1365,15 +1429,15 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
             label = ("年营收" if is_ps else "年净利润") if zh() else ("Annual revenue" if is_ps else "Annual net income")
             df = pd.DataFrame({"FY": [f"FY{p.period_end.year}" for p in series], "v": [float(p.value) for p in series],
                                "end": [p.period_end.isoformat() for p in series], "filed": [f"{p.form} {p.filed}" for p in series]})
-            chart = alt.Chart(df).mark_bar(size=26, color=th["accent"], cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+            chart = alt.Chart(df).mark_bar(size=26, color=th["accent"]).encode(
                 x=alt.X("FY:N", title=None, sort=None, axis=alt.Axis(labelAngle=0, labelColor=th["muted"], domain=False, ticks=False)),
                 y=alt.Y("v:Q", title=f"{label} (USD)", axis=alt.Axis(format="~s", **axis)),
                 tooltip=[alt.Tooltip("FY:N"), alt.Tooltip("v:Q", format=",.0f"), alt.Tooltip("end:N"), alt.Tooltip("filed:N")],
             )
             peak = max(float(p.value) for p in series)
             if required is not None and float(required) <= 5 * peak:
-                chart = chart + _rule(float(required), ("观点所需 " if zh() else "Claim needs ") + fmt_amount(required), th["muted"])
-            st.altair_chart(chart.properties(height=240).configure_view(strokeWidth=0).configure(background="transparent"), use_container_width=True)
+                chart = chart + _rule(float(required), ("观点所需 " if zh() else "Claim needs ") + fmt_amount(required), th["second"])
+            st.altair_chart(finish(chart.properties(height=240)), width="stretch")
             if required is not None and float(required) > 5 * peak:
                 st.caption(f"观点所需 {fmt_amount(required)}，超过图中最大值 5 倍，未画参考线。" if zh()
                            else f"The claim needs {fmt_amount(required)}, more than 5x the chart's maximum; no line drawn.")
@@ -1383,23 +1447,14 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
                 rows.append({"metric": kzh if zh() else ken, "period_end": p.period_end.isoformat(), "value": fmt_amount(p.value),
                              "concept": p.concept, "form": p.form, "filed": p.filed.isoformat(), "accession": p.accession})
         with st.expander(t("data_table")):
-            st.dataframe(rows, hide_index=True, use_container_width=True)
+            st.dataframe(rows, hide_index=True)
             st.caption(facts.source_url)
     if market is not None:
         html_block(f'<div class="tc-h">{esc(t("price_title"))} · {esc(market.symbol)}</div>')
-        df = pd.DataFrame({"day": [p.day for p in market.price_series], "close": [float(p.close) for p in market.price_series]})
-        hover = alt.selection_point(fields=["day"], nearest=True, on="pointerover", empty=False)
-        line = alt.Chart(df).mark_line(strokeWidth=2, color=th["accent"]).encode(
-            x=alt.X("day:T", title=None, axis=alt.Axis(format="%Y-%m", labelAngle=0, labelColor=th["muted"], grid=False, domain=False)),
-            y=alt.Y("close:Q", title=("收盘价" if zh() else "Close") + f" ({market.currency or ''})", axis=alt.Axis(**axis)))
-        points = alt.Chart(df).mark_point(size=70, filled=True, color=th["accent"], stroke=th["surface"], strokeWidth=2).encode(
-            x="day:T", y="close:Q", opacity=alt.condition(hover, alt.value(1), alt.value(0)),
-            tooltip=[alt.Tooltip("day:T", format="%Y-%m-%d"), alt.Tooltip("close:Q", format=",.2f")]).add_params(hover)
-        ref = _rule(float(claim.reference_price), ("参考价 " if zh() else "Reference ") + format(claim.reference_price, "f"), th["muted"])
-        st.altair_chart((line + points + ref).properties(height=240).configure_view(strokeWidth=0).configure(background="transparent"), use_container_width=True)
         vol = fmt_pct(market.annualized_volatility) if market.annualized_volatility is not None else "—"
-        st.caption(f"最新收盘 {format(market.last_close, 'f')}（{market.last_date}），历史年化波动率 {vol}。" if zh()
-                   else f"Latest close {format(market.last_close, 'f')} ({market.last_date}); historical volatility {vol}.")
+        close = f"{float(market.last_close):,.2f}"
+        st.caption(f"最新收盘 {close}（{market.last_date}），历史年化波动率 {vol}；K 线见 UNIT 02。" if zh()
+                   else f"Latest close {close} ({market.last_date}); historical volatility {vol}. The K-line is in UNIT 02.")
     if result.coverage is not None:
         html_block(f'<div class="tc-h">{esc(t("filings_title"))}</div>')
         (st.warning if result.coverage.coverage_gap else st.caption)(pick(result.coverage.message, result.coverage.message_zh))
@@ -1407,8 +1462,7 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
         rows = [{"form": r.form_type, "filed": r.filing_date.isoformat(), "period": r.report_date.isoformat() if r.report_date else "",
                  "document": r.document_url or "", "index": r.filing_index_url, "data_mode": r.data_mode.value}
                 for r in result.evidence_records]
-        st.dataframe(rows, use_container_width=True, hide_index=True,
-                     column_config={"document": st.column_config.LinkColumn(), "index": st.column_config.LinkColumn()})
+        st.dataframe(rows, hide_index=True, column_config={"document": st.column_config.LinkColumn(), "index": st.column_config.LinkColumn()})
         st.caption(t("filings_note"))
     if facts is None and market is None and not result.evidence_records:
         st.info(t("no_public"))
@@ -1418,6 +1472,11 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
     status = STATUS[result.status.value][0 if zh() else 1]
     st.caption(f"case_id {result.case_id} · {result.created_at.isoformat()} · {status}")
     st.json(result.data_modes, expanded=False)
+    notes = notes_of(result)
+    if notes:
+        st.markdown(f"**{t('notes', n=len(notes))}**")
+        for w in notes:
+            st.warning(w)
     if result.provider_errors:
         st.markdown(f"**{t('data_errors')}**")
         for e in result.provider_errors:
@@ -1453,94 +1512,132 @@ def render_model_probability(result: CaseResult) -> None:
         st.markdown(f"- {a}")
 
 
-# ------------------------------------------------------------------ result
+# ------------------------------------------------------------------ report page units
 
 
-def render_result(result: CaseResult, key_suffix: str = "current") -> None:
+def render_kline(result: CaseResult) -> None:
+    v = result.confirmed_claim.values
+    m = result.market
+    has_data = m is not None and (m.price_series or (m.kline is not None and m.kline.daily))
+    html_block(ck.unit_head(t("u_kln", tk=v.ticker), ck.chip(t("kln_src", d=m.last_date)) if has_data else "", "u-kln"))
+    if not has_data:
+        st.info(t("kln_none"))
+        return
+    touch_text, end_text = ck.kline_notes(result, zh())
+    st.iframe(kline_html(m, target=float(v.target_price), deadline=ck.deadline_of(result), zh=zh(), ticker=v.ticker, last_day=m.last_date,
+                         touch_text=touch_text, end_text=end_text, anim=False, phosphor=st.session_state["tube"]), height=KLINE_HEIGHT)
+
+
+def render_nar(result: CaseResult, key_suffix: str, anim: bool) -> None:
+    n = result.narratives.get(lang())
+    if n is None and result.narrative is not None and result.narrative.language == "both":  # written before v0.8
+        n = result.narrative
+    settings = get_service().settings
+    model_kw = dict(model=settings.narrative_model, effort=settings.narrative_effort)
+    if n is None or n.status != "ok":
+        html_block(ck.unit_head(t("u_nar"), "", "u-nar") + ck.para(t("ai_intro")))
+        if n is not None:
+            st.warning(t("ai_failed") + (n.error or n.status))
+        no_key = not settings.anthropic_api_key
+        if no_key:
+            st.caption(t("ai_missing"))
+            c = st.columns([3, 1], vertical_alignment="bottom")
+            c[0].text_input(t("ai_key"), key="ai_key_input", type="password", placeholder="sk-ant-...")
+            c[1].button(t("ai_save"), key="btn_ai_save", on_click=_save_ai_key, width="stretch")
+            show_msg("ai_msg")
+        st.button(t("ai_button") if n is None else t("ai_retry"), key=f"btn_narrate_{key_suffix}", help=t("ai_button_help", **model_kw),
+                  on_click=_narrate, args=(key_suffix,), type="primary", disabled=no_key)
+        st.caption(t("ai_button_help", **model_kw))
+        return
+    summary = t("ai_summary", ok=n.verified, total=n.total, bad=n.unsupported, model=n.model + (f" · effort {n.effort}" if n.effort else ""))
+    cost = estimate_cost(n.model, n.usage)
+    if n.reused_from:
+        summary += " · " + t("ai_reused", case=n.reused_from[:8])
+    elif cost is not None:
+        summary += " · " + t("ai_usage", inp=n.usage.get("input_tokens", 0), out=n.usage.get("output_tokens", 0), cost=cost)
+    html_block(ck.unit_head(t("u_nar"), ck.chip(summary), "u-nar") + ck.nar_paper(n, zh(), anim))
+    st.caption(t("ai_legend"))
+    with st.expander(t("ai_facts")):
+        for k, x in [(k, x) for k, v in n.sections.items() for x in v if x.problems]:
+            st.markdown(f"- {NARR_BADGE[x.status]} **{ck.L(zh(), *ck.NARR_TITLES.get(k, (k, k)))}**: {'；'.join(x.problems)}")
+        st.dataframe([{"id": f.id, "label": f.label_zh if zh() else f.label_en, "value": f.value, "unit": f.unit, "source": f.source} for f in n.facts],
+                     hide_index=True)
+    st.button(t("ai_retry"), key=f"btn_narrate_{key_suffix}", on_click=_narrate, args=(key_suffix, True), help=t("ai_retry_help", **model_kw))
+
+
+def render_result_units(result: CaseResult, key_suffix: str, *, anim: bool, start: int = 1) -> list[tuple[str, int]]:
+    """The report units in order; returns (container key, junction number) for the data bus."""
     if result.validation_issues:
         for i in result.validation_issues:
             st.error(issue_text(i))
-        return
+        return []
     if result.confirmed_claim is None:
-        return
+        return []
+    z = zh()
+    keys: list[str] = []
+    with st.container(key="u-c-status-bar"):
+        html_block(ck.status_bar(result, z, [j for j in JUMPS if result.oracle is not None or j[0] != "u-prb"]))
+    with st.container(key="u-b-clm"):
+        html_block(ck.claim_unit(result, z, t("u_clm_r")))
+    keys.append("u-b-clm")
+    with st.container(key="u-c-kln"):
+        render_kline(result)
+    keys.append("u-c-kln")
     if result.oracle is not None:
-        render_hero(result)
-    else:  # reports made before v0.5 have no probability
-        render_verdict(result)
-        if result.report is not None:
-            st.markdown(tr(result.report.headline))
-    warnings = result.warnings_zh if zh() and len(result.warnings_zh) == len(result.warnings) else result.warnings
-    if warnings or result.provider_errors:
-        # failed sources are already marked in the data-source chips; details stay folded so the report comes first
-        with st.expander(t("notes", n=len(warnings) + len(result.provider_errors)), expanded=result.oracle is None and bool(result.provider_errors)):
-            for w in warnings:
-                st.warning(w)
-            for e in result.provider_errors:
-                st.error(f"[{e.provider_id}] {e.code}" + (f" (HTTP {e.http_status})" if e.http_status else "") + f": {e.message}")
-    tabs = st.tabs(S["tabs"][0 if zh() else 1])
-    with tabs[0]:
-        if result.oracle is not None:
-            render_narrative(result, key_suffix)
-        render_report(result.report)
-    with tabs[1]:
-        if result.oracle is not None:
-            tab_scenario(result, key_suffix)
-        else:
-            st.info(t("sc_need"))
-    with tabs[2]:
-        if result.oracle is not None:
-            tab_levels(result)
-        else:
-            st.caption(t("r_none"))
-    with tabs[3]:
-        tab_fundamentals(result)
-    with tabs[4]:
-        tab_raw(result, key_suffix)
-
-
-# ------------------------------------------------------------------ views
-
-
-def sidebar() -> None:
-    with st.sidebar:
-        html_block('<div class="tc-brand">TickerCase</div>')
-        st.radio(t("language"), options=["zh", "en"], format_func=lambda x: "中文" if x == "zh" else "English", key="lang", horizontal=True,
-                 label_visibility="collapsed")
-        st.radio(t("view"), options=["new", "history"], format_func=labels({x: S[f"view_{x}"] for x in ("new", "history")}), key="view", horizontal=True)
-        st.radio(t("mode"), options=list(MODES), format_func=labels(MODES), key="sec_mode", help=t("mode_help"))
-        needs_sec = st.session_state["sec_mode"] in ("live", "record") and bool(validate_user_agent(get_service().settings.sec_user_agent))
-        needs_ai = not get_service().settings.anthropic_api_key
-        with st.expander(t("settings"), expanded=needs_sec):
-            st.markdown(f"**{t('sec_setup')}**")
-            if validate_user_agent(get_service().settings.sec_user_agent):
-                st.caption(t("sec_missing"))
-                st.text_input(t("sec_email"), key="sec_email_input", placeholder="you@example.org")
-                st.button(t("sec_save"), key="btn_sec_save", on_click=_save_sec_contact)
+        with st.container(key="u-c-prb"):
+            html_block(ck.prb_unit(result, z, t("u_prb"), anim))
+        keys.append("u-c-prb")
+    with st.container(key="u-o-feed"):
+        html_block(ck.feeds_unit(result, z, t("u_feed_r"), anim))
+    keys.append("u-o-feed")
+    with st.container(key="u-c-rpt"):
+        html_block(ck.unit_head(t("u_rpt"), ck.chip(t("rpt_note")), "u-rpt"))
+        tabs = st.tabs(S["tabs"][0 if z else 1])
+        with tabs[0]:
+            render_report(result.report)
+        with tabs[1]:
+            if result.oracle is not None:
+                tab_scenario(result, key_suffix)
             else:
-                st.caption("✔ " + t("sec_ok"))
-            show_msg("sec_msg")
-            st.markdown(f"**{t('ai_setup')}**")
-            if needs_ai:
-                st.caption(t("ai_missing"))
-                st.text_input(t("ai_key"), key="ai_key_input", type="password", placeholder="sk-ant-...")
-                st.button(t("ai_save"), key="btn_ai_save", on_click=_save_ai_key)
+                st.info(t("sc_need"))
+        with tabs[2]:
+            if result.oracle is not None:
+                tab_levels(result)
             else:
-                st.caption("✔ " + t("ai_ok"))
-            show_msg("ai_msg")
-        st.markdown(f"**{t('examples')}**")
-        st.button(t("ex_ps"), on_click=_load_example, args=("ps",), key="btn_example_ps", use_container_width=True)
-        st.button(t("ex_pe"), on_click=_load_example, args=("pe",), key="btn_example_pe", use_container_width=True)
-        st.button(t("clear"), on_click=_clear_form, key="btn_clear", use_container_width=True)
-        st.caption(t("no_advice"))
+                st.caption(t("r_none"))
+        with tabs[3]:
+            tab_fundamentals(result)
+        with tabs[4]:
+            tab_raw(result, key_suffix)
+    keys.append("u-c-rpt")
+    left, right = st.columns([2, 1])
+    with left, st.container(key="u-c-sig"):
+        html_block(ck.sig_unit(result, z, t("u_sig"), notes=notes_of(result)))
+    with right, st.container(key="u-r-fnd"):
+        html_block(ck.fnd_unit(result, z, t("u_fnd"), t("fnd_more")))
+    keys.append("u-c-sig")
+    with st.container(key="u-b-nar"):
+        render_nar(result, key_suffix, anim)
+    keys.append("u-b-nar")
+    return [(k, start + i) for i, k in enumerate(keys)]
+
+
+def view_result(result: CaseResult) -> None:
+    anim = result.case_id not in st.session_state["animated"]  # first view of a new report plays its motion once
+    st.session_state["animated"].add(result.case_id)
+    bridge_unit(result_page=True, warn=len(ck.warnings_of(result, zh())))
+    nodes = render_result_units(result, "current", anim=anim)
+    footer_unit()
+    st.html(ck.page_css(nodes))
+
+
+# ------------------------------------------------------------------ history page
 
 
 def view_history() -> None:
-    st.title(t("view_history"))
+    bridge_unit(result_page=False, warn=0)
     store = get_service().store
     cases = store.list_cases() if store is not None else []
-    if not cases:
-        st.info(t("history_empty"))
-        return
 
     def prob_text(c: CaseResult) -> str:
         o = c.oracle
@@ -1553,26 +1650,35 @@ def view_history() -> None:
             return "—"
         return (c.verdict.display_zh or VERDICT_DISPLAY_ZH[c.verdict.label]) if zh() else c.verdict.display
 
-    rows = []
-    for c in cases:
-        v = c.confirmed_claim.values if c.confirmed_claim else None
-        rows.append({
-            ("时间" if zh() else "Time"): c.created_at.strftime("%Y-%m-%d %H:%M"),
-            ("代码" if zh() else "Ticker"): v.ticker if v else "—",
-            ("观点" if zh() else "Claim"): v.claim_text if v else "—",
-            ("概率" if zh() else "Probability"): prob_text(c),
-            ("基本面结论" if zh() else "Fundamentals"): verdict_text(c),
-            ("数据" if zh() else "Data"): MODES.get(c.data_modes.get("sec_filings", ""), ("—", "—"))[0 if zh() else 1]
-            if c.data_modes.get("sec_filings") in MODES else c.data_modes.get("sec_filings", "—"),
-        })
-    st.caption(t("history_hint"))
-    event = st.dataframe(rows, hide_index=True, use_container_width=True, on_select="rerun", selection_mode="multi-row", key="history_table")
-    selected = [cases[i] for i in (event.selection.rows if event and event.selection else [])]
+    selected: list[CaseResult] = []
+    with st.container(key="u-c-hist"):
+        html_block(ck.unit_head(t("u_hist_all"), ck.chip(t("history_hint")), "u-hist"))
+        if not cases:
+            st.info(t("history_empty"))
+        else:
+            rows = []
+            for c in cases:
+                v = c.confirmed_claim.values if c.confirmed_claim else None
+                rows.append({
+                    ("时间" if zh() else "Time"): c.created_at.strftime("%Y-%m-%d %H:%M"),
+                    ("代码" if zh() else "Ticker"): v.ticker if v else "—",
+                    ("观点" if zh() else "Claim"): v.claim_text if v else "—",
+                    ("概率" if zh() else "Probability"): prob_text(c),
+                    ("基本面结论" if zh() else "Fundamentals"): verdict_text(c),
+                    ("数据" if zh() else "Data"): MODES.get(c.data_modes.get("sec_filings", ""), ("—", "—"))[0 if zh() else 1]
+                    if c.data_modes.get("sec_filings") in MODES else c.data_modes.get("sec_filings", "—"),
+                })
+            event = st.dataframe(rows, hide_index=True, on_select="rerun", selection_mode="multi-row", key="history_table")
+            selected = [cases[i] for i in (event.selection.rows if event and event.selection else [])]
+            if selected:
+                st.session_state["open_case"] = None
+            elif st.session_state["open_case"]:  # a tape played from the console
+                selected = [c for c in cases if c.case_id == st.session_state["open_case"]][:1]
+    nodes = [("u-c-hist", 1)]
     if len(selected) == 1:
         st.session_state["history_selected"] = selected[0]
-        render_result(selected[0], key_suffix=selected[0].case_id)
+        nodes += render_result_units(selected[0], selected[0].case_id, anim=False, start=2)
     elif len(selected) >= 2:
-        st.markdown(f"### {t('compare')}")
         tbl = {}
         for c in selected:
             v = c.confirmed_claim.values if c.confirmed_claim else None
@@ -1592,96 +1698,35 @@ def view_history() -> None:
                 ("已披露增速" if zh() else "Reported growth"): fmt_pct(Decimal(e1.measured["reported_cagr"])) if e1 and "reported_cagr" in e1.measured else "—",
                 ("基本面结论" if zh() else "Fundamentals"): verdict_text(c),
             }
-        st.dataframe(pd.DataFrame(tbl), use_container_width=True)
+        with st.container(key="u-c-compare"):
+            html_block(ck.unit_head(t("compare")))
+            st.dataframe(pd.DataFrame(tbl))
+        nodes.append(("u-c-compare", 2))
+    footer_unit()
+    st.html(ck.page_css(nodes))
+
+
+# ------------------------------------------------------------------ page
 
 
 def view_new() -> None:
     draft = current_draft()
-    confirmation: Optional[Confirmation] = st.session_state["confirmation"]
     result: Optional[CaseResult] = st.session_state["result"]
-    result_current = (result is not None and result.input_fingerprint == fingerprint(draft)
-                      and st.session_state["result_mode"] == st.session_state["sec_mode"])
-    validation = validate_draft(draft, today=get_service().today())
-
-    if result_current:
-        holder = st.expander(f"{t('edit_inputs')} · {result.confirmed_claim.values.claim_text}", expanded=False)
+    current = (result is not None and result.confirmed_claim is not None and result.input_fingerprint == fingerprint(draft)
+               and st.session_state["result_mode"] == st.session_state["sec_mode"])
+    if current and st.session_state["page"] == "result":
+        view_result(result)
     else:
-        html_block(f'<div class="tc-title" style="font-size:1.6rem">TickerCase</div><div class="tc-sub" style="margin-bottom:12px">{esc(t("tagline"))}</div>')
-        holder = st.container()
-    with holder:
-        render_claim_box()
-        rest_complete = all(not m.blocking or m.field in CLAIM_FIELDS for m in validation.missing_fields) and not validation.issues
-        render_rest(expanded=not rest_complete and bool(st.session_state["prefill_sources"]))
-
-        draft = current_draft()  # widgets above may have changed the values
-        validation = validate_draft(draft, today=get_service().today())
-        if not result_current:
-            for issue in validation.issues:
-                st.error(issue_text(issue))
-            blocking = [m for m in validation.missing_fields if m.blocking]
-            if blocking:
-                st.warning(t("missing_core") + ("、" if zh() else ", ").join(label_of(m.field) for m in blocking))
-            optional = [m for m in validation.missing_fields if not m.blocking]
-            if optional:
-                st.caption(t("optional_missing") + ("；" if zh() else "; ").join(missing_text(m) for m in optional))
-            for w in (validation.warnings_zh if zh() else validation.warnings):
-                st.caption("⚠ " + w)
-
-        c1, c2, c3 = st.columns([1, 1, 3], vertical_alignment="center")
-        if c1.button(t("confirm"), key="btn_confirm", use_container_width=True):
-            try:
-                st.session_state["confirmation"] = confirm(draft, now=get_service().now, today=get_service().today())
-                st.session_state["confirm_feedback"] = None
-            except ConfirmationError:
-                st.session_state["confirmation"] = None
-                st.session_state["confirm_feedback"] = "invalid"
-        confirmation = st.session_state["confirmation"]
-        state = confirmation_state(draft, confirmation)
-        run_clicked = c2.button(t("run"), key="btn_run", type="primary", disabled=state != "confirmed", use_container_width=True)
-        with c3:
-            if st.session_state["confirm_feedback"]:
-                st.error(t("invalid_confirm"))
-            if state == "confirmed":
-                st.success(t("confirmed", t=f"{confirmation.confirmed_at:%Y-%m-%d %H:%M:%S}"))
-            elif state == "stale":
-                st.warning(t("stale"))
-            else:
-                st.info(t("unconfirmed"))
-
-    if run_clicked:
-        st.session_state["result"] = None
-        st.session_state["run_error"] = None
-        with st.status(t("pipeline"), expanded=True) as status:
-            board = st.empty()
-            live_steps: dict[str, str] = {}
-
-            def on_step(step: str, step_state: str) -> None:
-                live_steps[step] = step_state
-                board.markdown(step_chips(live_steps), unsafe_allow_html=True)
-
-            try:
-                st.session_state["result"] = get_service().evaluate(draft, confirmation, sec_mode=st.session_state["sec_mode"], progress=on_step)
-                status.update(state="complete")
-                st.session_state["result_mode"] = st.session_state["sec_mode"]
-            except Exception as exc:  # unexpected failure; keep page usable and show it
-                st.session_state["run_error"] = f"{type(exc).__name__}: {exc}"
-        st.rerun()  # redraw with the input form collapsed above the new report
-
-    if st.session_state["run_error"]:
-        st.error(t("run_failed") + st.session_state["run_error"])
-    result = st.session_state["result"]
-    if result is not None:
-        if result.input_fingerprint != fingerprint(draft) or st.session_state["result_mode"] != st.session_state["sec_mode"]:
-            st.warning(t("hidden"))
-        else:
-            render_result(result)
+        view_home(current)
 
 
 def main() -> None:
-    st.set_page_config(page_title="TickerCase", page_icon="📈", layout="wide")
+    st.set_page_config(page_title="TickerCase", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
     _init_state()
-    st.markdown(CSS.format(**theme()), unsafe_allow_html=True)
-    sidebar()
+    _keep_widget_state()
+    st.html(ck.CSS)
+    if st.session_state["tube"] == "amb":
+        st.html(ck.AMBER_CSS)
     if st.session_state["view"] == "history":
         view_history()
     else:

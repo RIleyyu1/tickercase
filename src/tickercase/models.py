@@ -263,6 +263,25 @@ class PricePoint(BaseModel):
     close: DecimalStr
 
 
+class Candle(BaseModel):
+    """One OHLC bar; day is the bar's last trading day (a monthly bar is labelled by its last day)."""
+
+    day: date
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: Optional[int] = None
+
+
+class KLine(BaseModel):
+    """Candles for the K-line chart, built from the same daily response as the closes (no extra request)."""
+
+    daily: list[Candle] = Field(default_factory=list)  # last ~6 months of trading days
+    weekly: list[Candle] = Field(default_factory=list)  # last ~2 years
+    monthly: list[Candle] = Field(default_factory=list)  # last ~5 years
+
+
 class MarketSnapshot(BaseModel):
     """Daily closing prices for the ticker from a public quote source."""
 
@@ -276,6 +295,7 @@ class MarketSnapshot(BaseModel):
     annualized_volatility: Optional[DecimalStr] = None
     volatility_window: str
     price_series: list[PricePoint] = Field(default_factory=list)  # weekly sample for charts
+    kline: Optional[KLine] = None  # None when the source has closes only (then the chart draws a close line)
     source_url: str
     retrieved_at: datetime
     source_captured_at: Optional[datetime] = None

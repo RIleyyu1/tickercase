@@ -61,7 +61,10 @@ def test_example_confirm_run_and_stale_result_hidden(app_env):
     assert any(df.value.shape[0] >= 5 for df in at.dataframe)  # calculations table rendered
     assert result.probability is not None and result.probability.status == "ok"  # P/S example asks for it
 
-    # edit an input: confirmation becomes stale, old result is hidden, run disabled
+    # back on the console page, edit an input: confirmation becomes stale, old result is hidden, run disabled
+    button(at, "btn_new").click()
+    run(at)
+    assert "已确认" in texts(at) and any(b.key == "btn_open" for b in at.button)  # the report is still current
     at.text_input(key="f_target_price").set_value("120")
     run(at)
     page = texts(at)
@@ -154,6 +157,8 @@ def test_english_switch_and_history_view(app_env):
     at.radio(key="lang").set_value("en")
     run(at)
     assert any("Partially Supported" in m.value for m in at.markdown)
+    button(at, "btn_new").click()  # back to the console: the confirmation is shown there
+    run(at)
     assert any("Confirmed" in s.value for s in at.success)
     at.radio(key="view").set_value("history")
     run(at)
@@ -296,6 +301,37 @@ def test_english_page_shows_no_chinese(app_env):
     shown += [o for x in at.radio if x.key != "lang" for o in x.options]  # the language switch names each language in itself
     leaks = [s for s in shown if _cjk(s)]
     assert not leaks, leaks[:5]
+
+
+def test_console_in_english_shows_no_chinese(app_env):
+    at = run(AppTest.from_file(APP))
+    at.radio(key="lang").set_value("en")
+    run(at)
+    button(at, "btn_example_ps").click()
+    run(at)
+    shown = [m.value for m in at.markdown] + [c.value for c in at.caption] + [b.label for b in at.button] + [str(x.value) for x in at.info]
+    shown += [str(x.value) for x in at.warning] + [x.label for x in at.radio] + [x.label for x in at.text_input] + [x.label for x in at.selectbox]
+    shown += [o for x in at.radio if x.key != "lang" for o in x.options] + [o for x in at.selectbox for o in x.options]
+    leaks = [s for s in shown if _cjk(s)]
+    assert not leaks, leaks[:5]
+
+
+def test_tape_on_the_console_opens_its_report(app_env):
+    at = run(AppTest.from_file(APP))
+    button(at, "btn_example_ps").click()
+    run(at)
+    button(at, "btn_confirm").click()
+    run(at)
+    button(at, "btn_run").click()
+    run(at)
+    case_id = at.session_state["result"].case_id
+    button(at, "btn_new").click()
+    run(at)
+    button(at, f"btn_tape_{case_id}").click()
+    run(at)
+    assert at.session_state["view"] == "history"
+    assert any("部分支持" in m.value for m in at.markdown)  # the report units of that tape
+    assert any(b.key == f"btn_narrate_{case_id}" for b in at.button)
 
 
 def test_narrative_shows_current_language_and_reuse(app_env):

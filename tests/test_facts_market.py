@@ -6,9 +6,9 @@ from decimal import Decimal
 import pytest
 
 from tickercase.http_client import FakeHttpClient, LiveHttpClient, FetchError, TransportResponse
-from tickercase.models import DataMode
+from tickercase.models import Candle, DataMode
 from tickercase.providers.base import ProviderError
-from tickercase.providers.market import CHART_URL, YahooChartProvider, annualized_volatility, yahoo_symbol
+from tickercase.providers.market import CHART_URL, KLINE_DAYS, YahooChartProvider, annualized_volatility, build_kline, yahoo_symbol
 from tickercase.providers.sec import TICKERS_URL
 from tickercase.providers.sec_facts import COMPANYFACTS_URL, SecCompanyFactsProvider, annual_series, share_series
 
@@ -101,6 +101,43 @@ def test_market_short_history_has_no_volatility_and_errors_are_typed():
     with pytest.raises(ProviderError) as exc:
         YahooChartProvider(FakeHttpClient({url: chart([None, None])})).fetch_history("TEST")
     assert exc.value.code == "no_prices"
+
+
+def ohlc_chart(rows, start=1_700_000_000):
+    """rows of (open, high, low, close, volume), one per calendar day; adjusted close = close."""
+    stamps = [start + i * 86400 for i in range(len(rows))]
+    o, h, low, c, v = (list(x) for x in zip(*rows))
+    return {"chart": {"result": [{
+        "meta": {"currency": "USD", "gmtoffset": -14400},
+        "timestamp": stamps,
+        "indicators": {"quote": [{"open": o, "high": h, "low": low, "close": c, "volume": v}], "adjclose": [{"adjclose": c}]},
+    }], "error": None}}
+
+
+def test_market_keeps_candles_and_aggregates_weeks_and_months():
+    rows = [(10.0 + i, 11.0 + i, 9.0 + i, 10.5 + i, 1000 + i) for i in range(70)]
+    rows[5] = (None, 20.0, 9.0, 15.0, 7)  # no open: no candle, but the close still counts
+    rows[6] = (15.0, 14.0, 9.0, 15.5, 7)  # high below the body: inconsistent bar, dropped
+    url = CHART_URL.format(symbol="TEST")
+    snap = YahooChartProvider(FakeHttpClient({url: ohlc_chart(rows)})).fetch_history("TEST")
+    k = snap.kline
+    assert snap.observations == 70 and k is not None and len(k.daily) == 68
+    assert all(c.low <= min(c.open, c.close) and c.high >= max(c.open, c.close) for c in k.daily)
+    # a week: first open, highest high, lowest low, last close, summed volume, labelled by its last day
+    week = [c for c in k.daily if c.day.isocalendar()[:2] == k.weekly[2].day.isocalendar()[:2]]
+    assert k.weekly[2] == Candle(day=week[-1].day, open=week[0].open, high=max(c.high for c in week), low=min(c.low for c in week),
+                                 close=week[-1].close, volume=sum(c.volume for c in week))
+    assert [(c.day.year, c.day.month) for c in k.monthly] == [(2023, 11), (2023, 12), (2024, 1)]
+    assert sum(c.volume for c in k.monthly) == sum(c.volume for c in k.daily)
+    assert k.daily[-1].day == snap.last_date and k.monthly[-1].close == k.daily[-1].close
+
+
+def test_market_with_closes_only_has_no_candles_and_kline_is_trimmed():
+    url = CHART_URL.format(symbol="TEST")
+    assert YahooChartProvider(FakeHttpClient({url: chart([10.0, 11.0, 12.0])})).fetch_history("TEST").kline is None
+    snap = YahooChartProvider(FakeHttpClient({url: ohlc_chart([(10.0, 11.0, 9.0, 10.0, 5)] * 300)})).fetch_history("TEST")
+    assert len(snap.kline.daily) == KLINE_DAYS and snap.kline.daily[-1].day == snap.last_date
+    assert build_kline([]) is None
 
 
 def test_volatility_formula_and_symbol_mapping():
