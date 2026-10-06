@@ -93,6 +93,12 @@ def test_warnings_are_data_problems_only(case):
     assert "tc-l-red" not in sig and "NOTE" in sig and "WARN 0" in sig
 
 
+def test_dollar_amounts_cannot_turn_into_inline_math(case):
+    # Streamlit's markdown reads "$...$" as math even inside an HTML block; two amounts in one unit broke the FEED cards
+    assert ck.esc("sold about $1.43B / close above $240") == "sold about &#36;1.43B / close above &#36;240"
+    assert "$" not in ck.feeds_unit(case, False, "FEED", anim=False) and "$" not in _all_parts(case, False)
+
+
 def test_formats():
     assert ck.amount(215_938_000_000, True) == "2,159.38 亿" and ck.amount(215_938_000_000, False) == "215.94B"
     assert ck.amount(None, True) == "—" and ck.amount(1_000_000_000_000, False) == "1T"

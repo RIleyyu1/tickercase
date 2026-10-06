@@ -33,7 +33,8 @@ def L(zh: bool, z, e):
 
 
 def esc(x) -> str:
-    return html.escape("" if x is None else str(x), quote=True)
+    """HTML-escape text for st.markdown; "$" becomes an entity, or two amounts in one block would be read as inline math."""
+    return html.escape("" if x is None else str(x), quote=True).replace("$", "&#36;")
 
 
 def pct(p: Optional[float], digits: int = 1) -> str:
