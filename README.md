@@ -1,6 +1,32 @@
 # TickerCase
 
-**Since v0.5 TickerCase is a stock-only version of digital-oracle:** the headline answer to a claim such as "RKLB reaches $300 within 3 years" or "RKLB spikes to $200" is a probability range computed by independent methods and cross-checked, with every number traced to a source. The original evidence-as-of verdict (OA.13) is kept as a secondary view. This changes the product scope of the Team 12 course documents, which describe a verdict without price prediction; the documents need revising.
+**Write one sentence about a stock, such as "NVDA will hit $300 in 3 years", and get a probability range you can trace.** Four independent methods are computed from free public data, every number carries its source and time, and an optional AI narrative has each of its numbers checked against the facts it cites.
+
+![Console page: claim input, system settings, check and confirm](docs/screenshots/console.jpg)
+
+![Report page: status bar, claim and K-line](docs/screenshots/report-kline.jpg)
+
+![Report page: probability range from four methods, and the eight data sources](docs/screenshots/report-probability.jpg)
+
+## What it does
+
+- **Reads the claim.** Fixed rules (no AI) pick out the ticker, target price and time frame, and whether the claim means touching the price before the deadline ("hit", "冲到") or closing above it on the date. Public data fills in the price, share count and financials. Every value shows where it came from, and the user confirms the exact inputs, which are tied to a SHA-256 fingerprint.
+- **Computes the probability in code.** M1 uses the option market's implied volatility (Black-Scholes N(d2), and the first-passage formula for touch claims), M2 the same formulas with historical volatility, M3 the share of similar-size US companies that grew as fast as the claim needs (SEC XBRL frames), and M4 this stock's own past windows of the same length. The headline is the range of the usable methods, and disagreements between them are explained.
+- **Shows the evidence.** Eight data sources (Yahoo option chains and prices, the 10-year Treasury yield, SEC filings and XBRL facts, peer base rates, Form 4 insider trades, Polymarket, CNN Fear & Greed), a K-line, a layered plain-language report, an event-scenario calculator and a fundamentals check (an evidence-as-of verdict with recheck conditions).
+- **Checks the AI.** The optional narrative (Claude) sees only a numbered fact table. A verifier checks every number in every sentence against the facts it cites, and a narrative already written for the same facts is reused. Measured cost: about $0.06 per narrative.
+- **Reproducible.** Live, record, replay and synthetic data modes, exact `Decimal` arithmetic, and 216 offline tests.
+
+Chinese and English interface. Research use only; not investment advice.
+
+**Tech:** Python, Streamlit (a custom console interface: CSS and HTML units, K-line chart in an iframe), Pydantic, FastAPI, pandas and Altair, the Anthropic API, pytest. Data: SEC EDGAR and XBRL, Yahoo Finance, Polymarket, CNN Fear & Greed. All free; SEC needs only a contact email.
+
+**Background:** course project for SYSEN 5151, Team 12. The team's operational concept defines the use case (UC.1 "Evaluate a Stock Claim"). The TickerCase application in this repository, from the first commit to the current version, was built by [@RIleyyu1](https://github.com/RIleyyu1) with Claude Code as an AI pair programmer; the commit history records this. The team repository [Yunynl/Sysen5151_t12](https://github.com/Yunynl/Sysen5151_t12) carries the same code under `tickercase-oracle/`.
+
+To run it, see [Quick start](#quick-start). The sections below describe each version and the details.
+
+## Scope since v0.5
+
+TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://github.com/komako-workshop/digital-oracle): the headline answer to a claim such as "RKLB reaches $300 within 3 years" or "RKLB spikes to $200" is a probability range computed by independent methods and cross-checked, with every number traced to a source. The original evidence-as-of verdict (OA.13) is kept as a secondary view. The Team 12 course documents still describe the earlier scope (a verdict without price prediction) and need revising.
 
 ## Probability and cross-checks (v0.5)
 
@@ -48,7 +74,7 @@ Setup: put `ANTHROPIC_API_KEY` in `.env` (the SYS unit on the console does this)
 
 TickerCase turns a stock claim ("SYNT will be $100 in five years") into an inspectable investment case: explicit assumptions, reproducible numbers, dated public evidence, an evidence-as-of verdict and the conditions that should trigger a new review. It follows UC.1 *Evaluate a Stock Claim* from the Team 12 operational concept.
 
-It does **not** trade, manage portfolios, predict prices or give investment advice. The verdict describes the state of the evidence on a date. An optional probability section shows a model output under your assumptions; it never feeds the verdict.
+It does **not** trade, manage portfolios or give investment advice. The probabilities are market-implied or model outputs under stated assumptions, not guarantees; the fundamentals verdict describes the state of the evidence on a date.
 
 ## Flow (UC.1)
 
