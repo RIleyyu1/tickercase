@@ -61,6 +61,13 @@ def test_invalid_case_returns_422(tmp_path):
     assert r.status_code == 422 and r.json()["status"] == "blocked_invalid_input"
 
 
+def test_out_of_range_horizon_is_blocked_before_evaluation(tmp_path):
+    # a billion years used to overflow the deadline date; now validation stops it
+    client = make_client(tmp_path)
+    r = client.post("/cases", json={"draft": ps_draft(horizon_years="1e9").model_dump(), "sec_mode": "synthetic"})
+    assert r.status_code == 422 and r.json()["status"] == "blocked_invalid_input"
+
+
 def test_live_failure_via_api_keeps_calculations(tmp_path):
     client = make_client(tmp_path)  # no SEC_USER_AGENT configured
     draft = ps_draft().model_dump()

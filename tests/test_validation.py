@@ -34,6 +34,10 @@ def test_missing_core_fields_are_blocking():
         ("target_price", "Infinity", "infinity_not_allowed"),
         ("reference_price", "-inf", "infinity_not_allowed"),
         ("horizon_years", "0", "must_be_positive"),
+        ("horizon_years", "0.003", "horizon_too_short"),
+        ("horizon_years", "10.5", "horizon_too_long"),
+        ("horizon_years", "999", "horizon_too_long"),
+        ("horizon_years", "1e9", "horizon_too_long"),
         ("valuation_multiple", "-3", "must_be_positive"),
         ("target_assumed_shares", "0", "must_be_positive"),
         ("target_price", "abc", "not_a_number"),
@@ -49,6 +53,20 @@ def test_missing_core_fields_are_blocking():
 )
 def test_invalid_values(field, value, code):
     assert (field, code) in issues(ps_draft(**{field: value}))
+
+
+def test_horizon_limits_are_inclusive():
+    # about one month (0.08 years) and ten years are the shortest and longest horizons accepted
+    for years in ("0.08", "1", "10"):
+        assert validate_draft(ps_draft(horizon_years=years), today=FIXED_TODAY).ok, years
+    short = validate_draft(ps_draft(horizon_years="0.003"), today=FIXED_TODAY)
+    assert not short.ok and "about 1 day;" in short.issues[0].message
+
+
+def test_deadline_already_passed_is_rejected():
+    # reference date 2024-01-02 plus one year ends before FIXED_TODAY (2026-10-01)
+    assert ("horizon_years", "deadline_passed") in issues(ps_draft(reference_price_date="2024-01-02", horizon_years="1"))
+    assert validate_draft(ps_draft(reference_price_date="2024-01-02", horizon_years="3"), today=FIXED_TODAY).ok
 
 
 def test_currency_mismatch_rejected():

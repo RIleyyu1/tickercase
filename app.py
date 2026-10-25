@@ -259,7 +259,8 @@ FIELD_META = {
     "claim_text": ("观点原文", "Claim", ("例如：RKLB 3 年内冲到 200", "e.g. NVDA will hit $300 in 3 years"), "要核验的原始说法，原样记录。", "The claim as stated, recorded verbatim."),
     "ticker": ("股票代码", "Ticker", "AAPL", "美股代码。", "US ticker."),
     "target_price": ("目标价", "Target price", "100", "观点给出的目标价格。", "The price the claim names."),
-    "horizon_years": ("时间（年）", "Horizon (years)", "3", "观点在多少年内或多少年后兑现，可填小数。", "Years until the claim should hold; decimals allowed."),
+    "horizon_years": ("时间（年）", "Horizon (years)", "3", "观点在多少年内或多少年后兑现，可填小数；范围约 1 个月（0.08）到 10 年。",
+                      "Years until the claim should hold; decimals allowed, from about one month (0.08) to 10 years."),
     "currency": ("币种", "Currency", "USD", "3 位 ISO 代码。SEC 财务数据按 USD 比较。", "3-letter ISO code. SEC amounts are compared in USD."),
     "reference_price": ("参考价", "Reference price", "50", "参考值：当前或某日的股价。", "Reference value: the price on a date."),
     "reference_price_date": ("参考价日期", "Reference date", "YYYY-MM-DD", "参考价对应的交易日。", "Trading day of the reference price."),
@@ -319,6 +320,9 @@ ISSUE_ZH = {
     "invalid_ticker": "{f}：格式不正确", "invalid_currency": "{f}：须为 3 位字母代码",
     "currency_mismatch": "{f}：与价格币种不一致，不做汇率换算", "unsupported_method": "{f}：只能是 P/S 或 P/E",
     "out_of_range": "{f}：超出允许范围", "unknown_field": "{f}：包含未知字段", "unsupported_mode": "{f}：选项无效",
+    "horizon_too_short": "{f}：太短，最短约 1 个月（0.08 年）；更短的期限无法用月度股价和年度基础比率评估",
+    "horizon_too_long": "{f}：太长，最长 10 年；更长的期限超出基础比率的数据窗口和期权到期日",
+    "deadline_passed": "{f}：参考价日期加上这个期限，截止日已经过去",
 }
 MISSING_ZH = {
     "base_annual_metric": "未填基期指标，不计算相对基期的增速",

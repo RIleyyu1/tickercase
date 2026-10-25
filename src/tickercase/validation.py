@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation, localcontext
 from typing import Any, Callable, Optional
 
@@ -54,6 +54,9 @@ SHARE_MODES = ("trend", "flat", "rate", "absolute")
 PRICE_CONDITIONS = ("end", "touch")
 SHARE_RATE_MIN, SHARE_RATE_MAX = Decimal("-0.5"), Decimal("1")
 SHARE_RATE_WARN_LOW, SHARE_RATE_WARN_HIGH = Decimal("-0.10"), Decimal("0.20")
+# Below about a month the monthly price history (M4) and yearly base rates (M3) do not apply;
+# beyond ten years the claim outruns the base-rate window and every listed option expiry.
+HORIZON_MIN_YEARS, HORIZON_MAX_YEARS = Decimal("0.08"), Decimal("10")
 
 
 def _clean_text(value: Optional[str]) -> Optional[str]:
@@ -157,6 +160,15 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
     numbers: dict[str, Optional[Decimal]] = {}
     for name in POSITIVE_NUMBERS:
         numbers[name] = parse_decimal(name, norm[name], issues, positive=True)
+    horizon = numbers["horizon_years"]
+    if horizon is not None and not HORIZON_MIN_YEARS <= horizon <= HORIZON_MAX_YEARS:
+        short = horizon < HORIZON_MIN_YEARS
+        days = round(horizon * Decimal("365.25")) if short else 0
+        issues.append(ValidationIssue(
+            field="horizon_years", code="horizon_too_short" if short else "horizon_too_long",
+            message=(f"{horizon:f} years is about {days} day{'' if days == 1 else 's'}; the shortest horizon is about one month ({HORIZON_MIN_YEARS} years)"
+                     if short else f"{horizon:f} years is beyond the longest horizon of {HORIZON_MAX_YEARS} years")))
+        numbers["horizon_years"] = None
     numbers["current_shares"] = parse_decimal("current_shares", norm["current_shares"], issues, positive=True)
     # base metric may be zero or negative (e.g. a net loss); growth rate handles that case
     numbers["base_annual_metric"] = parse_decimal("base_annual_metric", norm["base_annual_metric"], issues, positive=False)
@@ -195,6 +207,11 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
 
     ref_date = _parse_date("reference_price_date", norm["reference_price_date"], issues, today)
     since = _parse_date("filings_since", norm["filings_since"], issues, today)
+    if ref_date is not None and numbers["horizon_years"] is not None:
+        deadline = ref_date + timedelta(days=round(float(numbers["horizon_years"]) * 365.25))
+        if deadline <= today:
+            issues.append(ValidationIssue(field="horizon_years", code="deadline_passed",
+                                          message=f"the reference date {ref_date} plus the horizon gives a deadline of {deadline}, which is not after today ({today})"))
 
     base_currency = norm["base_metric_currency"]
     if base_currency is not None and not CURRENCY_RE.match(base_currency):

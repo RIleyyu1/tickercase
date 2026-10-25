@@ -31,6 +31,12 @@ def ex(text):
     ("SYNT 一年半后 120 美元", "SYNT", "120", None, "1.5"),
     ("BRK.B to $600 within 2 years", "BRK.B", "600", None, "2"),
     ("RKLB stock will reach $1.5k in 4 years", "RKLB", "1500", None, "4"),
+    # days and weeks are read with three decimals; validation then applies the one-month to ten-year range
+    ("NVDA 999天后涨到300", "NVDA", "300", None, "2.735"),
+    ("SYNT to $120 in 30 days", "SYNT", "120", None, "0.082"),
+    ("苹果两周内涨到250美元", "AAPL", "250", None, "0.038"),
+    ("TSLA within 6 weeks to $400", "TSLA", "400", None, "0.115"),
+    ("NVDA 一天内涨到 300", "NVDA", "300", None, "0.003"),
 ])
 def test_extraction(text, ticker, target, multiple, years):
     r = ex(text)
@@ -39,6 +45,11 @@ def test_extraction(text, ticker, target, multiple, years):
     assert r.target_multiple == (Decimal(multiple) if multiple else None)
     assert r.horizon_years == Decimal(years)
     assert r.ticker_text and (r.target_text or not (target or multiple))
+
+
+def test_someday_and_anniversary_are_not_durations():
+    assert ex("NVDA 总有一天到1000").horizon_years is None
+    assert ex("TSLA 十周年冲到500").horizon_years is None
 
 
 def test_missing_parts_are_reported_not_guessed():

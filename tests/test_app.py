@@ -136,6 +136,22 @@ def test_claim_only_flow_reaches_a_verdict(app_env):
     assert prov["target_price"] == "user_input:claim"
 
 
+def test_out_of_range_horizon_shows_the_limit(app_env):
+    at = run(AppTest.from_file(APP))
+    at.radio(key="sec_mode").set_value("synthetic")
+    at.text_area(key="f_claim_text").set_value("SYNT reaches $100 in one day")
+    at.text_input(key="f_ticker").set_value("SYNT")
+    at.text_input(key="f_target_price").set_value("100")
+    at.text_input(key="f_horizon_years").set_value("0.003")
+    run(at)
+    button(at, "btn_prefill").click()
+    run(at)
+    assert "太短，最短约 1 个月" in texts(at)
+    at.text_input(key="f_horizon_years").set_value("12")
+    run(at)
+    assert "太长，最长 10 年" in texts(at)
+
+
 def test_user_assumption_is_not_overwritten_by_prefill(app_env):
     at = run(AppTest.from_file(APP))
     at.radio(key="sec_mode").set_value("synthetic")

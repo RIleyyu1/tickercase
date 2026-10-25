@@ -79,7 +79,7 @@ It does **not** trade, manage portfolios or give investment advice. The probabil
 
 ## Flow (UC.1)
 
-1. Write the claim as one sentence. "识别并补全" (Read and fill in) reads the ticker, target price and time frame from it by fixed rules (no AI): tickers such as `TSLA` or `$TSLA` checked against SEC's ticker list, common Chinese and English company names, prices such as "1000一股", "$1.5k", "两百美元", relative targets such as "翻倍", "10x", "涨50%", and times such as "2030年", "五年后", "in 3 years", "明年", "18个月". It then adds reference values from public data (latest close, reported shares, latest annual revenue / net income) and default assumptions for empty fields (target shares = current shares, multiple = today's multiple). Every filled value is visible and labelled with its source. (OA.1, OA.4)
+1. Write the claim as one sentence. "识别并补全" (Read and fill in) reads the ticker, target price and time frame from it by fixed rules (no AI): tickers such as `TSLA` or `$TSLA` checked against SEC's ticker list, common Chinese and English company names, prices such as "1000一股", "$1.5k", "两百美元", relative targets such as "翻倍", "10x", "涨50%", and times such as "2030年", "五年后", "in 3 years", "明年", "18个月", "999天后", "两周内" or "in 30 days". Horizons from about one month to 10 years can be evaluated; a shorter or longer time frame is read but blocked with a message that names the limit. It then adds reference values from public data (latest close, reported shares, latest annual revenue / net income) and default assumptions for empty fields (target shares = current shares, multiple = today's multiple). Every filled value is visible and labelled with its source. (OA.1, OA.4)
 2. Confirm. The confirmation is bound to a SHA-256 fingerprint of the exact inputs; any edit makes it stale. (OA.5)
 3. Deterministic calculation (`Decimal`, no network). (OA.8)
 4. Public evidence: SEC filings, SEC XBRL financial facts, daily prices. (OA.6, OA.7, OA.9)
@@ -139,7 +139,7 @@ python -m tickercase.cli run examples/synthetic_claim_ps.json --sec-mode synthet
 | `claim_text`, `ticker`, `currency` | required | currency is a 3-letter ISO code |
 | `target_price` | required, > 0 | the claim |
 | `reference_price`, `reference_price_date` | required, > 0 | reference value; typed or prefilled from the quote source |
-| `horizon_years` | required, > 0 | assumption, fractional allowed |
+| `horizon_years` | required, from 0.08 (about one month) to 10 | assumption, fractional allowed; the reference date plus the horizon must be after today |
 | `target_assumed_shares` | required unless derived, > 0 | share count at the target date; give it directly, or give `current_shares` + `share_change_rate` |
 | `share_change_rate` | optional assumption | yearly share change between -0.5 and 1 (0.01 = +1% a year); target shares = current x (1 + rate) ^ horizon |
 | `share_change_mode` | optional | `trend`, `flat`, `rate` or `absolute`; records how the page chose the share count |
@@ -158,7 +158,7 @@ Target share count: few people can estimate it directly, so the page asks how th
 
 A year in the claim text that is already past, or that disagrees with the horizon by more than a year, produces a warning.
 
-Rejected: missing core fields, non-numbers, NaN, Infinity, non-positive prices/multiples/shares/horizon, future dates, and a base-metric currency different from the price currency (no FX conversion is applied). Nothing is filled in silently: prefilled values are visible, labelled with their source and confirmed like any other input.
+Rejected: missing core fields, non-numbers, NaN, Infinity, non-positive prices/multiples/shares, a horizon shorter than about one month (0.08 years) or longer than 10 years, a deadline (reference date + horizon) that has already passed, future dates, and a base-metric currency different from the price currency (no FX conversion is applied). Nothing is filled in silently: prefilled values are visible, labelled with their source and confirmed like any other input.
 
 ## Formulas
 
