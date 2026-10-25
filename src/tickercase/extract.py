@@ -37,6 +37,9 @@ NOT_TICKERS = {
     "THE", "AND", "OR", "TO", "BY", "IN", "AT", "OF", "ON", "IT", "IS", "BE", "I", "A", "K", "M", "B", "T", "X", "HK", "HKD",
     "CNY", "RMB", "SEC", "NYSE", "NASDAQ", "IMO", "LOL", "ATH",
 }
+# English words that are also tickers (BE Bloom Energy, IT Gartner, ON onsemi); written in capitals inside a
+# normal sentence and listed by SEC, they are read as the ticker when nothing better is found
+COMMON_WORDS = {"THE", "AND", "OR", "TO", "BY", "IN", "AT", "OF", "ON", "IT", "IS", "BE"}
 CN_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 CN_UNITS = {"十": 10, "百": 100, "千": 1000, "万": 10000}
 EN_NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
@@ -103,6 +106,8 @@ def find_ticker(text: str, is_known: Optional[Callable[[str], bool]]) -> Optiona
         sym = m.group(1).upper()
         cashtag = m.group(0).startswith("$")
         if sym in NOT_TICKERS and not cashtag:
+            if sym in COMMON_WORDS and is_known and is_known(sym) and re.search(r"[a-z]", text):
+                candidates.append(_Found(sym, m.group(0), m.start(), priority=0, extra={"common_word": True}))
             continue
         if len(sym) == 1 and not cashtag:
             continue
@@ -252,6 +257,9 @@ def extract_claim(text: str, *, today: date, is_known_ticker: Optional[Callable[
     t = find_ticker(text, is_known_ticker)
     if t:
         out.ticker, out.ticker_text = t.value, t.text
+        if t.extra.get("common_word"):
+            out.notes_en.append(f"“{t.value}” is also an English word; it is read as the SEC-listed ticker {t.value}; change it if you meant something else")
+            out.notes_zh.append(f"「{t.value}」也是英文常用词，这里按 SEC 列出的股票代码 {t.value} 读；不是的话请修改")
     else:
         out.notes_en.append("no ticker or known company name found; enter the ticker")
         out.notes_zh.append("没有识别到股票代码或常见公司名，请手动填写代码")

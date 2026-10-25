@@ -43,7 +43,10 @@ S = {
     "language": ("语言", "Language"),
     "view": ("页面", "Page"), "view_new": ("CASE 观点", "CASE"), "view_history": ("HIST 历史", "HIST"),
     "tube": ("荧光颜色", "Phosphor"),
-    "back_new": ("◀ NEW 新观点", "◀ NEW claim"),
+    "back_edit": ("◀ EDIT 修改输入", "◀ EDIT inputs"),
+    "back_edit_help": ("回到输入页，保留这个案例的输入，改完重新确认即可。", "Back to the inputs of this case; change them and confirm again."),
+    "back_new": ("+ NEW 新观点", "+ NEW claim"),
+    "back_new_help": ("清空输入，开始一个新观点；这个案例保留在 HIST 里。", "Clear the inputs and start a new claim; this case stays in HIST."),
     "data_chip": ("数据源", "DATA"),
     "mode": ("DATA · 数据源模式", "DATA · data source"),
     "mode_help": ("实时数据会请求 SEC、行情和期权接口；合成示例使用虚构公司 SYNT 的数据。", "Live calls SEC, quote and option sources; the synthetic example uses the fictional company SYNT."),
@@ -74,6 +77,8 @@ S = {
     "need_ticker": ("先填写股票代码。", "Enter a ticker first."),
     "recognized": ("从原文识别：{items}", "Read from the claim: {items}"),
     "recognized_none": ("没有从原文识别出代码、目标价或时间。", "Nothing could be read from the claim."),
+    "kept_user": ("保留了你手动填写的：{items}。要改用原文的值，请先清空这些框再点识别。",
+                  "Kept the values you typed: {items}. To use the claim's values, clear those fields and read again."),
     "multiple_target": ("目标价 = 参考价 {ref} × {x}（原文「{text}」）", "Target = reference {ref} × {x} (from “{text}”)"),
     "condition": ("怎样算实现", "What counts as coming true"),
     "condition_help": ("期间触及：截止日前任何一天达到目标价就算，适合「冲到」「脉冲」这类说法。到期站上：截止日当天仍在目标价以上。",
@@ -545,6 +550,15 @@ def _clear_form() -> None:
     _reset_confirmation()
 
 
+def _new_claim() -> None:
+    """◀ NEW starts from an empty form; the finished case stays in HIST and settings (mode, language, AI) are kept."""
+    _clear_form()
+    st.session_state["extraction"] = None
+    st.session_state["result"] = None
+    st.session_state["run_error"] = None
+    st.session_state["page"] = "home"
+
+
 def _metric_suggestion(snap: ReferenceSnapshot, method: str):
     return snap.revenue_suggestion if method == "price_to_sales" else snap.net_income_suggestion
 
@@ -642,12 +656,22 @@ def _extract_and_fill() -> None:
         return
     ex = get_service().extract(text, mode=st.session_state["sec_mode"])
     sources = dict(st.session_state["prefill_sources"])
-    found_zh, found_en = [], []
+    found_zh, found_en, kept_zh, kept_en = [], [], [], []
     for name, value, src in (("ticker", ex.ticker, ex.ticker_text), ("target_price", ex.target_price, ex.target_text),
                              ("horizon_years", ex.horizon_years, ex.horizon_text)):
-        if value is None or not _is_untouched(name):
+        current, old = st.session_state[f"f_{name}"].strip(), sources.get(name)
+        if value is None:
+            # a value read from an earlier sentence does not belong to this one
+            if old is not None and old[1].startswith(CLAIM_TEXT_PREFIX) and current == old[0]:
+                st.session_state[f"f_{name}"] = ""
+                sources.pop(name)
             continue
         val = format(value.normalize(), "f") if isinstance(value, Decimal) else str(value)
+        if not _is_untouched(name):
+            if current != val:  # the user's own entry wins, but say so instead of skipping it silently
+                kept_zh.append(f"{FIELD_META[name][0]} {current}（原文是 {val}）")
+                kept_en.append(f"{FIELD_META[name][1]} {current} (the claim says {val})")
+            continue
         st.session_state[f"f_{name}"] = val
         sources[name] = (val, f"{CLAIM_TEXT_PREFIX}{src}")
         found_zh.append(f"{FIELD_META[name][0]} {val}（「{src}」）")
@@ -658,6 +682,9 @@ def _extract_and_fill() -> None:
         sources["price_condition"] = (ex.condition, f"{CLAIM_TEXT_PREFIX}{ex.condition_text}")
         found_zh.append(f"{S['cond_' + ex.condition][0]}（「{ex.condition_text}」）")
         found_en.append(f"{S['cond_' + ex.condition][1]} (“{ex.condition_text}”)")
+    elif not ex.condition and cond_src is not None and cond_src[1].startswith(CLAIM_TEXT_PREFIX) and st.session_state["f_price_condition"] == cond_src[0]:
+        st.session_state["f_price_condition"] = "end"  # the earlier sentence's touch / close wording is gone
+        sources.pop("price_condition")
     st.session_state["prefill_sources"] = sources
     st.session_state["extraction"] = ex
     zh_text = S["recognized"][0].format(items="；".join(found_zh)) if found_zh else S["recognized_none"][0]
@@ -665,7 +692,10 @@ def _extract_and_fill() -> None:
     if ex.notes_zh:
         zh_text += " " + " ".join(ex.notes_zh)
         en_text += " " + " ".join(ex.notes_en)
-    _msg("extract_msg", "warning" if ex.notes_zh and not found_zh else "info", (zh_text, en_text))
+    if kept_zh:
+        zh_text += " " + S["kept_user"][0].format(items="；".join(kept_zh))
+        en_text += " " + S["kept_user"][1].format(items="; ".join(kept_en))
+    _msg("extract_msg", "warning" if (ex.notes_zh and not found_zh) or kept_zh else "info", (zh_text, en_text))
     if st.session_state["f_ticker"].strip():
         _prefill()
     # "doubles" / "10x": the target is the reference price times the factor
@@ -841,7 +871,8 @@ def bridge_unit(*, result_page: bool, warn: int) -> None:
         left.markdown(ck.bridge(zh(), sys_on=result_page, link=link, warn=warn, chips=chips), unsafe_allow_html=True)
         with right, st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small"):
             if result_page:
-                st.button(t("back_new"), key="btn_new", on_click=_go, args=("home",))
+                st.button(t("back_edit"), key="btn_edit", on_click=_go, args=("home",), help=t("back_edit_help"))
+                st.button(t("back_new"), key="btn_new", on_click=_new_claim, help=t("back_new_help"))
             st.radio(t("view"), options=["new", "history"], format_func=labels({"new": S["view_new"], "history": S["view_history"]}), key="view",
                      horizontal=True, label_visibility="collapsed")
             st.radio(t("tube"), options=["grn", "amb"], format_func=lambda x: "GRN" if x == "grn" else "AMB", key="tube", horizontal=True,
