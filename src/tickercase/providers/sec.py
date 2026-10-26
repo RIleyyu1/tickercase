@@ -40,6 +40,7 @@ ARCHIVE_BASE = "https://www.sec.gov/Archives/edgar/data"
 DEFAULT_FORMS = ("10-K", "10-Q", "8-K")
 ACCESSION_RE = re.compile(r"^\d{10}-\d{2}-\d{6}$")
 RECENT_COLUMNS = ("accessionNumber", "filingDate", "reportDate", "form", "primaryDocument", "primaryDocDescription")
+OPTIONAL_COLUMNS = ("items",)  # 8-K item numbers; older recordings and fixtures may lack the column
 
 
 @dataclass(frozen=True)
@@ -158,6 +159,9 @@ class SecFilingProvider(Provider):
             if not isinstance(value, list):
                 raise ProviderParseError("parse_error", f"submissions.filings.recent.{name}: expected an array", url=url)
             columns[name] = value
+        for name in OPTIONAL_COLUMNS:
+            value = recent.get(name, [])
+            columns[name] = value if isinstance(value, list) else []
         older_files_raw = filings.get("files", [])
         if not isinstance(older_files_raw, list):
             raise ProviderParseError("parse_error", "submissions.filings.files: expected an array", url=url)
@@ -210,6 +214,7 @@ class SecFilingProvider(Provider):
             primary = cell("primaryDocument", i)
             primary = primary.strip() if isinstance(primary, str) and primary.strip() else None
             desc = cell("primaryDocDescription", i)
+            items = cell("items", i)
             doc_url, index_url = archive_urls(cik, accession, primary)
             records.append(
                 FilingRecord(
@@ -224,6 +229,7 @@ class SecFilingProvider(Provider):
                     report_date=_parse_iso(cell("reportDate", i)),
                     primary_document=primary,
                     primary_document_description=desc.strip() if isinstance(desc, str) and desc.strip() else None,
+                    items=items.strip() if isinstance(items, str) and items.strip() else None,
                     document_url=doc_url,
                     filing_index_url=index_url,
                     source_response_url=url,

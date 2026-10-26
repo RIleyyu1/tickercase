@@ -183,6 +183,10 @@ def status_bar(result: CaseResult, zh: bool, jumps: Iterable[tuple[str, str]]) -
     if o is not None:
         r, _ = other_side(result, zh)
         side = chip(f"{other_label(result, zh)} ≈ {r}") if r else ""
+    ch = result.change
+    if ch is not None and ch.previous_low is not None:
+        last = f"{pct(ch.previous_low, 0)}–{pct(ch.previous_high, 0)}"
+        side += f'<a class="tc-chiplink" href="#u-mkt">{chip(L(zh, f"上次 {ch.previous_market_date}：{last}", f"last run {ch.previous_market_date}: {last}"))}</a>'
     n = len(warnings_of(result, zh))
     warn = (f'<a href="#u-sig" class="tc-warnlink">{lamp("red")}{dymo(f"WARN {n}", small=True)}</a>' if n
             else f'<span class="tc-warnlink">{lamp("off")}{dymo("WARN 0", small=True)}</span>')
@@ -275,6 +279,9 @@ def prb_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
     _, side_detail = other_side(result, zh)
     if side_detail:
         lines.append(("tc-am", f"{other_label(result, zh)}{L(zh, '：', ': ')}{side_detail}"))
+    shift = shifted_line(result, zh)
+    if shift:
+        lines.append(("tc-dim", shift))
     lines_html = "".join(f'<div class="{c} tc-line">{esc(t)}</div>' for c, t in lines)
     if o.low is not None:
         big = (f'<span class="tc-vt tc-huge">{pct(o.low, 0)}–{pct(o.high, 0)}</span>'
@@ -325,6 +332,147 @@ def prb_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
             + f'<div class="tc-prb"><div class="tc-prb-screen">{screen}</div><div class="tc-prb-methods">{"".join(strips)}</div></div>')
 
 
+def signed(x: Optional[float], digits: int = 1) -> str:
+    return "—" if x is None else f"{x * 100:+.{digits}f}%"
+
+
+def shifted_line(result: CaseResult, zh: bool) -> str:
+    """The scenario under the headline: the range if the market and peer parts of the recent move returned."""
+    st = result.structure
+    sh = st.shifted if st is not None else None
+    if sh is None or sh.low is None:
+        return ""
+    rng = pct(sh.low, 0) if round(sh.low * 100) == round(sh.high * 100) else f"{sh.low * 100:.0f}–{sh.high * 100:.0f}%"
+    mk, pp = signed(st.market_part), signed(st.peer_part)
+    return L(zh, f"情景（不是预测）· 若近 {st.window_days} 日的大盘（{mk}）与同类（{pp}）两部分回到原位（价 ≈ {sh.spot_to:,.2f}）：{rng}",
+             f"Scenario, not a forecast · if the market ({mk}) and peer ({pp}) parts of the last {st.window_days} days returned (price ≈ {sh.spot_to:,.2f}): {rng}")
+
+
+ITEM_NAMES = {"1.01": ("重大协议", "material agreement"), "1.02": ("终止协议", "agreement ended"), "2.01": ("完成收购或出售", "acquisition or sale completed"),
+              "2.02": ("业绩", "results"), "2.03": ("新增债务", "new debt"), "2.05": ("重组", "restructuring"), "2.06": ("资产减值", "impairment"),
+              "3.02": ("发行股份", "share issue"), "5.02": ("高管变动", "officer change"), "5.07": ("股东投票", "shareholder vote"),
+              "7.01": ("Reg FD 披露", "Reg FD disclosure"), "8.01": ("其他事项", "other events")}
+
+
+def filing_text(label: str, zh: bool) -> str:
+    """'8-K 2026-10-14 (7.01, 8.01)' -> '8-K 2026-10-14 (7.01 Reg FD 披露, 8.01 其他事项)'."""
+    head, _, items = label.partition(" (")
+    if not items:
+        return label
+    codes = [x.strip() for x in items.rstrip(")").split(",")]
+    return f"{head} ({', '.join(f'{c} {L(zh, *ITEM_NAMES[c])}' if c in ITEM_NAMES else c for c in codes)})"
+
+
+def dbar(x: float, scale: float) -> str:
+    """Diverging bar around a centre line: falls solid, rises hollow (as on the K-line), never red."""
+    w = 0.0 if scale <= 0 else min(50.0, 50.0 * abs(x) / scale)
+    side = f"right:50%;width:{w:.1f}%" if x < 0 else f"left:50%;width:{w:.1f}%"
+    return f'<span class="tc-dbar" aria-hidden="true"><i class="{"neg" if x < 0 else "pos"}" style="{side}"></i></span>'
+
+
+PART_NAMES = {"market": ("大盘", "market"), "peers": ("同类", "peers"), "own": ("个股", "own"), "price": ("股价", "price"),
+              "volatility": ("波动率", "volatility"), "time": ("时间", "time"), "rate": ("利率", "rate")}
+
+
+def _tape(st, zh: bool) -> str:
+    scale = max([abs(d.own) for d in st.days] + [1e-9])
+    rows = [f'<div class="tc-trow tc-dim tc-thead"><span>{esc(L(zh, "日期", "day"))}</span><span>{esc(L(zh, "本股", "stock"))}</span>'
+            f'<span>{esc(L(zh, "大盘+同类", "mkt+peers"))}</span><span>{esc(L(zh, "个股", "own"))}</span><span></span>'
+            f'<span>{esc(L(zh, "SEC 申报", "SEC filings"))}</span></div>']
+    for i, d in enumerate(st.days):
+        files = [filing_text(f, zh) for f in d.filings]
+        if d.flagged and i > 0:
+            files += [L(zh, f"前一交易日：{filing_text(f, zh)}", f"day before: {filing_text(f, zh)}") for f in st.days[i - 1].filings]
+        rows.append(f'<div class="tc-trow{" tc-am" if d.flagged else ""}"><span>{"◆" if d.flagged else "·"} {d.day:%m-%d}</span>'
+                    f'<span class="tc-vt">{esc(signed(d.stock))}</span><span class="tc-vt">{esc(signed(math.expm1(d.market + d.peers)))}</span>'
+                    f'<span class="tc-vt">{esc(signed(math.expm1(d.own)))}</span>{dbar(d.own, scale)}<span class="tc-tfile">{esc(" · ".join(files))}</span></div>')
+    return f'<div class="tc-tape2">{"".join(rows)}</div>'
+
+
+def _side(st, zh: bool) -> str:
+    peers = []
+    for x in st.peers:
+        rho = f"ρ {x.correlation:.2f}" if x.correlation is not None else ""
+        ret = signed(x.window_return) if x.window_return is not None else ""
+        tag = L(zh, "采用", "used") if x.used else L(zh, "未采用", "left out")
+        peers.append(f'<div class="tc-prow3{"" if x.used else " tc-off"}"><b>{esc(x.symbol)}</b><span>{esc(rho)}</span><span>{esc(ret)}</span>'
+                     f'<span class="tc-tag">{esc(tag)}</span></div>' + (f'<span class="tc-src">{esc(tr(x.note, zh))}</span>' if x.note and not x.used else ""))
+    if not peers:
+        peers.append(f'<span class="tc-src">{esc(L(zh, "没有同类篮子：在 UNIT 02 的「同类篮子」里填写。", "No peer basket: enter one under “Peer basket” in UNIT 02."))}</span>')
+    src = (st.peer_source or "").removeprefix("default_assumption:")
+    rule = L(zh, "与本股日相关系数 ≥ 0.3 才采用", "used when the daily correlation is at least 0.3")
+    peers.append(f'<span class="tc-src">{esc(L(zh, f"来源：{src}；", f"source: {src}; ") + rule if src else rule)}</span>')
+    regime = []
+    for x in st.regime:
+        vix = x.symbol.startswith("^")
+        chg = "" if x.change is None else (f"{x.change:+.2f}" if vix else signed(x.change))
+        regime.append(f'<div class="tc-prow3"><b>{esc(x.symbol.lstrip("^"))}</b><span>{x.last:,.2f}</span><span>{esc(chg)}</span></div>')
+    lv = {x.symbol: x.last for x in st.regime}
+    if lv.get("^VIX") and lv.get("^VIX3M"):
+        ratio = lv["^VIX"] / lv["^VIX3M"]
+        word = L(zh, "短期恐慌高于远期（倒挂）", "near-term fear above the 3-month (inverted)") if ratio > 1 else L(zh, "正常（短期低于远期）", "normal (near term below 3-month)")
+        regime.append(f'<span class="tc-src">VIX ÷ VIX3M = {ratio:.2f}{esc(L(zh, "：", ": "))}{esc(word)}</span>')
+    regime.append(f'<span class="tc-src">{esc(L(zh, f"窗口内变化 · VIX 按点数 · 截至 {st.window_end}", f"change over the window · VIX in points · to {st.window_end}"))}</span>')
+    return (f'<div class="tc-feedm">{dymo(L(zh, "PEER · 同类篮子", "PEER · basket"), small=True)}{"".join(peers)}</div>'
+            f'<div class="tc-feedm">{dymo(L(zh, "REGIME · 大环境", "REGIME · market"), small=True)}{"".join(regime)}</div>')
+
+
+def mkt_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
+    st, ch = result.structure, result.change
+    head = unit_head(label, chip(L(zh, "统计拆分，不是原因 · 贝塔取自前 120 个交易日", "a statistical split, not a cause · betas from the 120 trading days before")), "u-mkt")
+    delta = delta_block(result, zh) if ch is not None else ""
+    if st is None:
+        why = (L(zh, "市场结构这一步本次失败，见 SIG 的警示。", "The market-structure step failed in this run; see the warnings under SIG.")
+               if result.data_steps.get("market_structure") == "failed" else L(zh, "这份报告没有市场结构数据（v0.11 之前生成）。", "This report has no market-structure data (made before v0.11)."))
+        return head + para(why, "tc-mknote") + delta
+    parts = [("market", st.market_part, f"SPY β {st.beta_market:.2f}"),
+             ("peers", st.peer_part, f"β {st.beta_peers:.2f}" if st.beta_peers is not None else L(zh, "未分出", "not separated")),
+             ("own", st.own_part, f"R² {st.r_squared:.2f}")]
+    scale = max(abs(x) for _, x, _ in parts) or 1.0
+    rows = "".join(f'<div class="tc-split"><span>{esc(L(zh, *PART_NAMES[k]))}</span><span class="tc-vt tc-sv">{esc(signed(x))}</span>{dbar(x, scale)}'
+                   f'<span class="tc-dim tc-small">{esc(b)}</span></div>' for k, x, b in parts)
+    n_flag = sum(1 for d in st.days if d.flagged)
+    flag_note = L(zh, f"◆ 个股部分超过估计窗日残差的 2 倍（2 × {st.residual_sd * 100:.1f}%）：{n_flag} 天",
+                  f"◆ own part beyond twice the daily residual (2 × {st.residual_sd * 100:.1f}%): {n_flag} days")
+    window = L(zh, f"近 {st.window_days} 个交易日", f"last {st.window_days} trading days")
+    screen = (f'<div class="tc-bezel"><div class="tc-crt{" tc-boot" if anim else ""}"><span class="tc-noise"></span><div class="tc-crt-in tc-ph" style="gap:12px">'
+              f'<span class="tc-dim tc-small">MKT&gt; {esc(st.symbol)} · {esc(window)} {st.window_start} → {st.window_end}</span>'
+              f'<div class="tc-bigrow"><span class="tc-vt tc-mktbig">{esc(signed(st.total))}</span>'
+              f'<span class="tc-line">{esc(L(zh, "= 大盘 + 同类 + 个股", "= market + peers + own"))}</span></div>'
+              f'<div class="tc-splits">{rows}</div><span class="tc-dim tc-small">{esc(flag_note)}</span>{_tape(st, zh)}</div></div></div>')
+    notes = "".join(para(tr(n, zh), "tc-mknote") for n in st.notes)
+    return head + f'<div class="tc-mkt"><div class="tc-mkt-screen">{screen}</div><div class="tc-mkt-side">{_side(st, zh)}</div></div>' + notes + delta
+
+
+def delta_block(result: CaseResult, zh: bool) -> str:
+    """Why the probability moved since the last run of the same claim: one strip per model method."""
+    ch = result.change
+
+    def rng(lo, hi) -> str:
+        return "—" if lo is None else f"{lo * 100:.0f}–{hi * 100:.0f}%"
+
+    case = ch.previous_case_id[:8].upper()
+    title = L(zh, f"Δ · 与上次同一观点相比（{ch.previous_market_date} 的行情 · CASE {case}）", f"Δ · since the last run of this claim (prices of {ch.previous_market_date} · CASE {case})")
+    summary = L(zh, f"区间 {rng(ch.previous_low, ch.previous_high)} → {rng(ch.low, ch.high)} · 股价 {ch.spot_before:,.2f} → {ch.spot_after:,.2f}",
+                f"range {rng(ch.previous_low, ch.previous_high)} → {rng(ch.low, ch.high)} · price {ch.spot_before:,.2f} → {ch.spot_after:,.2f}")
+    names = {"M1": L(zh, "期权隐含", "option-implied"), "M2": L(zh, "历史波动率模型", "historical-volatility model")}
+    strips = []
+    for mc in ch.methods:
+        scale = max([abs(p.delta) for p in mc.parts] + [1e-9])
+        rows = "".join(f'<div class="tc-split"><span>{esc(L(zh, *PART_NAMES[p.key]))}</span><span class="tc-vt tc-sv">{p.delta * 100:+.1f}</span>{dbar(p.delta, scale)}'
+                       f'<span class="tc-dim tc-small">{esc(tr(p.detail, zh))}</span></div>' for p in mc.parts)
+        moved = f"({(mc.after - mc.before) * 100:+.1f} {L(zh, '个百分点', 'pp')})"
+        strips.append(f'<div class="tc-rd tc-ph tc-dstrip"><span class="tc-dim tc-small">{esc(mc.method)} {esc(names.get(mc.method, ""))}</span>'
+                      f'<span class="tc-line">{mc.before * 100:.1f}% → {mc.after * 100:.1f}% <span class="tc-am">{esc(moved)}</span></span>'
+                      f'<div class="tc-splits">{rows}</div></div>')
+    how = L(zh, "每一行是它对概率变化的贡献（个百分点），按 Shapley 方法分摊，与计算顺序无关，各行相加等于总变化。股价部分用同一组贝塔拆成大盘、同类和个股。",
+            "Each line is its contribution to the change in percentage points, split by the Shapley method (independent of order); the lines add up to the change. "
+            "The price part is split into market, peers and own with the same betas.")
+    return (f'<div class="tc-delta">{sub_head(title)}<span class="tc-serif tc-dsum">{esc(summary)}</span><div class="tc-dgrid">{"".join(strips)}</div>'
+            + (para(tr(ch.note, zh), "tc-mknote") if ch.note else "") + para(how, "tc-mknote") + "</div>")
+
+
+
 def kline_notes(result: CaseResult, zh: bool) -> tuple[str, str]:
     """Labels for the K-line's future zone: (touch line, close-above line); only computed numbers, no forecast path."""
     o = result.oracle
@@ -342,6 +490,8 @@ def kline_notes(result: CaseResult, zh: bool) -> tuple[str, str]:
 def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
     o, mk, op = result.oracle, result.market, result.options
     facts, br, ins, pm, se = result.reported_facts, result.base_rate, result.insiders, result.prediction_markets, result.sentiment
+    st = result.structure
+    n_used = len([x for x in st.peers if x.used]) if st else 0
     tgt = format(o.target_price, "f") if o is not None else ""
     latest = None
     if facts is not None:
@@ -372,6 +522,10 @@ def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
         ("CH-08 SENT", "fear_greed", L(zh, "市场情绪", "Market mood"), f"{se.score:.1f}" if se else "—",
          (L(zh, f"恐惧贪婪 · 一月前 {se.previous_month:.1f}", f"Fear & Greed · a month ago {se.previous_month:.1f}") if se and se.previous_month is not None else ""),
          "CNN FEAR & GREED", "SIG"),
+        ("CH-09 MKT", "market_structure", L(zh, "市场结构", "Market structure"), signed(st.total) if st else "—",
+         (L(zh, f"近 {st.window_days} 日 · 大盘 {signed(st.market_part)} · 同类 {signed(st.peer_part)} · 个股 {signed(st.own_part)}",
+            f"last {st.window_days} days · market {signed(st.market_part)} · peers {signed(st.peer_part)} · own {signed(st.own_part)}") if st else ""),
+         "YAHOO · SPY QQQ IWM VIX" + (L(zh, f" · 同类 {n_used} 只", f" · {n_used} peers") if st else ""), "MKT · Δ"),
     ]
     cards = []
     for i, (ch, step, name, value, sub, src, to) in enumerate(rows):
@@ -512,6 +666,9 @@ FEEDS_INFO = [
     ("CH-06 INS", ("内部人交易", "Insider trades"), "SEC · FORM 4", ("过去 12 个月公开市场的买入与卖出", "open-market buying and selling over 12 months"), ("每日", "daily"), "SIG"),
     ("CH-07 PMKT", ("预测市场", "Prediction market"), "POLYMARKET", ("相关短期价格合约的概率，仅作参考", "related short-term price contracts, context only"), ("实时", "live"), "SIG"),
     ("CH-08 SENT", ("市场情绪", "Market mood"), "CNN · FEAR & GREED", ("整体市场环境，不进入概率计算", "market environment, not used in the probability"), ("每日", "daily"), "SIG"),
+    ("CH-09 MKT", ("市场结构", "Market structure"), "YAHOO · SPY QQQ IWM VIX",
+     ("把近 20 日涨跌拆成大盘、同类和个股三部分；同一观点再算时，解释概率为什么变", "splits the last 20 days into market, peers and own; explains why the probability moved since the last run"),
+     ("每日", "daily"), "MKT · Δ"),
 ]
 
 METHODS_INFO = [
@@ -573,7 +730,7 @@ def boot_rows(zh: bool, *, version: str, mode: str, mode_label: str, sec_set: bo
     ready = mode not in ("live", "record") or sec_set
     return [
         (L(zh, f"TC-8 自检 · TICKERCASE v{version}", f"TC-8 SELF-TEST · TICKERCASE v{version}"), L(zh, "开始", "START"), "am"),
-        (L(zh, "数据源 08 路 · SEC YAHOO PMKT CNN", "DATA 08 CH · SEC YAHOO PMKT CNN"), L(zh, "就绪", "READY") if ready else L(zh, "受限", "LIMITED"), "am"),
+        (L(zh, "数据源 09 路 · SEC YAHOO PMKT CNN", "DATA 09 CH · SEC YAHOO PMKT CNN"), L(zh, "就绪", "READY") if ready else L(zh, "受限", "LIMITED"), "am"),
         (L(zh, "方法 M1–M4 · 期权 波动率 同业 本股", "METHODS M1–M4 · OPT VOL PEER HIST"), L(zh, "就绪", "READY"), "am"),
         (L(zh, "SEC 联系邮箱", "SEC CONTACT EMAIL"), L(zh, "已设置", "SET") if sec_set else L(zh, "未设置", "NOT SET"), "am"),
         (L(zh, "CLAUDE KEY · AI 叙述（可选）", "CLAUDE KEY · AI NARRATIVE (OPTIONAL)"), L(zh, "已设置", "SET") if ai_set else L(zh, "未设置", "NOT SET"),
@@ -899,6 +1056,31 @@ h1.tc-claim{font-family:'Noto Serif SC',serif!important;font-weight:900!importan
 .tc-reel{width:26px;height:26px;border-radius:50%;background:#59493F;border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;box-sizing:border-box}
 .tc-reel-s{width:20px;height:20px}.tc-reel-l{width:36px;height:36px}
 .tc-hub{width:60%;height:60%;border-radius:50%;background:repeating-conic-gradient(#D8CEB2 0 18deg,#1B1917 18deg 60deg);border:2px solid var(--ink);box-sizing:border-box}
+.tc-mkt{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(250px,1fr);gap:16px;align-items:start}
+.tc-mkt-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.tc-mktbig{font-size:clamp(64px,7vw,104px)!important;line-height:.86!important}
+.tc-splits{display:flex;flex-direction:column;gap:6px}
+.tc-split{display:grid;grid-template-columns:5.5em 5.5em minmax(80px,1fr) minmax(0,1.3fr);gap:10px;align-items:center;font-size:16px;line-height:20px}
+.tc-sv{font-size:26px!important;line-height:24px!important;text-align:right}
+.tc-dbar{position:relative;display:block;height:14px;background:var(--seg);border:1px solid #050605}
+.tc-dbar::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--dim)}
+.tc-dbar i{position:absolute;top:2px;bottom:2px;box-sizing:border-box}
+.tc-dbar i.neg{background:var(--ph);box-shadow:0 0 6px rgba(var(--ph-rgb),.5)}.tc-dbar i.pos{border:2px solid var(--ph)}
+.tc-am .tc-dbar i.neg{background:var(--am)}.tc-am .tc-dbar i.pos{border-color:var(--am)}
+.tc-tape2{display:flex;flex-direction:column;border-top:2px dashed var(--scr-line);padding-top:6px}
+.tc-trow{display:grid;grid-template-columns:6em 5em 6em 5em minmax(60px,1fr) minmax(0,2fr);gap:8px;align-items:center;font-size:14px;line-height:22px;border-bottom:1px dashed var(--scr-faint)}
+.tc-trow .tc-vt{font-size:20px;text-align:right}
+.tc-thead{font-size:12px;line-height:18px}
+.tc-tfile{font-size:12px;line-height:16px;overflow-wrap:anywhere}
+.tc-prow3{display:grid;grid-template-columns:4.5em 1fr 1fr auto;gap:8px;align-items:baseline;font-size:14px;line-height:20px}
+.tc-prow3.tc-off{opacity:.55}
+p.tc-mknote{font-size:13px;color:#DCD3BA;margin-top:8px}
+.tc-delta{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.tc-delta .tc-subhead{color:#E3DAC0;border-bottom-color:rgba(227,218,192,.35)}
+.tc-dsum{font-size:16px;font-weight:700;color:#F1EBDC}
+.tc-dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:14px}
+.tc-dstrip{padding:10px 14px 12px;gap:8px}
+.tc-chiplink{text-decoration:none}
 .tc-feeds{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
 .tc-feeds-wide{grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
 .tc-feedm{display:flex;flex-direction:column;gap:6px;padding:12px 12px 14px;background:#2F2C29;border:2px solid var(--ink);box-shadow:inset 0 2px 0 #46423C,inset 0 -5px 0 #201E1B;min-width:0;color:#E3DAC0}
@@ -985,6 +1167,9 @@ h1.tc-claim{font-family:'Noto Serif SC',serif!important;font-weight:900!importan
   .tc-ptext{font-size:18px;line-height:24px}.tc-huge{font-size:84px!important}.tc-mark{font-size:16px}
   .tc-tape{grid-template-columns:minmax(0,1fr) auto}.tc-tape .tc-minicas{display:none}
   .tc-zones{font-size:10px}
+  .tc-mkt,.tc-dgrid{grid-template-columns:1fr}
+  .tc-split{grid-template-columns:4.5em 5em minmax(60px,1fr)}.tc-split>.tc-small{grid-column:1/-1}
+  .tc-trow{grid-template-columns:4.6em 4.4em 4.4em 4.4em minmax(30px,1fr)}.tc-trow>.tc-tfile{grid-column:1/-1}
   [data-testid="stLayoutWrapper"]:has(>.st-key-u-c-status-bar){position:static}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}[data-testid="stTabPanel"][role="tabpanel"]::before{display:none}}

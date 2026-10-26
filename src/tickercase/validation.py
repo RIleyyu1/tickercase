@@ -57,6 +57,10 @@ SHARE_RATE_WARN_LOW, SHARE_RATE_WARN_HIGH = Decimal("-0.10"), Decimal("0.20")
 # Below about a month the monthly price history (M4) and yearly base rates (M3) do not apply;
 # beyond ten years the claim outruns the base-rate window and every listed option expiry.
 HORIZON_MIN_YEARS, HORIZON_MAX_YEARS = Decimal("0.08"), Decimal("10")
+MAX_PEERS = 8
+PEER_SPLIT_RE = re.compile(r"[\s,，、;；]+")
+# fields added after v0.10 enter the fingerprint only when set, so earlier confirmations keep their fingerprint
+LATE_FIELDS = ("peer_tickers",)
 
 
 def _clean_text(value: Optional[str]) -> Optional[str]:
@@ -79,8 +83,30 @@ def normalized_draft(draft: ClaimDraft) -> dict[str, Optional[str]]:
             text = text.upper()
         if text is not None and name in ("valuation_method", "price_condition"):
             text = text.lower()
+        if name == "peer_tickers" and text is not None:
+            text = ",".join(x.upper() for x in PEER_SPLIT_RE.split(text) if x) or None
+        if name in LATE_FIELDS and text is None:
+            continue
         out[name] = text
     return out
+
+
+def parse_peers(text: Optional[str], ticker: Optional[str], issues: list[ValidationIssue]) -> list[str]:
+    """'asts, IONQ，ionq' -> ['ASTS', 'IONQ']: upper case, de-duplicated, the claim's own ticker left out."""
+    peers: list[str] = []
+    for raw in PEER_SPLIT_RE.split(text or ""):
+        sym = raw.strip().upper().lstrip("$")
+        if not sym:
+            continue
+        if not TICKER_RE.match(sym):
+            issues.append(ValidationIssue(field="peer_tickers", code="invalid_ticker", message=f"peer_tickers: '{raw}' is not a ticker"))
+            continue
+        if sym != ticker and sym not in peers:
+            peers.append(sym)
+    if len(peers) > MAX_PEERS:
+        issues.append(ValidationIssue(field="peer_tickers", code="out_of_range", message=f"peer_tickers: at most {MAX_PEERS} similar stocks"))
+        peers = peers[:MAX_PEERS]
+    return peers
 
 
 def fingerprint(draft: ClaimDraft) -> str:
@@ -187,6 +213,7 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
         issues.append(ValidationIssue(field="price_condition", code="unsupported_mode", message=f"price_condition must be one of {PRICE_CONDITIONS}"))
         condition = "end"
     target_shares, shares_derived = _target_shares(numbers, share_rate, share_mode, norm, missing, warnings)
+    peers = parse_peers(norm.get("peer_tickers"), ticker, issues)
 
     drift = parse_decimal("probability_drift", norm["probability_drift"], issues, positive=False)
     prob_vol = parse_decimal("probability_volatility", norm["probability_volatility"], issues, positive=True)
@@ -290,6 +317,7 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
         share_change_mode=share_mode,
         target_shares_derived=shares_derived,
         price_condition=condition,
+        peer_tickers=peers,
         probability_volatility=prob_vol,
         field_sources={k: v.strip() for k, v in sources.items() if isinstance(v, str) and v.strip() and norm.get(k) is not None},
     )

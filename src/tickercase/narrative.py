@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -35,7 +36,7 @@ from .models import CaseResult, Fact, Narrative, NarrativeSentence
 MODEL = "claude-opus-5-5"
 EFFORT = "medium"
 LANGUAGES = ("zh", "en")
-PROMPT_VERSION = "2"  # part of the cache key; bump when the prompt, schema or fact table format changes
+PROMPT_VERSION = "3"  # part of the cache key; bump when the prompt, schema or fact table format changes
 FALLBACK_MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-opus-5", "claude-fable-5-1")  # accept fallbacks="default"
 # USD per million tokens: input, output, cache read (Claude API list prices, 2026-09); cache writes cost 1.25x input
 PRICES = {"claude-opus-5-5": (4.0, 20.0, 0.20), "claude-sonnet-5-5": (2.0, 10.0, 0.20), "claude-haiku-4-5": (1.0, 5.0, 0.10)}
@@ -54,6 +55,8 @@ Rules:
 - Use only numbers that appear in the fact table. You may convert units (0.052 -> 5.2%, 42160000000 -> 421.6亿 / 42.16B) and round, but do not compute new numbers, estimate, or bring in outside knowledge (no news, no company plans, no history not in the table).
 - Every sentence lists in fact_ids the ids of every fact whose number or claim it uses. A sentence with no number may list the facts it interprets.
 - The probability statements must be the computed ones (range, methods). Do not give your own probability.
+- Facts labelled "scenario" are what-ifs, such as the range if the market and peer parts of the recent move returned; never present them as a forecast.
+- The split of the recent move into market, peer basket and own part is statistical. Do not name a cause for a move unless a fact lists a filing on that day.
 - Explain what each signal means in plain words, where signals agree, where they disagree and why (they often measure different things), and what would change the picture.
 - {language_rule}
 - Keep it tight: logic_chain 3-5 sentences, the other sections 2-4 sentences each.
@@ -192,6 +195,46 @@ def build_facts(r: CaseResult) -> list[Fact]:
     if r.prediction_markets:
         for mk in r.prediction_markets.markets[:3]:
             f.add(f"Polymarket: {mk.question}", f"Polymarket：{mk.question}", mk.probability_yes, "probability 0-1", mk.url)
+    if r.structure:
+        st = r.structure
+        src = f"factor split, daily closes {st.window_start} to {st.window_end}, betas from {st.estimation_days} trading days before"
+        f.add(f"stock return over the last {st.window_days} trading days", f"近 {st.window_days} 个交易日本股涨跌", st.total, "rate", src)
+        f.add("part of that move that came with the market (SPY)", "其中跟随大盘（SPY）的部分", st.market_part, "rate", src)
+        f.add("part that came with the peer basket", "其中跟随同类篮子的部分", st.peer_part, "rate", src)
+        f.add("the stock's own part", "其中个股自身的部分", st.own_part, "rate", src)
+        f.add("market beta (SPY)", "大盘贝塔（SPY）", round(st.beta_market, 2), "", src)
+        f.add("peer-basket beta", "同类篮子贝塔", round(st.beta_peers, 2) if st.beta_peers is not None else None, "", src)
+        f.add("share of daily moves explained by market and peers (R squared)", "大盘和同类能解释的日波动比例（R²）", round(st.r_squared, 2), "0-1", src)
+        used = [x.symbol for x in st.peers if x.used]
+        f.add("peer basket used", "采用的同类篮子", ", ".join(used) if used else "none", source=st.peer_source or "")
+        for x in st.regime:
+            f.add(f"{x.label.en} level on {st.window_end}", f"{x.label.zh}（{st.window_end}）", round(x.last, 2), "", "Yahoo daily closes")
+            if x.change is not None:
+                f.add(f"{x.label.en} change over the window", f"{x.label.zh} 窗口内变化", round(x.change, 4), "points" if x.symbol.startswith("^") else "rate",
+                      "Yahoo daily closes")
+        for day in st.days:
+            if day.flagged:
+                f.add(f"stock-specific move on {day.day}", f"{day.day} 的个股异动", round(math.expm1(day.own), 4), "rate", src)
+                if day.filings:
+                    f.add(f"SEC filings dated since the previous close before {day.day}", f"{day.day} 前一收盘以来的 SEC 申报", "; ".join(day.filings),
+                          source="SEC EDGAR submissions")
+        if st.shifted is not None and st.shifted.low is not None:
+            f.add("scenario: price if the market and peer parts returned", "情景：大盘和同类部分回到原位时的股价", round(st.shifted.spot_to, 2), "",
+                  "today's price divided by those two parts")
+            f.add("scenario: probability range low at that price", "情景：该价格下概率区间下限", st.shifted.low, "probability 0-1", "same methods, moved price")
+            f.add("scenario: probability range high at that price", "情景：该价格下概率区间上限", st.shifted.high, "probability 0-1", "same methods, moved price")
+    if r.change:
+        ch = r.change
+        src = f"case {ch.previous_case_id[:8]} of {ch.previous_created_at:%Y-%m-%d}, same claim"
+        f.add("previous run of the same claim: price date", "同一观点上一次运行的行情日期", ch.previous_market_date.isoformat(), source=src)
+        f.add("previous run: probability range low", "上一次：概率区间下限", ch.previous_low, "probability 0-1", src)
+        f.add("previous run: probability range high", "上一次：概率区间上限", ch.previous_high, "probability 0-1", src)
+        for mc in ch.methods:
+            f.add(f"{mc.method} then", f"{mc.method} 上一次", mc.before, "probability 0-1", src)
+            f.add(f"{mc.method} now", f"{mc.method} 这一次", mc.after, "probability 0-1", "this run")
+            for part in mc.parts:
+                f.add(f"{mc.method} change from {part.detail.en}", f"{mc.method} 变化中来自{part.detail.zh}的部分", round(part.delta, 4),
+                      "probability 0-1", "Shapley split of the change")
     if r.verdict:
         f.add("evidence-as-of verdict (rules-v1)", "证据结论（rules-v1）", r.verdict.display, source="TickerCase rules-v1")
     return f.items

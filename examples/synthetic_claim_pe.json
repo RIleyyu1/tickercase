@@ -16,6 +16,7 @@
     "base_metric_currency": "USD",
     "base_metric_period": "FY2025 (synthetic)",
     "filings_since": "2020-01-01",
-    "current_shares": "95000000"
+    "current_shares": "95000000",
+    "peer_tickers": "SYNA, SYNB, SYNC"
   }
 }

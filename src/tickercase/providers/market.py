@@ -184,6 +184,33 @@ class YahooChartProvider(Provider):
 
 
 MONTHLY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=max&interval=1mo"
+DAILY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1y&interval=1d"
+
+
+def daily_closes(payload: Any, url: str) -> list[tuple[date, float]]:
+    """Adjusted daily closes (falling back to closes), dated in the exchange's time zone like ``YahooChartProvider``."""
+    chart = payload.get("chart") if isinstance(payload, Mapping) else None
+    results = chart.get("result") if isinstance(chart, Mapping) else None
+    if not isinstance(results, list) or not results or not isinstance(results[0], Mapping):
+        desc = chart.get("error") if isinstance(chart, Mapping) else None
+        raise ProviderError("no_prices", f"chart has no result{f': {desc}' if desc else ''}", url=url)
+    r = results[0]
+    meta = r.get("meta") if isinstance(r.get("meta"), Mapping) else {}
+    offset = meta.get("gmtoffset") if isinstance(meta.get("gmtoffset"), int) else 0
+    stamps = r.get("timestamp") or []
+    ind = r.get("indicators") or {}
+    closes = ((ind.get("quote") or [{}])[0] or {}).get("close") or []
+    adj = ((ind.get("adjclose") or [{}])[0] or {}).get("adjclose") or []
+    if len(adj) != len(stamps):
+        adj = closes
+    by_day: dict[date, float] = {}
+    for ts, px in zip(stamps, adj):
+        v = _num(px)
+        if isinstance(ts, int) and not isinstance(ts, bool) and v is not None:
+            by_day[(datetime.fromtimestamp(ts, tz=timezone.utc) + timedelta(seconds=offset)).date()] = v
+    if not by_day:
+        raise ProviderError("no_prices", "chart has no usable daily closes", url=url)
+    return sorted(by_day.items())
 
 
 def monthly_closes(payload: Any, url: str) -> list[tuple[date, float]]:

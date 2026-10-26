@@ -12,6 +12,7 @@ other data source is substituted for a failed one.
 
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -42,14 +43,17 @@ from .report import build_report
 from .providers.base import ProviderError
 from .oracle import build_oracle
 from .providers.insiders import InsiderProvider
-from .providers.market import CHART_URL, MONTHLY_URL, YahooChartProvider, monthly_closes, price_base_rate, price_touch_hits
+from .providers.market import CHART_URL, MONTHLY_URL, YahooChartProvider, monthly_closes, price_base_rate, price_touch_hits, yahoo_symbol
 from .providers.options import YahooOptionsProvider
+from .providers.peers import YahooPeersProvider
+from .providers.structure import MarketStructureProvider
 from .providers.sec_frames import SecFramesBaseRateProvider
 from .providers.sentiment import FearGreedProvider, PolymarketProvider
 from .providers.yahoo_auth import BROWSER_UA, YahooAuthedClient
 from .providers.sec import SecFilingProvider, SecFilingQuery
 from .providers.sec_facts import SecCompanyFactsProvider
 from .storage import CaseStore
+from .structure import build_structure, find_previous, probability_change, shifted_range
 from .validation import TICKER_RE, fingerprint, validate_draft
 
 USER_INPUT_PROVENANCE = {
@@ -293,8 +297,27 @@ class CaseService:
         if market_fetcher is not None:
             prediction = step("prediction_markets", PolymarketProvider.provider_id, lambda: PolymarketProvider(market_fetcher).search(claim.ticker, now=self.now()))
         sentiment = step("fear_greed", FearGreedProvider.provider_id, lambda: FearGreedProvider(self._fetcher(mode, "web")).snapshot())
+        structure = fit = None
+        if market_fetcher is not None and market is not None:
+            peer_source = claim.field_sources.get("peer_tickers") or ("user input" if claim.peer_tickers else None)
+            built = step("market_structure", MarketStructureProvider.provider_id, lambda: build_structure(
+                MarketStructureProvider(market_fetcher).inputs(claim.ticker, claim.peer_tickers, peer_source=peer_source), records))
+            structure, fit = built if built is not None else (None, None)
         oracle = build_oracle(claim, market=market, options=options, base_rate=base_rate, price_rate=price_rate,
                               risk_free=risk_free, today=self.today())
+        change = None
+        if structure is not None and oracle.spot:
+            monthly_url = MONTHLY_URL.format(symbol=yahoo_symbol(claim.ticker))
+            closes = None
+            if price_rate is not None:  # M4 is recounted at the shifted price from the same monthly closes
+                closes = self._guard(MARKET_PROVIDER_ID, mode, errors, lambda: monthly_closes(market_fetcher.get_json(monthly_url).payload, monthly_url))
+            structure.shifted = shifted_range(claim, oracle, oracle.spot * math.exp(-(structure.log_market + structure.log_peers)), market=market,
+                                              options=options, base_rate=base_rate, price_rate=price_rate, closes=closes, risk_free=risk_free,
+                                              today=self.today())
+        if self.store is not None and oracle.spot and market is not None:
+            previous = find_previous(self.store.list_cases(), claim, oracle, market_date=market.last_date, exclude=case_id)
+            if previous is not None:
+                change = probability_change(previous, oracle=oracle, fit=fit, today=self.today())
         report = build_report(claim, calculations, facts=facts, market=market, items=outcome.items, verdict=outcome.verdict,
                               rechecks=outcome.rechecks, probability=probability, today=self.today(), oracle=oracle, options=options,
                               base_rate=base_rate, price_rate=price_rate, benchmarks=benchmarks, insiders=insiders,
@@ -318,6 +341,7 @@ class CaseService:
             "base_rate": mode_of(base_rate is not None, {base_rate.data_mode.value} if base_rate else set()),
             "insiders": mode_of(insiders is not None, {insiders.data_mode.value} if insiders else set()),
             "fear_greed": mode_of(sentiment is not None, {sentiment.data_mode.value} if sentiment else set()),
+            "market_structure": mode_of(structure is not None, {structure.data_mode.value} if structure else set()),
             "analysis": f"deterministic {RULES_VERSION}",
         }
         if DataMode.SYNTHETIC.value in data_modes.values():
@@ -346,6 +370,8 @@ class CaseService:
             prediction_markets=prediction,
             sentiment=sentiment,
             oracle=oracle,
+            structure=structure,
+            change=change,
             data_steps=steps,
             provider_errors=errors,
             data_modes=data_modes,
@@ -487,6 +513,13 @@ class CaseService:
                 snap.period_suggestion = ReferenceSuggestion(value=f"FY ending {latest.period_end}", source="SEC XBRL")
                 snap.suggestions["base_metric_currency"] = ReferenceSuggestion(value="USD", source="SEC XBRL unit")
             self._default_assumptions(snap, facts, market)
+        peers = self._guard(YahooPeersProvider.provider_id, mode, errors, lambda: YahooPeersProvider(self._fetcher(mode, "market")).similar(symbol))
+        if peers is not None:
+            listed = [p for p in peers[0] if p != symbol][:6]
+            if listed:
+                snap.assumption_suggestions["peer_tickers"] = ReferenceSuggestion(
+                    value=", ".join(listed), source=f"{DEFAULT_PREFIX}Yahoo Finance similar stocks for {symbol}")
+        snap.provider_errors = list(errors)
         snap.assumption_suggestions.setdefault("filings_since", ReferenceSuggestion(
             value=date(self.today().year - 2, 1, 1).isoformat(), source=f"{DEFAULT_PREFIX}two calendar years of filings"))
         return snap

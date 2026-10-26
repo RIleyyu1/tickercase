@@ -20,8 +20,9 @@ from datetime import date, timedelta  # noqa: E402
 
 from tickercase.http_client import ORIGIN_SYNTHETIC, write_snapshot  # noqa: E402
 from tickercase.providers.insiders import xml_url  # noqa: E402
-from tickercase.providers.market import CHART_URL, MONTHLY_URL  # noqa: E402
+from tickercase.providers.market import CHART_URL, DAILY_URL, MONTHLY_URL  # noqa: E402
 from tickercase.providers.options import OPTIONS_URL  # noqa: E402
+from tickercase.providers.peers import RECOMMEND_URL  # noqa: E402
 from tickercase.providers.sec_frames import FRAMES_URL  # noqa: E402
 from tickercase.providers.sentiment import FEAR_GREED_URL, POLYMARKET_URL  # noqa: E402
 from tickercase.providers.sec import SUBMISSIONS_URL, TICKERS_URL  # noqa: E402
@@ -57,8 +58,9 @@ ROWS = [
 
 
 def submissions() -> dict:
-    recent = {k: [] for k in ("accessionNumber", "filingDate", "reportDate", "form", "primaryDocument", "primaryDocDescription")}
+    recent = {k: [] for k in ("accessionNumber", "filingDate", "reportDate", "form", "primaryDocument", "primaryDocDescription", "items")}
     for i, (form, fdate, rdate, doc, desc) in enumerate(ROWS):
+        recent["items"].append("2.02,9.01" if form == "8-K" else "")
         recent["accessionNumber"].append(f"{CIK}-{fdate[2:4]}-{len(ROWS) - i:06d}")
         recent["filingDate"].append(fdate)
         recent["reportDate"].append(rdate)
@@ -210,6 +212,44 @@ def option_chain(expiry: date) -> dict:
                             "error": None}}
 
 
+def structure_series() -> dict[str, tuple[list[date], list[float]]]:
+    """One year of fictional daily closes for the market-structure split, ending 2026-09-30 like SYNT.
+
+    SPY, QQQ, IWM and two peers (SYNA, SYNB) are built from SYNT's own daily returns plus noise, so they move
+    with it; SYNC is noise only, so the split leaves it out of the basket. The VIX wanders around 16.
+    """
+    chart = price_chart()["chart"]["result"][0]
+    days = [datetime.fromtimestamp(t, tz=timezone.utc).date() for t in chart["timestamp"]][-261:]
+    closes = chart["indicators"]["adjclose"][0]["adjclose"][-261:]
+    r = [math.log(b / a) for a, b in zip(closes, closes[1:])]
+    rng = random.Random(5152)
+    spy = [0.30 * x + rng.gauss(0.0003, 0.006) for x in r]
+    rets = {
+        "SPY": spy,
+        "QQQ": [1.15 * x + rng.gauss(0.0, 0.004) for x in spy],
+        "IWM": [1.10 * x + rng.gauss(0.0, 0.006) for x in spy],
+        "SYNA": [0.6 * x + 0.5 * m + rng.gauss(0.0, 0.015) for x, m in zip(r, spy)],
+        "SYNB": [0.5 * x + 0.6 * m + rng.gauss(0.0, 0.018) for x, m in zip(r, spy)],
+        "SYNC": [rng.gauss(0.0, 0.02) for _ in r],
+    }
+    ends = {"SPY": 600.0, "QQQ": 520.0, "IWM": 240.0, "SYNA": 30.0, "SYNB": 75.0, "SYNC": 12.0}
+    out = {}
+    for sym, rr in rets.items():
+        path, x = [0.0], 0.0
+        for v in rr:
+            x += v
+            path.append(x)
+        shift = math.log(ends[sym]) - path[-1]
+        out[sym] = (days, [round(math.exp(v + shift), 4) for v in path])
+    vix, level = [], 16.0
+    for x in [0.0] + spy:
+        level = max(9.0, level + 0.15 * (16.0 - level) - 120 * x + rng.gauss(0.0, 0.4))
+        vix.append(round(level, 2))
+    out["^VIX"] = (days, vix)
+    out["^VIX3M"] = (days, [round(v * 0.85 + 3.0, 2) for v in vix])
+    return out
+
+
 def frames(concept: str, year: int, seed: int) -> dict:
     """About 300 fictional filers with revenue 50M-600M in 2020 growing at a random steady rate, for any year 2015-2025."""
     rng = random.Random(seed)
@@ -281,6 +321,11 @@ def main() -> None:
         dd, cc = _daily_path(seed, end, 0.18, 0.0004)
         md, mc = _monthly(dd, cc)
         w(MONTHLY_URL.format(symbol=sym), _chart(sym, md, mc))
+    # market-structure split (v0.11): one year of daily closes, and Yahoo's similar stocks for SYNT
+    for sym, (dd, cc) in structure_series().items():
+        w(DAILY_URL.format(symbol=sym), _chart(sym, dd, cc))
+    w(RECOMMEND_URL.format(symbol="SYNT"), {"finance": {"result": [{"symbol": "SYNT", "recommendedSymbols": [
+        {"symbol": "SYNA", "score": 0.21}, {"symbol": "SYNB", "score": 0.18}, {"symbol": "SYNC", "score": 0.12}]}], "error": None}})
     # SEC frames for the base rate: every year 2015-2025, so horizons of 1 to 10 years have both ends
     for concept, seed in (("RevenueFromContractWithCustomerExcludingAssessedTax", 21), ("Revenues", 22), ("NetIncomeLoss", 23)):
         for year in range(2015, 2026):

@@ -1,0 +1,34 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://query2.finance.yahoo.com/v6/finance/recommendationsbysymbol/SYNT"
+ },
+ "response": {
+  "finance": {
+   "error": null,
+   "result": [
+    {
+     "recommendedSymbols": [
+      {
+       "score": 0.21,
+       "symbol": "SYNA"
+      },
+      {
+       "score": 0.18,
+       "symbol": "SYNB"
+      },
+      {
+       "score": 0.12,
+       "symbol": "SYNC"
+      }
+     ],
+     "symbol": "SYNT"
+    }
+   ]
+  }
+ },
+ "schema": "tickercase.snapshot/1"
+}

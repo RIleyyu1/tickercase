@@ -53,7 +53,8 @@ def test_synthetic_end_to_end(tmp_path):
     assert r.verdict.label == "partially_supported" and r.analysis_status == "deterministic_rules"
     assert {k: v for k, v in r.data_modes.items() if k != "analysis"} == {
         "claim_inputs": "user_input", "sec_filings": "synthetic", "sec_facts": "synthetic", "market_prices": "synthetic",
-        "options": "synthetic", "base_rate": "synthetic", "insiders": "synthetic", "fear_greed": "synthetic"}
+        "options": "synthetic", "base_rate": "synthetic", "insiders": "synthetic", "fear_greed": "synthetic",
+        "market_structure": "synthetic"}
     assert r.oracle.low is not None and {m.id for m in r.oracle.methods if m.status == "ok"} >= {"M1", "M2", "M3"}
     assert r.reported_facts.revenue[-1].value == Decimal("200000000")
     assert r.market.last_close == Decimal("50")
