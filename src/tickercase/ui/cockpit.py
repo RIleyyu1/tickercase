@@ -376,8 +376,8 @@ PART_NAMES = {"market": ("大盘", "market"), "peers": ("同类", "peers"), "own
 
 def _tape(st, zh: bool) -> str:
     scale = max([abs(d.own) for d in st.days] + [1e-9])
-    rows = [f'<div class="tc-trow tc-dim tc-thead"><span>{esc(L(zh, "日期", "day"))}</span><span>{esc(L(zh, "本股", "stock"))}</span>'
-            f'<span>{esc(L(zh, "大盘+同类", "mkt+peers"))}</span><span>{esc(L(zh, "个股", "own"))}</span><span></span>'
+    rows = [f'<div class="tc-trow tc-dim tc-thead"><span>{esc(L(zh, "日期", "day"))}</span><span class="tc-num">{esc(L(zh, "本股", "stock"))}</span>'
+            f'<span class="tc-num">{esc(L(zh, "大盘+同类", "mkt+peers"))}</span><span class="tc-num">{esc(L(zh, "个股", "own"))}</span><span></span>'
             f'<span>{esc(L(zh, "SEC 申报", "SEC filings"))}</span></div>']
     for i, d in enumerate(st.days):
         files = [filing_text(f, zh) for f in d.filings]
@@ -1167,7 +1167,9 @@ h1.tc-claim{font-family:'Noto Serif SC',serif!important;font-weight:900!importan
 .tc-tape2{display:flex;flex-direction:column;border-top:2px dashed var(--scr-line);padding-top:6px}
 .tc-trow{display:grid;grid-template-columns:6em 5em 6em 5em minmax(60px,1fr) minmax(0,2fr);gap:8px;align-items:center;font-size:14px;line-height:22px;border-bottom:1px dashed var(--scr-faint)}
 .tc-trow .tc-vt{font-size:20px;text-align:right}
-.tc-thead{font-size:12px;line-height:18px}
+.tc-thead{line-height:18px}
+.tc-thead>span{font-size:12px}
+.tc-thead .tc-num{text-align:right}
 .tc-tfile{font-size:12px;line-height:16px;overflow-wrap:anywhere}
 .tc-prow3{display:grid;grid-template-columns:4.5em 1fr 1fr auto;gap:8px;align-items:baseline;font-size:14px;line-height:20px}
 .tc-prow3.tc-off{opacity:.55}
