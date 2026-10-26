@@ -1,0 +1,24 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/index.json"
+ },
+ "response": {
+  "directory": {
+   "item": [
+    {
+     "name": "synt-20260804.htm",
+     "type": "text.gif"
+    },
+    {
+     "name": "synt-20260804ex991.htm",
+     "type": "text.gif"
+    }
+   ]
+  }
+ },
+ "schema": "tickercase.snapshot/1"
+}

@@ -23,6 +23,10 @@ from tickercase.providers.insiders import xml_url  # noqa: E402
 from tickercase.providers.market import CHART_URL, DAILY_URL, MONTHLY_URL  # noqa: E402
 from tickercase.providers.options import OPTIONS_URL  # noqa: E402
 from tickercase.providers.peers import RECOMMEND_URL  # noqa: E402
+from tickercase.providers.calendar import CALENDAR_URL  # noqa: E402
+from tickercase.providers.filing_text import DOC_URL, INDEX_URL  # noqa: E402
+from tickercase.providers.news import GOOGLE_NEWS_URL, YAHOO_NEWS_URL, google_query  # noqa: E402
+from urllib.parse import quote_plus  # noqa: E402
 from tickercase.providers.sec_frames import FRAMES_URL  # noqa: E402
 from tickercase.providers.sentiment import FEAR_GREED_URL, POLYMARKET_URL  # noqa: E402
 from tickercase.providers.sec import SUBMISSIONS_URL, TICKERS_URL  # noqa: E402
@@ -250,6 +254,35 @@ def structure_series() -> dict[str, tuple[list[date], list[float]]]:
     return out
 
 
+# ---------------------------------------------------------------- catalysts (v0.12): a fictional product story
+OUTLET = "Example Wire (fictional)"
+# (published, title) for the Google News searches; every item is invented
+STORY = [
+    ("2026-01-15T21:05:00", "Synthetic Example unveils Orbiter X, first deliveries planned for 2026"),
+    ("2026-03-10T14:00:00", "Synthetic Example says Orbiter X passed its first integrated test"),
+    ("2026-08-05T21:10:00", "Synthetic Example delays Orbiter X first delivery to first half of 2027"),
+    ("2026-08-06T15:30:00", "Synthetic Example shares slide after Orbiter X slips to 2027"),
+    ("2026-09-17T13:00:00", "Synthetic Example signs supply contract worth $40 million"),
+    ("2026-09-24T12:00:00", "Synthetic Example to report third quarter results on November 5"),
+]
+EXHIBITS = {
+    "2026-01-15": ("synt-20260114ex991.htm", "Synthetic Example Corp Announces Orbiter X Program. January 15, 2026 - Synthetic Example Corp (fictional) "
+                   "today announced Orbiter X, its next product line. The Company expects first customer deliveries of Orbiter X in 2026. "
+                   "About Synthetic Example Synthetic Example Corp is a fictional company used for demonstrations."),
+    "2026-08-05": ("synt-20260804ex991.htm", "Synthetic Example Corp Reports Second Quarter 2026 Results. August 5, 2026 - Synthetic Example Corp (fictional) "
+                   "reported revenue of $52 million for the second quarter. The Company now expects first deliveries of Orbiter X in the "
+                   "first half of 2027, after additional qualification testing. Forward-Looking Statements This release contains "
+                   "forward-looking statements."),
+}
+
+
+def rss(items: list[tuple[str, str]]) -> str:
+    rows = "".join(f"<item><title>{t} - {OUTLET}</title><link>https://example.com/news/{i}</link>"
+                   f"<pubDate>{datetime.fromisoformat(d).strftime('%a, %d %b %Y %H:%M:%S')} GMT</pubDate>"
+                   f'<source url="https://example.com">{OUTLET}</source></item>' for i, (d, t) in enumerate(items))
+    return f'<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>synthetic</title>{rows}</channel></rss>'
+
+
 def frames(concept: str, year: int, seed: int) -> dict:
     """About 300 fictional filers with revenue 50M-600M in 2020 growing at a random steady rate, for any year 2015-2025."""
     rng = random.Random(seed)
@@ -326,6 +359,24 @@ def main() -> None:
         w(DAILY_URL.format(symbol=sym), _chart(sym, dd, cc))
     w(RECOMMEND_URL.format(symbol="SYNT"), {"finance": {"result": [{"symbol": "SYNT", "recommendedSymbols": [
         {"symbol": "SYNA", "score": 0.21}, {"symbol": "SYNB", "score": 0.18}, {"symbol": "SYNC", "score": 0.12}]}], "error": None}})
+    # catalysts (v0.12): headlines, 8-K press releases, earnings date
+    recent = [x for x in STORY if x[0] >= "2026-09-01"]
+    w(YAHOO_NEWS_URL.format(symbol="SYNT"), {"news": [{"title": t, "publisher": OUTLET, "link": f"https://example.com/y/{i}",
+                                                       "providerPublishTime": int(datetime.fromisoformat(d).replace(tzinfo=timezone.utc).timestamp())}
+                                                      for i, (d, t) in enumerate(recent)]})
+    w(GOOGLE_NEWS_URL.format(query=quote_plus(google_query("Synthetic Example", days=30))), rss(recent))
+    w(GOOGLE_NEWS_URL.format(query=quote_plus(google_query("Synthetic Example", days=365))), rss(STORY))
+    w(GOOGLE_NEWS_URL.format(query=quote_plus(google_query("Synthetic Example", "Orbiter X", days=730))), rss([x for x in STORY if "Orbiter" in x[1]]))
+    for i, (form, fdate, _, doc, _) in enumerate(ROWS):
+        if form != "8-K" or fdate not in EXHIBITS:
+            continue
+        acc = f"{CIK}-{fdate[2:4]}-{len(ROWS) - i:06d}".replace("-", "")
+        name, text = EXHIBITS[fdate]
+        w(INDEX_URL.format(cik=int(CIK), acc=acc), {"directory": {"item": [{"name": doc, "type": "text.gif"}, {"name": name, "type": "text.gif"}]}})
+        w(DOC_URL.format(cik=int(CIK), acc=acc, name=name), f"<html><body><p>Exhibit 99.1</p><p>{text}</p></body></html>")
+    w(CALENDAR_URL.format(symbol="SYNT"), {"quoteSummary": {"result": [{"calendarEvents": {"earnings": {
+        "earningsDate": [{"raw": 1793836800, "fmt": "2026-11-05"}], "isEarningsDateEstimate": False,
+        "earningsAverage": {"raw": 0.41}, "revenueAverage": {"raw": 55000000}}}}], "error": None}})
     # SEC frames for the base rate: every year 2015-2025, so horizons of 1 to 10 years have both ends
     for concept, seed in (("RevenueFromContractWithCustomerExcludingAssessedTax", 21), ("Revenues", 22), ("NetIncomeLoss", 23)):
         for year in range(2015, 2026):

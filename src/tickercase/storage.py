@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Union
 
-from .models import CaseResult
+from .models import CaseResult, CatalystRegister
 
 CASE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
@@ -65,3 +65,42 @@ class CaseStore:
         if not path.is_file():
             return None
         return CaseResult.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+TICKER_FILE_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
+
+
+class CatalystStore:
+    """Confirmed catalysts, one UTF-8 JSON file per ticker (v0.12). Cases keep the version they saw; this is the latest."""
+
+    def __init__(self, directory: Union[str, Path]):
+        self.directory = Path(directory)
+
+    def _path(self, ticker: str) -> Path:
+        symbol = (ticker or "").strip().upper()
+        if not TICKER_FILE_RE.match(symbol):
+            raise ValueError(f"invalid ticker: {ticker!r}")
+        return self.directory / f"{symbol}.json"
+
+    def get(self, ticker: str) -> Optional[CatalystRegister]:
+        path = self._path(ticker)
+        if not path.is_file():
+            return None
+        try:
+            return CatalystRegister.model_validate(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return None
+
+    def save(self, register: CatalystRegister) -> Path:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        target = self._path(register.ticker)
+        fd, tmp = tempfile.mkstemp(prefix=".tmp-", suffix=".json", dir=self.directory)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(register.model_dump_json(indent=2))
+            os.replace(tmp, target)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+        return target

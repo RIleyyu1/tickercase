@@ -1,0 +1,26 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://query1.finance.yahoo.com/v1/finance/search?q=SYNT&newsCount=20&quotesCount=0"
+ },
+ "response": {
+  "news": [
+   {
+    "link": "https://example.com/y/0",
+    "providerPublishTime": 1789650000,
+    "publisher": "Example Wire (fictional)",
+    "title": "Synthetic Example signs supply contract worth $40 million"
+   },
+   {
+    "link": "https://example.com/y/1",
+    "providerPublishTime": 1790251200,
+    "publisher": "Example Wire (fictional)",
+    "title": "Synthetic Example to report third quarter results on November 5"
+   }
+  ]
+ },
+ "schema": "tickercase.snapshot/1"
+}

@@ -1,0 +1,11 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000013/synt-20260804ex991.htm"
+ },
+ "response": "<html><body><p>Exhibit 99.1</p><p>Synthetic Example Corp Reports Second Quarter 2026 Results. August 5, 2026 - Synthetic Example Corp (fictional) reported revenue of $52 million for the second quarter. The Company now expects first deliveries of Orbiter X in the first half of 2027, after additional qualification testing. Forward-Looking Statements This release contains forward-looking statements.</p></body></html>",
+ "schema": "tickercase.snapshot/1"
+}

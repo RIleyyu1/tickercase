@@ -125,7 +125,7 @@ S = {
     "open_report": ("▶ 打开当前报告", "▶ Open the current report"),
     "ready": ("这组输入已经生成过报告。", "These inputs already have a report."),
     # console: data and methods used, recent tapes
-    "u_feed": ("UNIT 03 · FEED 采用的信息 · 9 CH", "UNIT 03 · FEED data we use · 9 CH"),
+    "u_feed": ("UNIT 03 · FEED 采用的信息 · 10 CH", "UNIT 03 · FEED data we use · 10 CH"),
     "u_mth": ("UNIT 04 · MTH 四种方法 · 互相核对", "UNIT 04 · MTH four methods · cross-checked"),
     "u_hist": ("UNIT 05 · HIST 最近的磁带", "UNIT 05 · HIST recent tapes"),
     "hist_hint": ("▶ PLAY 直接打开这盘磁带的报告", "▶ PLAY opens that tape's report"),
@@ -137,13 +137,14 @@ S = {
     "kln_none": ("这份报告没有行情数据，画不出 K 线。", "This report has no price data, so there is no K-line."),
     "u_prb": ("UNIT 03 · PRB 概率 ← MTH 四种方法", "UNIT 03 · PRB probability ← MTH four methods"),
     "u_mkt": ("UNIT 04 · MKT 市场结构 · Δ 变化归因", "UNIT 04 · MKT market structure · Δ change"),
-    "u_feed_r": ("UNIT 05 · FEED 数据源读数 · 9 CH", "UNIT 05 · FEED source readings · 9 CH"),
-    "u_rpt": ("UNIT 06 · RPT 报告 · 5 CH", "UNIT 06 · RPT report · 5 CH"),
+    "u_cat": ("UNIT 05 · CAT 催化剂档案", "UNIT 05 · CAT catalyst register"),
+    "u_feed_r": ("UNIT 06 · FEED 数据源读数 · 10 CH", "UNIT 06 · FEED source readings · 10 CH"),
+    "u_rpt": ("UNIT 07 · RPT 报告 · 5 CH", "UNIT 07 · RPT report · 5 CH"),
     "rpt_note": ("换台雪花 0.5 秒 · 内容随即出现", "0.5 s of snow per channel, then the content"),
     "tabs": (["CH1 报告", "CH2 情景推演", "CH3 价位与方法", "CH4 基本面核查", "CH5 原始数据"], ["CH1 Report", "CH2 Scenario", "CH3 Levels & methods", "CH4 Fundamentals", "CH5 Raw data"]),
-    "u_sig": ("UNIT 07 · SIG 信号", "UNIT 07 · SIG signals"),
+    "u_sig": ("UNIT 08 · SIG 信号", "UNIT 08 · SIG signals"),
     "u_fnd": ("FND · 基本面结论", "FND · FUNDAMENTALS"), "fnd_more": ("CH4 详情 ▲", "CH4 details ▲"),
-    "u_nar": ("UNIT 08 · NAR 叙述 · DOT-MATRIX", "UNIT 08 · NAR narrative · DOT-MATRIX"),
+    "u_nar": ("UNIT 09 · NAR 叙述 · DOT-MATRIX", "UNIT 09 · NAR narrative · DOT-MATRIX"),
     "prob_none": ("数据不足，无法计算概率", "Not enough data to compute a probability"),
     "target": ("目标价", "Target"), "now_price": ("现价", "Now"),
     "r_layers": ("数据分层", "Evidence by layer"), "r_analysis": ("交叉验证", "Cross-check"),
@@ -156,6 +157,37 @@ S = {
     "r_mon_cols": (("信号", "当前", "触发条件", "含义"), ("Signal", "Now", "Trigger", "Meaning")),
     "r_time_cols": (("时间", "要看什么", "说明"), ("When", "What", "Note")),
     "r_none": ("这份报告没有分层内容（由旧版本生成）。", "This report has no layers (made by an older version)."),
+    # catalyst register
+    "cat_chip": ("Claude 提议 · 代码核对 · 你确认", "Claude proposes · code checks · you confirm"),
+    "cat_up": ("截止日前已知的日期", "Known dates before the deadline"),
+    "cat_up_none": ("截止日前没有已知日期：既没有财报日期，档案里也没有带时间的催化剂。", "No known dates before the deadline: no earnings date and no dated catalyst in the register."),
+    "cat_use": ("→ 情景", "→ scenario"),
+    "cat_use_help": ("把这个日期和期权定价的幅度填进 RPT · CH2 情景推演。", "Fills this date and the option-priced move into RPT · CH2 Scenario."),
+    "cat_used": ("已填入 RPT · CH2 情景推演：{name}，{day}。", "Filled into RPT · CH2 Scenario: {name}, {day}."),
+    "cat_reg": ("档案 · 已确认的催化剂", "Register · confirmed catalysts"),
+    "cat_reg_none": ("这只股票的档案还是空的。按下面的 SCAN，让 Claude 根据 8-K 新闻稿和新闻标题提出催化剂，核对后由你确认。",
+                     "This stock's register is empty. Press SCAN below: Claude proposes catalysts from 8-K press releases and headlines, code checks them, you confirm."),
+    "cat_reg_note": ("档案按股票保存（data/catalysts），以后每次 RUN 都会读入并补算反应。反应 = 事件当天和次日的涨跌，以及扣除大盘和同类后的个股部分。",
+                     "The register is kept per stock (data/catalysts); every later RUN reads it and measures new reactions. Reaction = the move on the event day and the next, and the part the market and the peers do not explain."),
+    "cat_manage": ("管理档案", "Manage the register"),
+    "cat_remove": ("移除 {id}", "Remove {id}"),
+    "cat_scan": ("SCAN 生成催化剂提议", "SCAN · propose catalysts"),
+    "cat_scan_help": ("读取近一年的 8-K 新闻稿和新闻标题，调用两次 Claude（{model}，effort {effort}）：先找主题和检索词，再按主题检索两年的新闻并写出催化剂和时间线。按用量计费。",
+                      "Reads a year of 8-K press releases and headlines and makes two Claude calls ({model}, effort {effort}): themes and search words first, then a two-year news search per theme and the catalysts with their timelines. Billed by usage."),
+    "cat_rescan": ("RESCAN 重新提议", "RESCAN · propose again"),
+    "cat_running": ("正在生成催化剂提议…", "Proposing catalysts…"),
+    "cat_step": {"filings": ("读取 8-K 新闻稿", "reading 8-K press releases"), "news": ("取新闻标题", "fetching headlines"),
+                 "themes": ("Claude：找主题和检索词", "Claude: themes and search words"), "catalysts": ("Claude：写催化剂和时间线", "Claude: catalysts and timelines"),
+                 "reactions": ("计算每个事件的市场反应", "measuring each event's reaction")},
+    "cat_prop": ("提议 · 待你确认", "Proposal · waiting for you"),
+    "cat_prop_meta": ("{n} 项 · {src} 条来源 · 检索词：{themes} · {model}", "{n} items · {src} sources · searched: {themes} · {model}"),
+    "cat_accept": ("接受 {id}", "Accept {id}"),
+    "cat_confirm": ("CONFIRM 写入档案", "CONFIRM · write to the register"),
+    "cat_discard": ("DISCARD 放弃这份提议", "DISCARD this proposal"),
+    "cat_decided": ("这份提议已于 {t} 处理：接受 {n} 项。", "This proposal was decided at {t}: {n} accepted."),
+    "cat_failed": ("催化剂提议未生成：", "Catalysts not proposed: "),
+    "cat_heads": ("近期新闻标题", "Recent headlines"),
+    "cat_rule": ("未通过核对的提议默认不勾选。接受的进入档案；没接受的新名称会记下来，以后不再提议。", "Proposals that fail a check start unticked. Accepted ones join the register; new names you do not accept are remembered and not proposed again."),
     # AI narrative
     "ai_intro": ("由 Claude 根据本报告的事实表撰写，每句话的数字都会逐个核对出处。", "Written by Claude from this report's fact table; every number in every sentence is checked against its source."),
     "ai_button": ("PRINT 生成 AI 叙述", "PRINT · write AI narrative"),
@@ -348,11 +380,11 @@ STEP_LABELS = {
     "options": ("期权链", "Option chain"), "risk_free_rate": ("美债利率", "Treasury yield"), "price_base_rate": ("本股历史涨幅", "Own price history"),
     "benchmarks": ("大盘对标", "Benchmarks"), "base_rate": ("同规模公司基准率", "Peer base rate"), "insiders": ("内部人交易", "Insider trades"),
     "prediction_markets": ("预测市场", "Prediction markets"), "fear_greed": ("恐惧贪婪指数", "Fear & Greed"),
-    "market_structure": ("市场结构", "Market structure"),
+    "market_structure": ("市场结构", "Market structure"), "news": ("新闻标题", "Headlines"), "earnings_date": ("财报日期", "Earnings date"),
 }
 TONE_OF_ROW = {"good": "good", "bad": "bad", "missing": "neutral", "neutral": "neutral"}
 NARR_BADGE = {"verified": "✔", "qualitative": "○", "cited_elsewhere": "⚠", "unsupported": "✖"}
-JUMPS = (("u-clm", "CLM"), ("u-kln", "KLN"), ("u-prb", "PRB"), ("u-mkt", "MKT"), ("u-feed", "FEED"), ("u-rpt", "RPT"), ("u-sig", "SIG"), ("u-nar", "NAR"))
+JUMPS = (("u-clm", "CLM"), ("u-kln", "KLN"), ("u-prb", "PRB"), ("u-mkt", "MKT"), ("u-cat", "CAT"), ("u-feed", "FEED"), ("u-rpt", "RPT"), ("u-sig", "SIG"), ("u-nar", "NAR"))
 KLINE_HEIGHT = 600
 
 
@@ -790,6 +822,48 @@ def _narrate(key_suffix: str, force: bool = False) -> None:
     get_service().narrate(result, language=lang(), force=force)
 
 
+def _case_of(key_suffix: str) -> Optional[CaseResult]:
+    return st.session_state["result"] if key_suffix == "current" else st.session_state["history_selected"]
+
+
+def _case_mode(result: CaseResult) -> str:
+    """The data mode a case ran in, so a proposal reads the same kind of data (live, replay or synthetic)."""
+    modes = {result.data_modes.get(k, "") for k in ("market_prices", "sec_filings")}
+    return "synthetic" if "synthetic" in modes else "replay" if "replay" in modes else "live"
+
+
+def _use_catalyst(key_suffix: str, name: str, day, move: Optional[float]) -> None:
+    result = _case_of(key_suffix)
+    if result is None:
+        return
+    lo, hi = result.created_at.date() + timedelta(days=1), ck.deadline_of(result)
+    st.session_state[f"sc_name_{key_suffix}"] = name
+    st.session_state[f"sc_date_{key_suffix}"] = min(max(day, lo), hi)
+    if move is not None:
+        _use_market_move(key_suffix, move)
+    st.session_state[f"cat_msg_{key_suffix}"] = (name, str(day))
+
+
+def _confirm_catalysts(key_suffix: str) -> None:
+    result = _case_of(key_suffix)
+    if result is None or result.catalyst_proposal is None:
+        return
+    accepted = [c.id for c in result.catalyst_proposal.catalysts if st.session_state.get(f"cat_acc_{key_suffix}_{c.id}")]
+    get_service().confirm_catalysts(result, accepted)
+
+
+def _discard_proposal(key_suffix: str) -> None:
+    result = _case_of(key_suffix)
+    if result is not None and result.catalyst_proposal is not None:
+        get_service().confirm_catalysts(result, [])
+
+
+def _remove_catalyst(key_suffix: str, catalyst_id: str) -> None:
+    result = _case_of(key_suffix)
+    if result is not None:
+        get_service().remove_catalyst(result, catalyst_id)
+
+
 def _go(page: str) -> None:
     st.session_state["page"] = page
 
@@ -1225,7 +1299,8 @@ def tab_scenario(result: CaseResult, key_suffix: str) -> None:
     c1, c2 = st.columns([2, 1])
     c1.text_input(t("sc_event"), key=f"sc_name_{k}", placeholder=t("sc_event_ph"))
     default_date = min(today + timedelta(days=182), o.target_date - timedelta(days=1))
-    ev_date = c2.date_input(t("sc_date"), value=default_date, min_value=today + timedelta(days=1), max_value=o.target_date, key=f"sc_date_{k}")
+    st.session_state.setdefault(f"sc_date_{k}", default_date)
+    ev_date = c2.date_input(t("sc_date"), min_value=today + timedelta(days=1), max_value=o.target_date, key=f"sc_date_{k}")
 
     with st.container(border=True):
         st.markdown(f"**{t('sc_market')}**")
@@ -1617,6 +1692,77 @@ def render_model_probability(result: CaseResult) -> None:
 # ------------------------------------------------------------------ report page units
 
 
+def render_cat(result: CaseResult, key_suffix: str) -> None:
+    z, k = zh(), key_suffix
+    html_block(ck.unit_head(t("u_cat"), ck.chip(t("cat_chip")), "u-cat"))
+    settings = get_service().settings
+    model_kw = dict(model=settings.narrative_model, effort=settings.narrative_effort)
+    # known dates before the deadline
+    html_block(ck.sub_head(t("cat_up")))
+    rows = ck.upcoming_rows(result, z)
+    if not rows:
+        st.caption(t("cat_up_none"))
+    for i, (row, data) in enumerate(rows):
+        c = st.columns([7, 1], vertical_alignment="center")
+        c[0].markdown(row, unsafe_allow_html=True)
+        if result.oracle is not None:
+            c[1].button(t("cat_use"), key=f"cat_use_{k}_{i}", help=t("cat_use_help"), on_click=_use_catalyst, args=(k, data["name"], data["day"], data["move"]),
+                        width="stretch")
+    used = st.session_state.get(f"cat_msg_{k}")
+    if used:
+        st.success(t("cat_used", name=used[0], day=used[1]))
+    # the confirmed register
+    html_block(ck.sub_head(t("cat_reg")))
+    reg = result.catalysts
+    if reg is None or not reg.catalysts:
+        st.caption(t("cat_reg_none"))
+    else:
+        html_block('<div class="tc-cats">' + "".join(ck.catalyst_card(c, z) for c in reg.catalysts) + "</div>")
+        st.caption(t("cat_reg_note"))
+        with st.expander(t("cat_manage")):
+            for c in reg.catalysts:
+                st.button(t("cat_remove", id=c.id) + f" · {c.name_zh if z and c.name_zh else c.name_en}", key=f"cat_rm_{k}_{c.id}",
+                          on_click=_remove_catalyst, args=(k, c.id))
+    # the proposal
+    prop = result.catalyst_proposal
+    if prop is not None and prop.status == "ok" and prop.decided_at is None:
+        html_block(ck.sub_head(t("cat_prop")))
+        cost = estimate_cost(prop.model, prop.usage)
+        st.caption(t("cat_prop_meta", n=len(prop.catalysts), src=len(prop.sources), themes=", ".join(prop.themes) or "—", model=prop.model)
+                   + (" · " + t("ai_usage", inp=prop.usage.get("input_tokens", 0), out=prop.usage.get("output_tokens", 0), cost=cost) if cost is not None else ""))
+        st.caption(t("cat_rule"))
+        for c in prop.catalysts:
+            st.session_state.setdefault(f"cat_acc_{k}_{c.id}", not c.problems)
+            st.checkbox(t("cat_accept", id=c.id), key=f"cat_acc_{k}_{c.id}")
+            html_block(ck.catalyst_card(c, z, proposed=True))
+        if prop.error:
+            st.caption("⚠ " + prop.error)
+        b = st.columns([2, 2, 3])
+        b[0].button(t("cat_confirm"), key=f"cat_confirm_{k}", type="primary", on_click=_confirm_catalysts, args=(k,), width="stretch")
+        b[1].button(t("cat_discard"), key=f"cat_discard_{k}", on_click=_discard_proposal, args=(k,), width="stretch")
+    else:
+        if prop is not None and prop.status != "ok":
+            st.warning(t("cat_failed") + (prop.error or prop.status))
+        elif prop is not None and prop.decided_at is not None:
+            st.caption(t("cat_decided", t=f"{prop.decided_at:%Y-%m-%d %H:%M} UTC", n=len(prop.accepted)))
+        no_key = not settings.anthropic_api_key
+        if no_key:
+            st.caption(t("ai_missing"))
+        label = t("cat_scan") if prop is None else t("cat_rescan")
+        if st.button(label, key=f"cat_scan_{k}", type="primary" if prop is None else "secondary", disabled=no_key, help=t("cat_scan_help", **model_kw)):
+            steps = S["cat_step"]
+            with st.status(t("cat_running"), expanded=True) as box:
+                def note(step: str) -> None:
+                    name, _, term = step.partition(":")
+                    label = (("检索：" if z else "searching: ") + term) if name == "search" else steps.get(name, (name, name))[0 if z else 1]
+                    box.write("· " + label)
+                get_service().propose_catalysts(result, mode=_case_mode(result), progress=note)
+            st.rerun()
+        st.caption(t("cat_scan_help", **model_kw))
+    with st.expander(t("cat_heads")):
+        html_block(ck.headlines_html(result.news, z))
+
+
 def render_kline(result: CaseResult) -> None:
     v = result.confirmed_claim.values
     m = result.market
@@ -1698,6 +1844,9 @@ def render_result_units(result: CaseResult, key_suffix: str, *, anim: bool, star
     with st.container(key="u-c-mkt"):
         html_block(ck.mkt_unit(result, z, t("u_mkt"), anim))
     keys.append("u-c-mkt")
+    with st.container(key="u-c-cat"):
+        render_cat(result, key_suffix)
+    keys.append("u-c-cat")
     with st.container(key="u-o-feed"):
         html_block(ck.feeds_unit(result, z, t("u_feed_r"), anim))
     keys.append("u-o-feed")

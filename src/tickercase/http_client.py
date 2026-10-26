@@ -136,6 +136,15 @@ def validate_user_agent(user_agent: Optional[str]) -> Optional[str]:
     return None
 
 
+TEXT_SUFFIXES = (".xml", ".htm", ".html", ".txt")
+TEXT_PREFIXES = ("https://news.google.com/rss/",)
+
+
+def is_text_url(url: str) -> bool:
+    """Responses kept as text rather than parsed as JSON: documents by suffix, RSS feeds by prefix."""
+    return urlparse(url).path.lower().endswith(TEXT_SUFFIXES) or url.startswith(TEXT_PREFIXES)
+
+
 @dataclass
 class LiveHttpClient:
     user_agent: Optional[str]
@@ -270,8 +279,8 @@ class LiveHttpClient:
                 body = gzip.decompress(body)
             except OSError as exc:
                 raise FetchError("invalid_payload", f"could not decompress gzip body from {url}", url=url, data_mode=DataMode.LIVE) from exc
-        if urlparse(url).path.lower().endswith(".xml"):
-            return body.decode("utf-8", "replace")  # SEC ownership documents (Form 4) are XML; kept as text
+        if is_text_url(url):
+            return body.decode("utf-8", "replace")  # Form 4 XML, 8-K exhibits (HTML) and news RSS are kept as text
         try:
             return json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:

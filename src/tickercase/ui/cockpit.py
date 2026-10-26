@@ -383,6 +383,7 @@ def _tape(st, zh: bool) -> str:
         files = [filing_text(f, zh) for f in d.filings]
         if d.flagged and i > 0:
             files += [L(zh, f"前一交易日：{filing_text(f, zh)}", f"day before: {filing_text(f, zh)}") for f in st.days[i - 1].filings]
+        files += [f"▸ {h}" for h in d.headlines]
         rows.append(f'<div class="tc-trow{" tc-am" if d.flagged else ""}"><span>{"◆" if d.flagged else "·"} {d.day:%m-%d}</span>'
                     f'<span class="tc-vt">{esc(signed(d.stock))}</span><span class="tc-vt">{esc(signed(math.expm1(d.market + d.peers)))}</span>'
                     f'<span class="tc-vt">{esc(signed(math.expm1(d.own)))}</span>{dbar(d.own, scale)}<span class="tc-tfile">{esc(" · ".join(files))}</span></div>')
@@ -473,6 +474,94 @@ def delta_block(result: CaseResult, zh: bool) -> str:
 
 
 
+KIND_NAMES = {"product": ("产品与项目", "product"), "regulatory": ("审批监管", "regulatory"), "contract": ("合同", "contract"),
+              "financing": ("融资", "financing"), "deal": ("并购", "deal"), "operations": ("经营", "operations"), "legal": ("法律", "legal"),
+              "other": ("其他", "other")}
+STATUS_NAMES = {"upcoming": ("待发生", "upcoming"), "in_progress": ("进行中", "in progress"), "achieved": ("已实现", "achieved"),
+                "delayed": ("推迟", "delayed"), "cancelled": ("取消", "cancelled")}
+DIRECTION_NAMES = {"up": ("成功利好", "success lifts"), "down": ("成功利空", "success weighs"), "mixed": ("方向不定", "mixed")}
+
+
+def reaction_text(r, zh: bool) -> str:
+    if r is None:
+        return L(zh, "反应：待观察", "reaction: not yet")
+    own = "" if r.own is None else L(zh, f"，其中个股 {signed(r.own)}", f", own {signed(r.own)}")
+    return L(zh, f"{r.days} 日反应：本股 {signed(r.stock)}{own}", f"{r.days}-day reaction: stock {signed(r.stock)}{own}")
+
+
+def _source_links(sources, zh: bool, limit: int = 3) -> str:
+    out = []
+    for s in sources[:limit]:
+        label = f"{s.publisher or s.id} {s.day:%m-%d}"
+        out.append(f'<a class="tc-srclink" href="{esc(s.url)}" target="_blank" rel="noopener">{esc(label)}</a>' if s.url else f"<span>{esc(label)}</span>")
+    more = len(sources) - limit
+    return " · ".join(out) + (f" · +{more}" if more > 0 else "")
+
+
+def catalyst_card(c, zh: bool, *, proposed: bool = False) -> str:
+    """One catalyst: name, kind, status, timing, summary, then its dated events with sources and the measured reaction."""
+    name = c.name_zh if zh and c.name_zh else c.name_en
+    tag = c.updates if proposed and c.updates else c.id
+    head = (f'<div class="tc-row tc-between" style="gap:10px;flex-wrap:wrap"><b class="tc-serif tc-catname">{esc(name)}</b>'
+            f'<span class="tc-row" style="gap:6px;flex-wrap:wrap">{dymo(tag, small=True)}{dymo(L(zh, *KIND_NAMES[c.kind]), small=True)}'
+            f'{dymo(L(zh, *STATUS_NAMES[c.status]), small=True)}</span></div>')
+    timing = L(zh, f"预计 {c.expected}", f"expected {c.expected}") if c.expected else L(zh, "来源没有给出时间", "no timing in the sources")
+    meta = f'<div class="tc-catmeta">{esc(timing)} · {esc(L(zh, *DIRECTION_NAMES[c.direction]))}' + (
+        esc(L(zh, f" · 更新 {c.updates}", f" · updates {c.updates}")) if proposed and c.updates else "") + "</div>"
+    summary = c.summary_zh if zh and c.summary_zh else c.summary_en
+    events = "".join(
+        f'<div class="tc-catev"><span class="tc-catday">{e.day}</span><div class="tc-col" style="gap:2px;min-width:0">'
+        f'<span>{esc(e.change_zh if zh and e.change_zh else e.change_en)}</span>'
+        f'<span class="tc-catsub">{esc(reaction_text(e.reaction, zh))} · {_source_links(e.sources, zh)}</span></div></div>' for e in c.events)
+    problems = "".join(f'<div class="tc-catwarn">⚠ {esc(x)}</div>' for x in c.problems)
+    ok = "" if c.problems else f'<div class="tc-catok">{esc(L(zh, "核对通过：引用、日期和数字都能在来源里找到", "checks pass: citations, dates and numbers are in the sources"))}</div>'
+    return (f'<div class="tc-cat{" tc-catprop" if proposed else ""}">{head}{meta}<p class="tc-catsum">{esc(summary)}</p>'
+            f'<div class="tc-catevs">{events}</div>{problems if proposed or c.problems else ""}{ok if proposed else ""}</div>')
+
+
+def upcoming_rows(result: CaseResult, zh: bool) -> list[tuple[str, dict]]:
+    """Dated items before the deadline: the next earnings and confirmed catalysts, with the move options price around the day."""
+    from ..catalysts import upcoming
+    from ..oracle import event_move
+
+    today = result.created_at.date()
+    until = deadline_of(result)
+    term = result.options.term if result.options is not None else []
+    items = []
+    if result.earnings is not None and today < result.earnings.day <= until:
+        e = result.earnings
+        items.append((e.day, L(zh, "财报", "Earnings") + (L(zh, "（日期为估计）", " (estimated date)") if e.estimate else ""), "YAHOO CALENDAR", e.day))
+    for c in upcoming(result.catalysts, today=today, until=until):
+        items.append((c.expected_day, c.name_zh if zh and c.name_zh else c.name_en, L(zh, f"{c.id} · 预计 {c.expected}（取区间中点）", f"{c.id} · expected {c.expected} (middle of the span)"), c.expected_day))
+    rows = []
+    for day, name, src, ev_day in sorted(items, key=lambda x: x[0]):
+        mv = event_move(term, ev_day, today) if term else None
+        if mv is None:
+            priced = L(zh, "无期权期限结构", "no option term structure")
+        elif mv.status == "ok":
+            priced = L(zh, f"期权为前后额外定价 ±{mv.move * 100:.0f}%", f"options price an extra ±{mv.move * 100:.0f}% around it")
+            if mv.gap_days and mv.gap_days > 120:
+                priced += L(zh, f"（前后到期日相隔 {mv.gap_days} 天，期间其他消息也算在里面）", f" (the expiries around it are {mv.gap_days} days apart, so other news is mixed in)")
+        elif mv.status == "not_priced":
+            priced = L(zh, "期权没有为这个日期额外加价", "options add nothing around this date")
+        else:
+            priced = L(zh, "超出期权到期日，读不出定价", "beyond the listed expiries")
+        html = (f'<div class="tc-uprow"><span class="tc-vt tc-upday">{day}</span><div class="tc-col" style="gap:2px;min-width:0">'
+                f'<b class="tc-serif">{esc(name)}</b><span class="tc-catsub">{esc(src)} · {esc(priced)}</span></div></div>')
+        rows.append((html, {"name": name, "day": ev_day, "move": mv.move if mv is not None and mv.status == "ok" else None}))
+    return rows
+
+
+def headlines_html(feed, zh: bool, limit: int = 12) -> str:
+    if feed is None or not feed.items:
+        return para(L(zh, "本次没有取得新闻标题。", "No headlines in this run."), "tc-mknote")
+    rows = "".join(f'<div class="tc-headrow"><span class="tc-catday">{(n.published.date()):%m-%d}</span>'
+                   f'<a class="tc-srclink" href="{esc(n.url)}" target="_blank" rel="noopener">{esc(n.title)}</a><span class="tc-catsub">{esc(n.publisher)}</span></div>'
+                   for n in feed.items[:limit])
+    return f'<div class="tc-heads">{rows}</div>'
+
+
+
 def kline_notes(result: CaseResult, zh: bool) -> tuple[str, str]:
     """Labels for the K-line's future zone: (touch line, close-above line); only computed numbers, no forecast path."""
     o = result.oracle
@@ -492,6 +581,7 @@ def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
     facts, br, ins, pm, se = result.reported_facts, result.base_rate, result.insiders, result.prediction_markets, result.sentiment
     st = result.structure
     n_used = len([x for x in st.peers if x.used]) if st else 0
+    nw, er = result.news, result.earnings
     tgt = format(o.target_price, "f") if o is not None else ""
     latest = None
     if facts is not None:
@@ -526,6 +616,10 @@ def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
          (L(zh, f"近 {st.window_days} 日 · 大盘 {signed(st.market_part)} · 同类 {signed(st.peer_part)} · 个股 {signed(st.own_part)}",
             f"last {st.window_days} days · market {signed(st.market_part)} · peers {signed(st.peer_part)} · own {signed(st.own_part)}") if st else ""),
          "YAHOO · SPY QQQ IWM VIX" + (L(zh, f" · 同类 {n_used} 只", f" · {n_used} peers") if st else ""), "MKT · Δ"),
+        ("CH-10 NEWS", "news", L(zh, "新闻与日历", "News and calendar"), str(len(nw.items)) if nw else "—",
+         (L(zh, f"条标题 · 下次财报 {er.day}{'（估计）' if er.estimate else ''}", f"headlines · next earnings {er.day}{' (est.)' if er.estimate else ''}") if nw and er
+          else L(zh, "条标题", "headlines") if nw else ""),
+         "YAHOO · GOOGLE NEWS · YAHOO CALENDAR", "CAT · MKT"),
     ]
     cards = []
     for i, (ch, step, name, value, sub, src, to) in enumerate(rows):
@@ -669,6 +763,9 @@ FEEDS_INFO = [
     ("CH-09 MKT", ("市场结构", "Market structure"), "YAHOO · SPY QQQ IWM VIX",
      ("把近 20 日涨跌拆成大盘、同类和个股三部分；同一观点再算时，解释概率为什么变", "splits the last 20 days into market, peers and own; explains why the probability moved since the last run"),
      ("每日", "daily"), "MKT · Δ"),
+    ("CH-10 NEWS", ("新闻与日历", "News and calendar"), "YAHOO · GOOGLE NEWS · SEC 8-K",
+     ("新闻标题、8-K 新闻稿和财报日期：催化剂档案的来源，异动日旁的标题", "headlines, 8-K press releases and the earnings date: the sources of the catalyst register"),
+     ("每日", "daily"), "CAT · MKT"),
 ]
 
 METHODS_INFO = [
@@ -730,7 +827,7 @@ def boot_rows(zh: bool, *, version: str, mode: str, mode_label: str, sec_set: bo
     ready = mode not in ("live", "record") or sec_set
     return [
         (L(zh, f"TC-8 自检 · TICKERCASE v{version}", f"TC-8 SELF-TEST · TICKERCASE v{version}"), L(zh, "开始", "START"), "am"),
-        (L(zh, "数据源 09 路 · SEC YAHOO PMKT CNN", "DATA 09 CH · SEC YAHOO PMKT CNN"), L(zh, "就绪", "READY") if ready else L(zh, "受限", "LIMITED"), "am"),
+        (L(zh, "数据源 10 路 · SEC YAHOO PMKT CNN NEWS", "DATA 10 CH · SEC YAHOO PMKT CNN NEWS"), L(zh, "就绪", "READY") if ready else L(zh, "受限", "LIMITED"), "am"),
         (L(zh, "方法 M1–M4 · 期权 波动率 同业 本股", "METHODS M1–M4 · OPT VOL PEER HIST"), L(zh, "就绪", "READY"), "am"),
         (L(zh, "SEC 联系邮箱", "SEC CONTACT EMAIL"), L(zh, "已设置", "SET") if sec_set else L(zh, "未设置", "NOT SET"), "am"),
         (L(zh, "CLAUDE KEY · AI 叙述（可选）", "CLAUDE KEY · AI NARRATIVE (OPTIONAL)"), L(zh, "已设置", "SET") if ai_set else L(zh, "未设置", "NOT SET"),
@@ -1081,6 +1178,25 @@ p.tc-mknote{font-size:13px;color:#DCD3BA;margin-top:8px}
 .tc-dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:14px}
 .tc-dstrip{padding:10px 14px 12px;gap:8px}
 .tc-chiplink{text-decoration:none}
+.tc-cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px}
+.tc-cat{display:flex;flex-direction:column;gap:8px;padding:12px 14px 14px;background:#EDE3CC;color:var(--ink);border:3px solid var(--ink);box-shadow:4px 4px 0 #0C0B09;min-width:0}
+.tc-catprop{background:#E4D8B8;border-style:dashed}
+.tc-catname{font-size:19px;font-weight:900;line-height:1.3}
+.tc-catmeta{font-size:12px;font-weight:700;letter-spacing:.04em;color:#4A4436}
+p.tc-catsum{margin:0;font-family:'Noto Serif SC',serif;font-size:14px;line-height:1.6;color:#221C14}
+.tc-catevs{display:flex;flex-direction:column;border-top:2px dashed #A99F86}
+.tc-catev{display:grid;grid-template-columns:6.4em minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px dashed #B9AF95;font-family:'Noto Serif SC',serif;font-size:14px;line-height:1.5}
+.tc-catday{font-family:'VT323',monospace;font-size:20px;line-height:20px;color:#5A5244;white-space:nowrap}
+.tc-catsub{font-size:12px;line-height:1.5;color:#5A5244;overflow-wrap:anywhere}
+.tc-srclink{color:#7E3B2A!important;text-decoration:underline;text-underline-offset:2px}
+.tc-catwarn{font-size:13px;font-weight:700;color:#7E3B2A}
+.tc-catok{font-size:12px;font-weight:700;color:#3C5A2E}
+.tc-uprow{display:grid;grid-template-columns:7.2em minmax(0,1fr);gap:12px;align-items:center;padding:6px 0}
+.tc-upday{font-size:24px!important;line-height:24px;color:#FFB23E}
+.tc-uprow b{color:#F1EBDC;font-size:17px}.tc-uprow .tc-catsub{color:#CFC4A6;font-size:13px}
+.tc-heads{display:flex;flex-direction:column}
+.tc-headrow{display:grid;grid-template-columns:4em minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px dashed #46423C;font-size:14px;line-height:1.5}
+.tc-headrow .tc-srclink{color:#E3DAC0!important}.tc-headrow .tc-catsub,.tc-headrow .tc-catday{color:#B5AC93}
 .tc-feeds{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
 .tc-feeds-wide{grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
 .tc-feedm{display:flex;flex-direction:column;gap:6px;padding:12px 12px 14px;background:#2F2C29;border:2px solid var(--ink);box-shadow:inset 0 2px 0 #46423C,inset 0 -5px 0 #201E1B;min-width:0;color:#E3DAC0}
@@ -1167,7 +1283,7 @@ p.tc-mknote{font-size:13px;color:#DCD3BA;margin-top:8px}
   .tc-ptext{font-size:18px;line-height:24px}.tc-huge{font-size:84px!important}.tc-mark{font-size:16px}
   .tc-tape{grid-template-columns:minmax(0,1fr) auto}.tc-tape .tc-minicas{display:none}
   .tc-zones{font-size:10px}
-  .tc-mkt,.tc-dgrid{grid-template-columns:1fr}
+  .tc-mkt,.tc-dgrid,.tc-cats{grid-template-columns:1fr}.tc-headrow{grid-template-columns:4em minmax(0,1fr)}.tc-headrow>.tc-catsub{grid-column:2}
   .tc-split{grid-template-columns:4.5em 5em minmax(60px,1fr)}.tc-split>.tc-small{grid-column:1/-1}
   .tc-trow{grid-template-columns:4.6em 4.4em 4.4em 4.4em minmax(30px,1fr)}.tc-trow>.tc-tfile{grid-column:1/-1}
   [data-testid="stLayoutWrapper"]:has(>.st-key-u-c-status-bar){position:static}

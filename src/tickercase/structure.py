@@ -31,13 +31,15 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from itertools import combinations
 from typing import Callable, Optional, Sequence
 
 from .models import (
     CaseResult,
+    NewsItem,
+    Reaction,
     ChangePart,
     DataMode,
     FilingRecord,
@@ -86,6 +88,8 @@ class FactorFit:
     peers_alpha: float
     r_squared: float
     residual_sd: float
+    used_peers: list[str] = field(default_factory=list)
+    inputs: Optional["StructureInputs"] = None  # the full series, for reactions to events before the window (v0.12)
 
     def parts(self, i0: int, i1: int) -> tuple[float, float]:
         """(market, peers) log parts of the returns after close i0 up to close i1."""
@@ -157,6 +161,7 @@ def fit_factors(inp: StructureInputs, *, estimation: int = ESTIMATION_DAYS, wind
 
     peer_infos: list[PeerInfo] = []
     kept: list[list[float]] = []
+    used_syms: list[str] = []
     for sym, series in inp.peers.items():
         prices = dict(series)
         if not all(d in prices for d in dates):
@@ -171,6 +176,7 @@ def fit_factors(inp: StructureInputs, *, estimation: int = ESTIMATION_DAYS, wind
                                      f"与本股的日相关系数低于 {MIN_PEER_CORRELATION:g}，不放进篮子")))
         if used:
             kept.append(pr)
+            used_syms.append(sym)
     for sym, why in inp.peer_notes.items():
         peer_infos.append(PeerInfo(symbol=sym, note=why))
 
@@ -199,11 +205,49 @@ def fit_factors(inp: StructureInputs, *, estimation: int = ESTIMATION_DAYS, wind
     ssr = sum(x * x for x in res)
     k = 3 if p is not None else 2
     fit = FactorFit(dates=dates, r=r, m=m, p=p, beta_market=b_m, beta_peers=b_p, peers_market_beta=c, alpha=a, peers_alpha=d0,
-                    r_squared=1 - ssr / sst if sst > 0 else 0.0, residual_sd=math.sqrt(ssr / max(estimation - k, 1)))
+                    r_squared=1 - ssr / sst if sst > 0 else 0.0, residual_sd=math.sqrt(ssr / max(estimation - k, 1)),
+                    used_peers=used_syms, inputs=inp)
     if fit.r_squared < LOW_R_SQUARED:
         notes.append(T(f"The market and the peers explain only {fit.r_squared * 100:.0f}% of this stock's daily moves, so most of any move lands in its own part.",
                        f"大盘和同类只能解释这只股票日波动的 {fit.r_squared * 100:.0f}%，所以大部分涨跌都会落在个股部分。"))
     return fit, peer_infos, notes
+
+
+def _news_day(n: NewsItem) -> date:
+    """The trading day a headline can move: its US Eastern date (UTC minus 4 hours, close enough for daily bars)."""
+    return (n.published - timedelta(hours=4)).date()
+
+
+def reaction(fit: FactorFit, day: date, *, days: int = 2) -> Optional[Reaction]:
+    """The stock's move from the last close before ``day`` to the close of the second trading day from it, and its own part.
+
+    Two days, because news that comes out after the close moves the next session. The own part uses the betas of
+    the fit: market and peers where every series has both closes, market only where a peer is missing, none before
+    SPY's history. Returns None when no trading day on or after ``day`` is in the data yet.
+    """
+    inp = fit.inputs
+    if inp is None:
+        return None
+    stock = dict(inp.stock)
+    dates = sorted(stock)
+    before = [d for d in dates if d < day]
+    after = [d for d in dates if d >= day]
+    if not before or not after:
+        return None
+    d0, d1 = before[-1], after[min(days, len(after)) - 1]
+    total = math.log(stock[d1] / stock[d0])
+    market = dict(inp.market)
+    if d0 not in market or d1 not in market:
+        return Reaction(start=d0, end=d1, days=min(days, len(after)), stock=math.expm1(total))
+    mk = math.log(market[d1] / market[d0])
+    own = total - fit.beta_market * mk
+    basis = "market"
+    peer_moves = [math.log(dict(inp.peers[s])[d1] / dict(inp.peers[s])[d0]) for s in fit.used_peers
+                  if d0 in dict(inp.peers[s]) and d1 in dict(inp.peers[s])]
+    if fit.used_peers and len(peer_moves) == len(fit.used_peers):
+        own -= fit.beta_peers * (sum(peer_moves) / len(peer_moves) - fit.peers_market_beta * mk)
+        basis = "market+peers"
+    return Reaction(start=d0, end=d1, days=min(days, len(after)), stock=math.expm1(total), own=math.expm1(own), basis=basis)
 
 
 def _filing_label(f: FilingRecord) -> str:
@@ -211,8 +255,8 @@ def _filing_label(f: FilingRecord) -> str:
     return f"{f.form_type} {f.filing_date}" + (f" ({items})" if items else "")
 
 
-def build_structure(inp: StructureInputs, filings: Sequence[FilingRecord] = (), *, estimation: int = ESTIMATION_DAYS,
-                    window: int = WINDOW_DAYS) -> tuple[MarketStructure, FactorFit]:
+def build_structure(inp: StructureInputs, filings: Sequence[FilingRecord] = (), *, news: Sequence[NewsItem] = (),
+                    estimation: int = ESTIMATION_DAYS, window: int = WINDOW_DAYS) -> tuple[MarketStructure, FactorFit]:
     fit, peers, notes = fit_factors(inp, estimation=estimation, window=window)
     dates, r, m = fit.dates, fit.r, fit.m
     w0 = estimation
@@ -225,8 +269,10 @@ def build_structure(inp: StructureInputs, filings: Sequence[FilingRecord] = (), 
         own = r[t] - mk - pp
         prev, day = dates[t], dates[t + 1]
         near = [_filing_label(f) for f in filings if prev < f.filing_date <= day]
-        days.append(StructureDay(day=day, stock=math.expm1(r[t]), market=mk, peers=pp, own=own,
-                                 flagged=abs(own) > FLAG_SD * fit.residual_sd, filings=near))
+        flagged = abs(own) > FLAG_SD * fit.residual_sd
+        heads = [f"{n.publisher}: {n.title}" if n.publisher else n.title for n in news if flagged and prev < _news_day(n) <= day][:4]
+        days.append(StructureDay(day=day, stock=math.expm1(r[t]), market=mk, peers=pp, own=own, headlines=heads,
+                                 flagged=flagged, filings=near))
     regime = [RegimeReading(symbol=MARKET, label=T("S&P 500 (SPY)", "标普 500（SPY）"), last=dict(inp.market)[dates[-1]],
                             change=math.expm1(sum(m[w0:])))]
     for sym, label in REGIME:

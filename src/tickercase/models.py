@@ -725,6 +725,7 @@ class StructureDay(BaseModel):
     own: float  # the day's abnormal return: what the market and the peers do not explain
     flagged: bool = False  # |own| above twice the residual standard deviation of the estimation window
     filings: list[str] = Field(default_factory=list)  # SEC filings on this day or the trading day before, e.g. "8-K 2026-10-14 (7.01, 8.01)"
+    headlines: list[str] = Field(default_factory=list)  # flagged days: headlines published since the previous close (v0.12)
 
 
 class RegimeReading(BaseModel):
@@ -813,6 +814,117 @@ class ProbabilityChange(BaseModel):
     price_split: bool = False  # the price move is split into market, peers and own
     methods: list[MethodChange] = Field(default_factory=list)
     note: Optional["Text"] = None
+
+
+# ---------------------------------------------------------------- catalysts (v0.12)
+
+
+class NewsItem(BaseModel):
+    published: datetime
+    publisher: str = ""
+    title: str
+    url: str
+    origin: Literal["yahoo", "google_news"]
+    query: Optional[str] = None  # the search that found it (Google News)
+
+
+class NewsFeed(BaseModel):
+    """Recent headlines about the company: Yahoo Finance's latest and a Google News search, newest first."""
+
+    items: list[NewsItem] = Field(default_factory=list)
+    queries: list[str] = Field(default_factory=list)
+    source_urls: list[str] = Field(default_factory=list)
+    retrieved_at: datetime
+    data_mode: DataMode
+
+
+class EarningsDate(BaseModel):
+    day: date
+    estimate: bool  # Yahoo marks a date that the company has not confirmed
+    eps_average: Optional[float] = None
+    revenue_average: Optional[float] = None
+    source_url: str
+    retrieved_at: datetime
+    data_mode: DataMode
+
+
+class CatalystSource(BaseModel):
+    """One numbered source handed to Claude: a headline (N..) or a sentence of an 8-K exhibit (F..)."""
+
+    id: str
+    kind: Literal["news", "filing"]
+    day: date
+    text: str
+    publisher: str = ""  # news outlet, or "SEC 8-K (7.01, 8.01)"
+    url: str = ""
+
+
+class Reaction(BaseModel):
+    """How the stock moved around an event: the event day and the next, split like the market-structure step."""
+
+    start: date  # last close before the event
+    end: date  # close of the second trading day (or the last one available)
+    days: int
+    stock: float  # simple return of the stock
+    own: Optional[float] = None  # simple return of the part the market and the peers do not explain
+    basis: Literal["market+peers", "market", "none"] = "none"
+
+
+class CatalystEvent(BaseModel):
+    day: date
+    change_en: str
+    change_zh: str
+    source_ids: list[str] = Field(default_factory=list)
+    sources: list[CatalystSource] = Field(default_factory=list)  # copied, so the register keeps them after the proposal is gone
+    reaction: Optional[Reaction] = None
+
+
+class Catalyst(BaseModel):
+    """A growth driver or risk the price depends on (a product, an approval, a contract...), with its dated history."""
+
+    id: str
+    name_en: str
+    name_zh: str
+    kind: Literal["product", "regulatory", "contract", "financing", "deal", "operations", "legal", "other"] = "other"
+    status: Literal["upcoming", "in_progress", "achieved", "delayed", "cancelled"] = "upcoming"
+    expected: Optional[str] = None  # as the sources give it: "2027", "2027-H1", "2027-Q2", "2027-03" or "2027-03-15"
+    expected_day: Optional[date] = None  # a day for the scenario: the middle of that span
+    direction: Literal["up", "down", "mixed"] = "up"  # which way success would move the price
+    summary_en: str = ""
+    summary_zh: str = ""
+    search_terms: list[str] = Field(default_factory=list)
+    source_ids: list[str] = Field(default_factory=list)
+    sources: list[CatalystSource] = Field(default_factory=list)
+    events: list[CatalystEvent] = Field(default_factory=list)
+    updates: Optional[str] = None  # in a proposal: the id of the confirmed catalyst it updates
+    problems: list[str] = Field(default_factory=list)  # what the check found; empty = every citation, date and number checks out
+    proposed_by: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
+
+
+class CatalystRegister(BaseModel):
+    """The confirmed catalysts of one stock. Kept per ticker across cases; each case stores the version it used."""
+
+    ticker: str
+    company: Optional[str] = None
+    updated_at: datetime
+    catalysts: list[Catalyst] = Field(default_factory=list)
+    rejected: list[str] = Field(default_factory=list)  # names the user turned down, so they are not proposed again
+
+
+class CatalystProposal(BaseModel):
+    """Claude's proposed catalysts for a case, checked against the sources, waiting for the user's decision."""
+
+    status: Literal["ok", "refused", "error", "not_configured"]
+    model: str
+    created_at: datetime
+    themes: list[str] = Field(default_factory=list)  # the search terms of the first call
+    sources: list[CatalystSource] = Field(default_factory=list)
+    catalysts: list[Catalyst] = Field(default_factory=list)
+    usage: dict[str, int] = Field(default_factory=dict)
+    error: Optional[str] = None
+    decided_at: Optional[datetime] = None
+    accepted: list[str] = Field(default_factory=list)
 
 
 class Fact(BaseModel):
@@ -910,6 +1022,10 @@ class CaseResult(BaseModel):
     oracle: Optional[OracleSummary] = None
     structure: Optional[MarketStructure] = None
     change: Optional[ProbabilityChange] = None
+    news: Optional[NewsFeed] = None
+    earnings: Optional[EarningsDate] = None
+    catalysts: Optional[CatalystRegister] = None  # the stock's confirmed catalysts as this case saw them
+    catalyst_proposal: Optional[CatalystProposal] = None
     data_steps: dict[str, str] = Field(default_factory=dict)  # step -> "ok" | "failed"
     narrative: Optional[Narrative] = None  # the latest narrative written, any language
     narratives: dict[str, Narrative] = Field(default_factory=dict)  # by language ("zh", "en")

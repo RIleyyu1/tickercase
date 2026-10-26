@@ -1,0 +1,11 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://news.google.com/rss/search?q=%22Synthetic+Example%22+Orbiter+X+when%3A730d&hl=en-US&gl=US&ceid=US:en"
+ },
+ "response": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>synthetic</title><item><title>Synthetic Example unveils Orbiter X, first deliveries planned for 2026 - Example Wire (fictional)</title><link>https://example.com/news/0</link><pubDate>Thu, 15 Jan 2026 21:05:00 GMT</pubDate><source url=\"https://example.com\">Example Wire (fictional)</source></item><item><title>Synthetic Example says Orbiter X passed its first integrated test - Example Wire (fictional)</title><link>https://example.com/news/1</link><pubDate>Tue, 10 Mar 2026 14:00:00 GMT</pubDate><source url=\"https://example.com\">Example Wire (fictional)</source></item><item><title>Synthetic Example delays Orbiter X first delivery to first half of 2027 - Example Wire (fictional)</title><link>https://example.com/news/2</link><pubDate>Wed, 05 Aug 2026 21:10:00 GMT</pubDate><source url=\"https://example.com\">Example Wire (fictional)</source></item><item><title>Synthetic Example shares slide after Orbiter X slips to 2027 - Example Wire (fictional)</title><link>https://example.com/news/3</link><pubDate>Thu, 06 Aug 2026 15:30:00 GMT</pubDate><source url=\"https://example.com\">Example Wire (fictional)</source></item></channel></rss>",
+ "schema": "tickercase.snapshot/1"
+}

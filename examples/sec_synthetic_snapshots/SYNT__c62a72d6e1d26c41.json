@@ -1,0 +1,36 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://query2.finance.yahoo.com/v10/finance/quoteSummary/SYNT?modules=calendarEvents"
+ },
+ "response": {
+  "quoteSummary": {
+   "error": null,
+   "result": [
+    {
+     "calendarEvents": {
+      "earnings": {
+       "earningsAverage": {
+        "raw": 0.41
+       },
+       "earningsDate": [
+        {
+         "fmt": "2026-11-05",
+         "raw": 1793836800
+        }
+       ],
+       "isEarningsDateEstimate": false,
+       "revenueAverage": {
+        "raw": 55000000
+       }
+      }
+     }
+    }
+   ]
+  }
+ },
+ "schema": "tickercase.snapshot/1"
+}

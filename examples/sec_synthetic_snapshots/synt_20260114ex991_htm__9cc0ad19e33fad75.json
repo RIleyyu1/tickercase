@@ -1,0 +1,11 @@
+{
+ "captured_at": "2026-10-01T00:00:00+00:00",
+ "note": "SYNTHETIC: hand-written example data for TickerCase demos/tests. Not an SEC response.",
+ "origin": "synthetic_fixture",
+ "request": {
+  "method": "GET",
+  "url": "https://www.sec.gov/Archives/edgar/data/9999901/000999990126000007/synt-20260114ex991.htm"
+ },
+ "response": "<html><body><p>Exhibit 99.1</p><p>Synthetic Example Corp Announces Orbiter X Program. January 15, 2026 - Synthetic Example Corp (fictional) today announced Orbiter X, its next product line. The Company expects first customer deliveries of Orbiter X in 2026. About Synthetic Example Synthetic Example Corp is a fictional company used for demonstrations.</p></body></html>",
+ "schema": "tickercase.snapshot/1"
+}

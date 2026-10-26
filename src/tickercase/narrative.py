@@ -32,11 +32,12 @@ from typing import Any, Callable, Optional
 from pydantic import BaseModel, Field, ValidationError
 
 from .models import CaseResult, Fact, Narrative, NarrativeSentence
+from .oracle import event_move
 
 MODEL = "claude-opus-5-5"
 EFFORT = "medium"
 LANGUAGES = ("zh", "en")
-PROMPT_VERSION = "3"  # part of the cache key; bump when the prompt, schema or fact table format changes
+PROMPT_VERSION = "4"  # part of the cache key; bump when the prompt, schema or fact table format changes
 FALLBACK_MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-opus-5", "claude-fable-5-1")  # accept fallbacks="default"
 # USD per million tokens: input, output, cache read (Claude API list prices, 2026-09); cache writes cost 1.25x input
 PRICES = {"claude-opus-5-5": (4.0, 20.0, 0.20), "claude-sonnet-5-5": (2.0, 10.0, 0.20), "claude-haiku-4-5": (1.0, 5.0, 0.10)}
@@ -235,6 +236,29 @@ def build_facts(r: CaseResult) -> list[Fact]:
             for part in mc.parts:
                 f.add(f"{mc.method} change from {part.detail.en}", f"{mc.method} 变化中来自{part.detail.zh}的部分", round(part.delta, 4),
                       "probability 0-1", "Shapley split of the change")
+    today = r.created_at.date()
+    term = r.options.term if r.options is not None else []
+    if r.earnings:
+        e = r.earnings
+        f.add("next earnings date", "下一次财报日期", e.day.isoformat(), source="Yahoo Finance calendar" + (" (estimated)" if e.estimate else ""))
+        if term and e.day > today:
+            mv = event_move(term, e.day, today)
+            f.add(f"option-priced extra move around {e.day} (one standard deviation)", f"期权为 {e.day} 前后额外定价的波动（一个标准差）",
+                  round(mv.move, 4) if mv.status == "ok" else None, "rate", "option term structure")
+    for c in (r.catalysts.catalysts if r.catalysts else []):
+        src = f"catalyst register {c.id}, confirmed by the user {c.confirmed_at:%Y-%m-%d}" if c.confirmed_at else f"catalyst register {c.id}"
+        f.add(f"catalyst {c.id}: {c.name_en}", f"催化剂 {c.id}：{c.name_zh}", f"status {c.status}" + (f", expected {c.expected}" if c.expected else ""), source=src)
+        for e in c.events[-2:]:
+            f.add(f"catalyst {c.id} event on {e.day}", f"催化剂 {c.id} {e.day} 的事件", e.change_en,
+                  source="; ".join(f"{s.publisher} {s.day}" for s in e.sources[:2]) or src)
+            if e.reaction is not None and e.reaction.own is not None:
+                f.add(f"catalyst {c.id}: stock-specific move over {e.reaction.days} days from {e.day}", f"催化剂 {c.id}：{e.day} 起 {e.reaction.days} 天的个股部分涨跌",
+                      round(e.reaction.own, 4), "rate", f"factor split ({e.reaction.basis}), closes {e.reaction.start} to {e.reaction.end}")
+        if term and c.expected_day and c.expected_day > today:
+            mv = event_move(term, c.expected_day, today)
+            if mv.status == "ok":
+                f.add(f"option-priced extra move around {c.expected_day} ({c.name_en})", f"期权为 {c.expected_day}（{c.name_zh}）前后额外定价的波动",
+                      round(mv.move, 4), "rate", "option term structure; the day is the middle of the stated timing")
     if r.verdict:
         f.add("evidence-as-of verdict (rules-v1)", "证据结论（rules-v1）", r.verdict.display, source="TickerCase rules-v1")
     return f.items
