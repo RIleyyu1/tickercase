@@ -167,7 +167,7 @@ def warnings_of(result: CaseResult, zh: bool) -> list[str]:
     return out
 
 
-def status_bar(result: CaseResult, zh: bool, jumps: Iterable[tuple[str, str]]) -> str:
+def status_bar(result: CaseResult, zh: bool, jumps: Iterable[tuple[str, str]] = ()) -> str:
     v = result.confirmed_claim.values
     o = result.oracle
     touch = is_touch(result)
@@ -186,13 +186,12 @@ def status_bar(result: CaseResult, zh: bool, jumps: Iterable[tuple[str, str]]) -
     ch = result.change
     if ch is not None and ch.previous_low is not None:
         last = f"{pct(ch.previous_low, 0)}–{pct(ch.previous_high, 0)}"
-        side += f'<a class="tc-chiplink" href="#u-mkt">{chip(L(zh, f"上次 {ch.previous_market_date}：{last}", f"last run {ch.previous_market_date}: {last}"))}</a>'
+        side += chip(L(zh, f"上次 {ch.previous_market_date}：{last}", f"last run {ch.previous_market_date}: {last}"))
     n = len(warnings_of(result, zh))
-    warn = (f'<a href="#u-sig" class="tc-warnlink">{lamp("red")}{dymo(f"WARN {n}", small=True)}</a>' if n
-            else f'<span class="tc-warnlink">{lamp("off")}{dymo("WARN 0", small=True)}</span>')
+    warn = f'<span class="tc-warnlink">{lamp("red" if n else "off")}{dymo(f"WARN {n}", small=True)}</span>'
     links = "".join(f'<a class="tc-jump" href="#{esc(h)}">{esc(t)}</a>' for h, t in jumps)
-    return (f'<div class="tc-status"><b class="tc-serif">{esc(claim)}</b>{rng}{side}{warn}<span class="tc-grow"></span>'
-            f'<nav class="tc-jumps" aria-label="{esc(L(zh, "跳到单元", "Jump to unit"))}">{links}</nav></div>')
+    nav = f'<span class="tc-grow"></span><nav class="tc-jumps" aria-label="{esc(L(zh, "跳到单元", "Jump to unit"))}">{links}</nav>' if links else ""
+    return f'<div class="tc-status"><b class="tc-serif">{esc(claim)}</b>{rng}{side}{warn}{nav}</div>'
 
 
 # ------------------------------------------------------------------ result units
@@ -264,6 +263,13 @@ def mini_cassette(spin: bool = False) -> str:
 
 
 def prb_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
+    """The probability screen with the four method strips below it."""
+    return (unit_head(label, chip(L(zh, "平方根刻度 · 同一把尺子", "square-root scale · one ruler")), "u-prb")
+            + f'<div class="tc-prb"><div class="tc-prb-screen">{prb_screen(result, zh, anim)}</div>{method_strips(result, zh, anim)}</div>')
+
+
+def prb_screen(result: CaseResult, zh: bool, anim: bool) -> str:
+    """The headline range on one square-root ruler, with the methods marked on it."""
     o = result.oracle
     touch = o.condition == "touch"
     target = format(o.target_price, "f")
@@ -304,13 +310,21 @@ def prb_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
     zones = L(zh, ("彩票级 &lt;5%", "不太可能 5–20%", "有可能 20–50%", "较可能 &gt;50%"), ("Lottery &lt;5%", "Unlikely 5–20%", "Possible 20–50%", "Likely &gt;50%"))
     zone_html = "".join(f'<span{" class=tc-am" if i == 3 else ""}>{z}</span>' for i, z in enumerate(zones))
     n_ok = len([m for m in o.methods if m.status == "ok"])
-    screen = (f'<div class="tc-bezel"><div class="tc-crt{" tc-boot" if anim else ""}"><span class="tc-noise"></span><div class="tc-crt-in tc-ph" style="gap:12px">'
-              f'<span class="tc-dim tc-small">PRB&gt; {esc(head)} · {esc(L(zh, f"{n_ok} 种方法交叉核对", f"{n_ok} methods cross-checked"))}</span>'
-              f'<div class="tc-bigrow">{big}</div>'
-              f'<div class="tc-marks">{"".join(top)}</div><div class="tc-cells" aria-hidden="true">{cells}</div><div class="tc-marks">{"".join(bottom)}{ticks}</div>'
-              f'<div class="tc-zones tc-dim">{zone_html}</div>'
-              f'<span class="tc-dim tc-small">{esc(L(zh, "平方根刻度 · 亮格为区间 · ▼▲ 计入 · ▽△ 仅参考", "square-root scale · lit cells = range · ▼▲ counted · ▽△ context"))}</span>'
-              f'</div></div></div>')
+    return (f'<div class="tc-bezel"><div class="tc-crt{" tc-boot" if anim else ""}"><span class="tc-noise"></span><div class="tc-crt-in tc-ph" style="gap:12px">'
+            f'<span class="tc-dim tc-small">PRB&gt; {esc(head)} · {esc(L(zh, f"{n_ok} 种方法交叉核对", f"{n_ok} methods cross-checked"))}</span>'
+            f'<div class="tc-bigrow">{big}</div>'
+            f'<div class="tc-marks">{"".join(top)}</div><div class="tc-cells" aria-hidden="true">{cells}</div><div class="tc-marks">{"".join(bottom)}{ticks}</div>'
+            f'<div class="tc-zones tc-dim">{zone_html}</div>'
+            f'<span class="tc-dim tc-small">{esc(L(zh, "平方根刻度 · 亮格为区间 · ▼▲ 计入 · ▽△ 仅参考", "square-root scale · lit cells = range · ▼▲ counted · ▽△ context"))}</span>'
+            f'</div></div></div>')
+
+
+def method_strips(result: CaseResult, zh: bool, anim: bool, *, solo: bool = False) -> str:
+    """One cassette strip per method: both conditions, its place on the ruler, what it measures. ``solo``: no screen above, so no feed pipes."""
+    o = result.oracle
+    touch = o.condition == "touch"
+    used, _ = split_methods(result)
+    used_ids = {m.id for m, _ in used}
     strips = []
     for m in o.methods:
         p = m.touch_probability if touch else m.probability
@@ -328,8 +342,7 @@ def prb_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
             f'<div class="tc-grid2">{readout(L(zh, "A · 触及", "A · touch"), a, amber=touch)}{readout(L(zh, "B · 收在", "B · close"), b, amber=not touch)}</div>'
             f'<div class="tc-rd" aria-hidden="true" style="padding:5px 6px"><div class="tc-mcells">{mcells}</div></div>'
             f'<span class="tc-basis">{esc(tr(m.measures, zh))}</span></div>')
-    return (unit_head(label, chip(L(zh, "平方根刻度 · 同一把尺子", "square-root scale · one ruler")), "u-prb")
-            + f'<div class="tc-prb"><div class="tc-prb-screen">{screen}</div><div class="tc-prb-methods">{"".join(strips)}</div></div>')
+    return f'<div class="tc-prb-methods{" tc-solo" if solo else ""}">{"".join(strips)}</div>'
 
 
 def signed(x: Optional[float], digits: int = 1) -> str:
@@ -399,7 +412,7 @@ def _side(st, zh: bool) -> str:
         peers.append(f'<div class="tc-prow3{"" if x.used else " tc-off"}"><b>{esc(x.symbol)}</b><span>{esc(rho)}</span><span>{esc(ret)}</span>'
                      f'<span class="tc-tag">{esc(tag)}</span></div>' + (f'<span class="tc-src">{esc(tr(x.note, zh))}</span>' if x.note and not x.used else ""))
     if not peers:
-        peers.append(f'<span class="tc-src">{esc(L(zh, "没有同类篮子：在 UNIT 02 的「同类篮子」里填写。", "No peer basket: enter one under “Peer basket” in UNIT 02."))}</span>')
+        peers.append(f'<span class="tc-src">{esc(L(zh, "没有同类篮子：在 STEP 2 核对页的「高级参数 · 同类篮子」里填写。", "No peer basket: enter one under “More inputs · Peer basket” in STEP 2."))}</span>')
     src = (st.peer_source or "").removeprefix("default_assumption:")
     rule = L(zh, "与本股日相关系数 ≥ 0.3 才采用", "used when the daily correlation is at least 0.3")
     peers.append(f'<span class="tc-src">{esc(L(zh, f"来源：{src}；", f"source: {src}; ") + rule if src else rule)}</span>')
@@ -418,10 +431,10 @@ def _side(st, zh: bool) -> str:
             f'<div class="tc-feedm">{dymo(L(zh, "REGIME · 大环境", "REGIME · market"), small=True)}{"".join(regime)}</div>')
 
 
-def mkt_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
+def mkt_unit(result: CaseResult, zh: bool, label: str, anim: bool, *, notes: bool = True) -> str:
     st, ch = result.structure, result.change
     head = unit_head(label, chip(L(zh, "统计拆分，不是原因 · 贝塔取自前 120 个交易日", "a statistical split, not a cause · betas from the 120 trading days before")), "u-mkt")
-    delta = delta_block(result, zh) if ch is not None else ""
+    delta = delta_block(result, zh, notes=notes) if ch is not None else ""
     if st is None:
         why = (L(zh, "市场结构这一步本次失败，见 SIG 的警示。", "The market-structure step failed in this run; see the warnings under SIG.")
                if result.data_steps.get("market_structure") == "failed" else L(zh, "这份报告没有市场结构数据（v0.11 之前生成）。", "This report has no market-structure data (made before v0.11)."))
@@ -441,11 +454,16 @@ def mkt_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
               f'<div class="tc-bigrow"><span class="tc-vt tc-mktbig">{esc(signed(st.total))}</span>'
               f'<span class="tc-line">{esc(L(zh, "= 大盘 + 同类 + 个股", "= market + peers + own"))}</span></div>'
               f'<div class="tc-splits">{rows}</div><span class="tc-dim tc-small">{esc(flag_note)}</span>{_tape(st, zh)}</div></div></div>')
-    notes = "".join(para(tr(n, zh), "tc-mknote") for n in st.notes)
-    return head + f'<div class="tc-mkt"><div class="tc-mkt-screen">{screen}</div><div class="tc-mkt-side">{_side(st, zh)}</div></div>' + notes + delta
+    note_html = "".join(para(tr(n, zh), "tc-mknote") for n in st.notes) if notes else ""
+    return head + f'<div class="tc-mkt"><div class="tc-mkt-screen">{screen}</div><div class="tc-mkt-side">{_side(st, zh)}</div></div>' + note_html + delta
 
 
-def delta_block(result: CaseResult, zh: bool) -> str:
+DELTA_HOW = ("每一行是它对概率变化的贡献（个百分点），按 Shapley 方法分摊，与计算顺序无关，各行相加等于总变化。股价部分用同一组贝塔拆成大盘、同类和个股。",
+             "Each line is its contribution to the change in percentage points, split by the Shapley method (independent of order); the lines add up to the change. "
+             "The price part is split into market, peers and own with the same betas.")
+
+
+def delta_block(result: CaseResult, zh: bool, *, notes: bool = True) -> str:
     """Why the probability moved since the last run of the same claim: one strip per model method."""
     ch = result.change
 
@@ -466,11 +484,9 @@ def delta_block(result: CaseResult, zh: bool) -> str:
         strips.append(f'<div class="tc-rd tc-ph tc-dstrip"><span class="tc-dim tc-small">{esc(mc.method)} {esc(names.get(mc.method, ""))}</span>'
                       f'<span class="tc-line">{mc.before * 100:.1f}% → {mc.after * 100:.1f}% <span class="tc-am">{esc(moved)}</span></span>'
                       f'<div class="tc-splits">{rows}</div></div>')
-    how = L(zh, "每一行是它对概率变化的贡献（个百分点），按 Shapley 方法分摊，与计算顺序无关，各行相加等于总变化。股价部分用同一组贝塔拆成大盘、同类和个股。",
-            "Each line is its contribution to the change in percentage points, split by the Shapley method (independent of order); the lines add up to the change. "
-            "The price part is split into market, peers and own with the same betas.")
+    extra = ((para(tr(ch.note, zh), "tc-mknote") if ch.note else "") + para(L(zh, *DELTA_HOW), "tc-mknote")) if notes else ""
     return (f'<div class="tc-delta">{sub_head(title)}<span class="tc-serif tc-dsum">{esc(summary)}</span><div class="tc-dgrid">{"".join(strips)}</div>'
-            + (para(tr(ch.note, zh), "tc-mknote") if ch.note else "") + para(how, "tc-mknote") + "</div>")
+            + extra + "</div>")
 
 
 
@@ -595,7 +611,7 @@ def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
         ("CH-02 PRC", "price_history", L(zh, "价格历史", "Price history"), f"{float(mk.last_close):,.2f}" if mk else "—",
          (L(zh, f"{mk.last_date} 收盘 · 年化波动 {float(mk.annualized_volatility) * 100:.0f}%", f"close {mk.last_date} · vol {float(mk.annualized_volatility) * 100:.0f}%/yr")
           if mk and mk.annualized_volatility is not None else ""),
-         L(zh, "YAHOO · 日线 · K 线见 UNIT 02", "YAHOO · daily · K-line in UNIT 02"), "M1 · M2 · M4 · FND"),
+         L(zh, "YAHOO · 日线 · K 线见 ① 答案", "YAHOO · daily · K-line on ① Answer"), "M1 · M2 · M4 · FND"),
         ("CH-03 TNX", "risk_free_rate", L(zh, "10 年期美债", "10-year Treasury"),
          pct(float(o.risk_free_rate), 2) if o is not None and o.risk_free_rate is not None else "—", L(zh, "无风险利率", "risk-free rate"), "YAHOO · ^TNX", "M1 · M2"),
         ("CH-04 FIN", "sec_facts", L(zh, "财报事实", "Reported facts"), amount(latest.value, zh) if latest else "—",
@@ -636,22 +652,24 @@ def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
             + f'<div class="tc-feeds">{"".join(cards)}</div>')
 
 
-def sig_unit(result: CaseResult, zh: bool, label: str, notes: Iterable[str] = ()) -> str:
+def sig_unit(result: CaseResult, zh: bool, label: str, notes: Iterable[str] = (), *, signals: bool = True, warnings: bool = True) -> str:
+    """Agreeing (++) and diverging (!!) signals, then system warnings (data failures, coverage gaps) and notes."""
     rows = []
     rep = result.report
-    if rep is not None:
+    if rep is not None and signals:
         rows += [("green", "++", tr(x, zh)) for x in rep.agreements]
         rows += [("amber", "!!", tr(x, zh)) for x in rep.divergences]
-    warns = warnings_of(result, zh)
-    rows += [("red", "WARN", w) for w in warns]
-    if not warns:
-        rows.append(("off", "WARN 0", L(zh, "没有系统警示：数据源全部成功，申报覆盖完整。", "No system warnings: every data source answered and filing coverage is complete.")))
-    rows += [("off", "NOTE", n) for n in notes]
+    if warnings:
+        warns = warnings_of(result, zh)
+        rows += [("red", "WARN", w) for w in warns]
+        if not warns:
+            rows.append(("off", "WARN 0", L(zh, "没有系统警示：数据源全部成功，申报覆盖完整。", "No system warnings: every data source answered and filing coverage is complete.")))
+        rows += [("off", "NOTE", n) for n in notes]
     body = "".join(f'<div class="tc-sigrow">{lamp(k)}<span><b>{esc(t)}</b>　{esc(x)}</span></div>' for k, t, x in rows)
     return unit_head(label, "", "u-sig") + body
 
 
-def fnd_unit(result: CaseResult, zh: bool, label: str, more: str) -> str:
+def fnd_unit(result: CaseResult, zh: bool, label: str, more: str = "") -> str:
     v = result.verdict
     head = f'<div class="tc-uhead"><span class="tc-engr tc-tiny" style="letter-spacing:.18em">{esc(label)}</span></div>'
     if v is None:
@@ -662,7 +680,7 @@ def fnd_unit(result: CaseResult, zh: bool, label: str, more: str) -> str:
     return (head + f'<div class="tc-row" style="gap:12px;margin-bottom:6px">{lamp(tone)}<span class="tc-engr tc-serif tc-fndname">{esc(name)}</span></div>'
             f'<div class="tc-engr tc-tiny">{esc(v.rules_version.upper())} · {esc(L(zh, "截至", "as of"))} {v.as_of}</div>'
             f'<p class="tc-engr tc-serif tc-fndtext">{esc(meaning or L(zh, "证据视图，不是预测。", "An evidence view, not a forecast."))}</p>'
-            f'<a class="tc-jump" href="#u-rpt">{esc(more)}</a>')
+            + (f'<a class="tc-jump" href="#u-rpt">{esc(more)}</a>' if more else ""))
 
 
 NARR_ORDER = ("logic_chain", "resonance", "divergences", "conclusion", "upside", "downside")
@@ -1051,6 +1069,28 @@ label[data-testid="stWidgetLabel"] p{font-family:'Noto Serif SC',serif!important
 [data-testid="stTabPanel"] a{color:var(--am)!important}
 [data-testid="stTabPanel"] [data-testid="stExpander"] details{background:transparent;border:2px dashed var(--scr-line)!important}
 [data-testid="stTabPanel"] [data-testid="stExpander"] summary,[data-testid="stTabPanel"] [data-testid="stExpander"] summary p{color:var(--ph)!important}
+/* ---------- a channel screen as a page section (scr- containers): the look of the old report tabs ---------- */
+[class*="st-key-scr-"]{position:relative;padding:18px 22px 24px!important;background:#0F120F;border:3px solid var(--ink);border-radius:18px;box-shadow:inset 0 0 0 4px #050605;overflow:hidden;gap:12px}
+[class*="st-key-scr-"]::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0,rgba(0,0,0,.22) 1px,transparent 1px,transparent 3px)}
+[class*="st-key-scr-"]::before{content:"";position:absolute;inset:-40px;pointer-events:none;z-index:6;background:#0A0D0A url(__SNOW__);background-size:200px 200px;animation:tc-snow .5s steps(1,end) both}
+[class*="st-key-scr-"] [data-testid="stMarkdownContainer"],[class*="st-key-scr-"] li,[class*="st-key-scr-"] label,[class*="st-key-scr-"] [data-testid="stCaptionContainer"],
+[class*="st-key-scr-"] [data-testid="stCaptionContainer"] p{color:var(--scr-text)!important}
+[class*="st-key-scr-"] [data-testid="stCaptionContainer"]{opacity:.8}
+[class*="st-key-scr-"] strong{color:var(--ph)}
+[class*="st-key-scr-"] a{color:var(--am)!important}
+[class*="st-key-scr-"] [data-testid="stExpander"] details{background:transparent;border:2px dashed var(--scr-line)!important}
+[class*="st-key-scr-"] [data-testid="stExpander"] summary,[class*="st-key-scr-"] [data-testid="stExpander"] summary p{color:var(--ph)!important}
+[class*="st-key-scr-"] .tc-h:first-child{margin-top:4px}
+/* ---------- step keys: where you are, and the way on ---------- */
+.st-key-u-c-nav{padding:12px 16px 14px!important}
+.st-key-u-c-nav::before{display:none}
+[class*="st-key-navrow"]{gap:8px!important;flex-wrap:wrap}
+[class*="st-key-nav_"] button{min-height:40px!important;padding:2px 12px 6px!important}
+[class*="st-key-nav_"] button p{font-size:13px!important;white-space:nowrap}
+.tc-navsep{display:inline-block;width:3px;height:34px;background:#1B1917;margin:0 6px;box-shadow:1px 0 0 #524E48}
+.st-key-navfoot{gap:12px!important;padding:4px 2px 0}
+.st-key-navfoot button{min-width:180px}
+.tc-solo .tc-stub{display:none}
 /* ---------- report channels: parts drawn by the report renderers, on the channel screen ---------- */
 .tc-h{font-family:'FusionPixel',monospace!important;font-size:24px;line-height:30px;color:var(--am);text-shadow:0 0 5px rgba(var(--am-rgb),.45);margin:22px 0 10px}
 .tc-sub{color:var(--scr-text);opacity:.85;font-size:13px;line-height:1.6}
@@ -1118,6 +1158,10 @@ table.tc-table th.on,table.tc-table td.on{background:rgba(var(--ph-rgb),.08)}
 .tc-rd::before{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.3) 0,rgba(0,0,0,.3) 1px,transparent 1px,transparent 3px)}
 h1.tc-claim{font-family:'Noto Serif SC',serif!important;font-weight:900!important;font-size:clamp(30px,4vw,52px)!important;line-height:1.15!important;margin:0 0 14px!important;
   color:var(--ink)!important;text-shadow:0 1px 0 rgba(255,245,215,.55);padding:0!important;letter-spacing:0}
+h1.tc-claim-dark{color:#F1EBDC!important;text-shadow:0 2px 0 var(--ink);font-size:clamp(24px,3vw,36px)!important}
+.tc-quote{display:flex;flex-direction:column;gap:4px;padding:10px 14px 12px;border:2px solid var(--ink);border-left:8px solid #C49A4A;background:#C4B998;
+  box-shadow:inset 0 3px 0 #D6CDB2,inset 0 -5px 0 #A4997C}
+.tc-quote>span{color:#4A4436}.tc-quote b{font-size:22px;line-height:1.4;color:var(--ink)}
 .tc-grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
 .tc-grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .tc-bezel{background:#141311;border:3px solid var(--ink);padding:12px;box-shadow:inset 0 3px 0 #26241F}
@@ -1285,10 +1329,12 @@ p.tc-catsum{margin:0;font-family:'Noto Serif SC',serif;font-size:14px;line-heigh
   .tc-ptext{font-size:18px;line-height:24px}.tc-huge{font-size:84px!important}.tc-mark{font-size:16px}
   .tc-tape{grid-template-columns:minmax(0,1fr) auto}.tc-tape .tc-minicas{display:none}
   .tc-zones{font-size:10px}
-  .tc-mkt,.tc-dgrid,.tc-cats{grid-template-columns:1fr}.tc-headrow{grid-template-columns:4em minmax(0,1fr)}.tc-headrow>.tc-catsub{grid-column:2}
+  .tc-mkt,.tc-dgrid,.tc-cats{grid-template-columns:minmax(0,1fr)}.tc-tape2{overflow-x:auto}.tc-headrow{grid-template-columns:4em minmax(0,1fr)}.tc-headrow>.tc-catsub{grid-column:2}
   .tc-split{grid-template-columns:4.5em 5em minmax(60px,1fr)}.tc-split>.tc-small{grid-column:1/-1}
   .tc-trow{grid-template-columns:4.6em 4.4em 4.4em 4.4em minmax(30px,1fr)}.tc-trow>.tc-tfile{grid-column:1/-1}
   [data-testid="stLayoutWrapper"]:has(>.st-key-u-c-status-bar){position:static}
+  .st-key-navfoot button{min-width:0}.tc-navsep{display:none}
 }
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}[data-testid="stTabPanel"][role="tabpanel"]::before{display:none}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}
+  [data-testid="stTabPanel"][role="tabpanel"]::before,[class*="st-key-scr-"]::before{display:none}}
 </style>""".replace("__PIX__", PIX).replace("__VT__", VT).replace("__GRAIN__", GRAIN).replace("__SNOW__", SNOW)

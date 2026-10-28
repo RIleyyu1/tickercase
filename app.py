@@ -1,10 +1,11 @@
 """TickerCase Streamlit page: one claim sentence -> public data -> probability report with layered evidence.
 
 Run: streamlit run app.py
-One script, two pages laid out as a console (v0.9): the console page (write the claim, check and confirm
-every input, see which data and methods are used) and the report page (status bar, claim, K-line,
-probability, data readings, report channels, signals, narrative). The page is either Chinese or English;
-the switch is on the bridge at the top. The look lives in tickercase/ui.
+One script laid out as a console (v0.9), one step per page since v0.13: three input steps (the claim,
+checking and confirming every input, the run) and seven report pages (answer, methods, market, events,
+fundamentals, narrative, data), with step keys at the top and back / next at the bottom. The bridge
+switches between the case, the history and the setup-and-guide page, and between Chinese and English.
+The look lives in tickercase/ui.
 """
 
 from __future__ import annotations
@@ -41,10 +42,8 @@ S = {
     "boot_note": ("也可以直接按 ↵。开机过程约 1.5 秒，每次打开页面时播放一次，任何时候都能直接进入。",
                   "You can also press ↵. The start-up takes about 1.5 s, plays once each time the page opens, and can be skipped at any moment."),
     "language": ("语言", "Language"),
-    "view": ("页面", "Page"), "view_new": ("CASE 观点", "CASE"), "view_history": ("HIST 历史", "HIST"),
+    "view": ("页面", "Page"), "view_new": ("CASE 观点", "CASE"), "view_history": ("HIST 历史", "HIST"), "view_sys": ("SYS 设置·说明", "SYS · setup"),
     "tube": ("荧光颜色", "Phosphor"),
-    "back_edit": ("◀ EDIT 修改输入", "◀ EDIT inputs"),
-    "back_edit_help": ("回到输入页，保留这个案例的输入，改完重新确认即可。", "Back to the inputs of this case; change them and confirm again."),
     "back_new": ("+ NEW 新观点", "+ NEW claim"),
     "back_new_help": ("清空输入，开始一个新观点；这个案例保留在 HIST 里。", "Clear the inputs and start a new claim; this case stays in HIST."),
     "data_chip": ("数据源", "DATA"),
@@ -67,9 +66,13 @@ S = {
     "ai_auto_help": ("开启后，每次生成报告都会写一次当前语言的叙述（相同事实直接复用，不再调用）。默认关闭。",
                      "When on, each report also gets a narrative in the current language (the same facts are reused without a call). Off by default."),
     "no_advice": ("不执行交易，不构成投资建议。", "No trading. Not investment advice."),
-    # console: claim input
-    "u_clm": ("UNIT 01 · CLM 观点输入", "UNIT 01 · CLM claim input"),
-    "clm_flow": ("READ 识别 → UNIT 02 核对确认 → RUN 生成报告", "READ → UNIT 02 check and confirm → RUN"),
+    # steps and pages
+    "nav_input": ("输入", "INPUT"), "nav_report": ("报告", "REPORT"),
+    "prev": ("◀ 上一步 · {p}", "◀ Back · {p}"), "next": ("下一步 · {p} ▶", "Next · {p} ▶"),
+    "info": ("ⓘ 说明", "ⓘ Notes"),
+    # step 1: the claim
+    "u_clm": ("STEP 1 · CLM 观点", "STEP 1 · CLM claim"),
+    "clm_flow": ("READ 识别 → ② 核对 → RUN 运行", "READ → ② check → RUN"),
     "prefill": ("READ 识别并补全 ↵", "READ · read and fill in ↵"),
     "prefill_help": ("从句子里读出代码、目标价、时间和条件，再用公开数据补全价格、股本和财务数据。改了句子就再按一次。",
                      "Reads ticker, target, time and condition from the sentence, then fills price, shares and financials from public data. Press again after editing the sentence."),
@@ -88,8 +91,15 @@ S = {
     "defaults_used": ("默认假设：{items}。可在下方修改。", "Default assumptions: {items}. You can change them below."),
     "not_fetched": ("未取到：{errors}", "Not fetched: {errors}"),
     "nothing_fetched": ("没有取到公开数据。{errors}", "No public data fetched. {errors}"),
-    # console: check and confirm
-    "u_cnf": ("UNIT 02 · CNF 核对与确认", "UNIT 02 · CNF check and confirm"),
+    # step 2: check and confirm
+    "u_cnf": ("STEP 2 · CNF 核对与确认", "STEP 2 · CNF check and confirm"),
+    "claim_quote": ("观点原文", "Claim"),
+    "key_inputs": (("关键输入", "从句子和公开数据读出，最容易读错，请逐项看过"), ("Key inputs", "Read from the sentence and public data; the easiest to misread, so check each one")),
+    "more_inputs": ("高级参数 · 其余 {n} 项", "More inputs · {n} more"),
+    "more_defaults": ("，其中 ◇ 默认假设 {d} 项", ", {d} of them ◇ default assumptions"),
+    "refill": ("↻ 按代码重新补全", "↻ Fill again"),
+    "refill_help": ("用公开数据重新补全价格、股本和财务数据；你改过的假设不会被覆盖。", "Fills price, shares and financials again from public data for this ticker; assumptions you changed are kept."),
+    "read_log": ("ⓘ 读取记录", "ⓘ What was read"),
     "cnf_stby": ("按 READ 后，这里列出读到的每一项输入和它的来源：✎ 原文、ⓘ 公开数据、◇ 默认假设。核对无误后按 ARM 确认，RUN 才会亮；之后改动任何一项，都需要重新确认。",
                  "After READ, every input and its source is listed here: ✎ claim, ⓘ public data, ◇ default assumption. Check them and press ARM to confirm; only then does RUN light up. Any later edit needs a new confirmation."),
     "cnf_hint": ("核对每一项和它的来源，尤其是 ◇ 默认假设。无误后按 ARM 确认，RUN 才会亮。", "Check every input and its source, especially ◇ defaults. Press ARM when they are right; then RUN lights up."),
@@ -97,8 +107,8 @@ S = {
     "g_claim": (("观点", "从句子里读出来的几项，最容易读错，请先看这里"), ("Claim", "Read from the sentence; the easiest to misread, so check these first")),
     "g_price": (("价格与股本", "公开数据，带来源与时间"), ("Price and shares", "Public data, with source and time")),
     "g_val": (("估值", "用哪种倍数、多少倍来估目标日的公司价值"), ("Valuation", "Which multiple, and how high, values the company at the target date")),
-    "g_extra": (("同类篮子、申报范围与附加项", "可选；同类篮子用来拆分近期涨跌，漂移率和波动率只用于「原始数据」里的旧版概率参考"),
-                ("Peers, filing window and extras", "Optional; the peer basket splits the recent move, drift and volatility only feed the older model reference under Raw data")),
+    "g_extra": (("同类篮子、申报范围与附加项", "可选；同类篮子用来拆分近期涨跌，漂移率和波动率只用于 ⑦ 数据页里的旧版概率参考"),
+                ("Peers, filing window and extras", "Optional; the peer basket splits the recent move, drift and volatility only feed the older model reference on ⑦ Data")),
     "you_changed": ("你修改了这一项 · 原值 {v}", "you changed this · was {v}"),
     "method": ("估值方法", "Valuation method"), "method_help": ("假设：目标日期用哪种倍数估值。", "Assumption: which multiple values the company at the target date."),
     "m_ps": ("市销率 P/S", "Price-to-sales (P/S)"), "m_pe": ("市盈率 P/E", "Price-to-earnings (P/E)"),
@@ -109,7 +119,7 @@ S = {
     "shares_result": ("目标期股份数 ≈ {n} 股（当前 {c} × (1 {sign} {r}%)^{y} 年）", "Target-date shares ≈ {n} (current {c} × (1 {sign} {r}%)^{y} years)"),
     "shares_need_current": ("需要当前股份数才能推算目标期股份数。", "Current shares are needed to work out the target-date count."),
     "flat_note": ("每年变化 0%：目标期股份数等于当前股份数。", "0% a year: target-date shares equal current shares."),
-    "prob_note": ("漂移率和波动率只用于「原始数据」里的旧版概率参考，不影响首页概率。", "Drift and volatility only feed the older model reference under “Raw data”; the headline probability does not use them."),
+    "prob_note": ("漂移率和波动率只用于 ⑦ 数据页里的旧版概率参考，不影响概率区间。", "Drift and volatility only feed the older model reference on ⑦ Data; the headline probability does not use them."),
     "checks": ("检查结果 · 核心字段缺失或无效时不能确认", "Checks · inputs cannot be confirmed while core fields are missing or invalid"),
     "checks_ok": ("核心字段齐全，没有无效输入。", "Core fields are complete; no invalid input."),
     "missing_core": ("还缺：", "Still missing: "), "optional_missing": ("可选项未填：", "Optional inputs empty: "),
@@ -120,31 +130,44 @@ S = {
     "invalid_confirm": ("输入无效或缺少核心字段，未确认。", "Inputs are invalid or incomplete; not confirmed."),
     "run_failed": ("运行失败：", "Run failed: "),
     "run_kept": ("输入和确认都保留着，重试不需要重新填写。", "Your inputs and confirmation are kept; retrying needs no re-entry."),
-    "hidden": ("已有报告对应修改前的输入或数据来源，已隐藏。请重新确认并生成。旧报告仍在 HIST 里。",
+    "hidden": ("已有报告对应修改前的输入或数据来源，已隐藏。请重新确认并运行。旧报告仍在 HIST 里。",
                "The previous report belongs to older inputs or another data source and is hidden. Confirm and build again; the old report stays in HIST."),
     "open_report": ("▶ 打开当前报告", "▶ Open the current report"),
     "ready": ("这组输入已经生成过报告。", "These inputs already have a report."),
-    # console: data and methods used, recent tapes
-    "u_feed": ("UNIT 03 · FEED 采用的信息 · 10 CH", "UNIT 03 · FEED data we use · 10 CH"),
-    "u_mth": ("UNIT 04 · MTH 四种方法 · 互相核对", "UNIT 04 · MTH four methods · cross-checked"),
-    "u_hist": ("UNIT 05 · HIST 最近的磁带", "UNIT 05 · HIST recent tapes"),
+    # step 3: the run
+    "u_run": ("STEP 3 · RUN 运行", "STEP 3 · RUN build the report"),
+    "run_wait": ("正在拉取数据并计算，完成后自动打开报告。", "Fetching data and computing; the report opens when it is done."),
+    "run_none": ("还没有要运行的输入：在 ② 核对页确认后按 RUN。", "Nothing to run yet: confirm on ② Check, then press RUN."),
+    "run_back": ("◀ 回到 ② 核对", "◀ Back to ② Check"),
+    # setup and guide page, recent tapes
+    "u_sys": ("SYS · 系统设置", "SYS · setup"),
+    "u_feed": ("FEED · 采用的信息 · 10 CH", "FEED · data we use · 10 CH"),
+    "u_mth": ("MTH · 四种方法 · 互相核对", "MTH · four methods · cross-checked"),
+    "u_hist": ("HIST · 最近的磁带", "HIST · recent tapes"),
     "hist_hint": ("▶ PLAY 直接打开这盘磁带的报告", "▶ PLAY opens that tape's report"),
     "play": ("▶ PLAY", "▶ PLAY"), "hist_all": ("全部历史 ▶", "All history ▶"),
-    # report page
-    "u_clm_r": ("UNIT 01 · CLM 观点", "UNIT 01 · CLM claim"),
-    "u_kln": ("UNIT 02 · KLN K 线 · {tk}", "UNIT 02 · KLN K-line · {tk}"),
+    # report pages
+    "u_clm_r": ("① CLM 观点", "① CLM claim"),
+    "u_kln": ("① KLN K 线 · {tk}", "① KLN K-line · {tk}"),
     "kln_src": ("YAHOO · 截至 {d} 收盘 · 与案例同一份数据", "YAHOO · to the {d} close · the same data as the case"),
     "kln_none": ("这份报告没有行情数据，画不出 K 线。", "This report has no price data, so there is no K-line."),
-    "u_prb": ("UNIT 03 · PRB 概率 ← MTH 四种方法", "UNIT 03 · PRB probability ← MTH four methods"),
-    "u_mkt": ("UNIT 04 · MKT 市场结构 · Δ 变化归因", "UNIT 04 · MKT market structure · Δ change"),
-    "u_cat": ("UNIT 05 · CAT 催化剂档案", "UNIT 05 · CAT catalyst register"),
-    "u_feed_r": ("UNIT 06 · FEED 数据源读数 · 10 CH", "UNIT 06 · FEED source readings · 10 CH"),
-    "u_rpt": ("UNIT 07 · RPT 报告 · 5 CH", "UNIT 07 · RPT report · 5 CH"),
-    "rpt_note": ("换台雪花 0.5 秒 · 内容随即出现", "0.5 s of snow per channel, then the content"),
-    "tabs": (["CH1 报告", "CH2 情景推演", "CH3 价位与方法", "CH4 基本面核查", "CH5 原始数据"], ["CH1 Report", "CH2 Scenario", "CH3 Levels & methods", "CH4 Fundamentals", "CH5 Raw data"]),
-    "u_sig": ("UNIT 08 · SIG 信号", "UNIT 08 · SIG signals"),
-    "u_fnd": ("FND · 基本面结论", "FND · FUNDAMENTALS"), "fnd_more": ("CH4 详情 ▲", "CH4 details ▲"),
-    "u_nar": ("UNIT 09 · NAR 叙述 · DOT-MATRIX", "UNIT 09 · NAR narrative · DOT-MATRIX"),
+    "u_prb": ("① PRB 概率", "① PRB probability"),
+    "prb_chip": ("平方根刻度 · 同一把尺子", "square-root scale · one ruler"),
+    "u_mth_r": ("② MTH 四种方法", "② MTH four methods"),
+    "u_lvl": ("② LVL 价位与方法", "② LVL levels and methods"),
+    "u_mkt": ("③ MKT 市场结构 · Δ 变化归因", "③ MKT market structure · Δ change"),
+    "u_cat": ("④ CAT 催化剂档案", "④ CAT catalyst register"),
+    "u_scn": ("④ SCN 情景推演", "④ SCN scenario"),
+    "u_fnd": ("⑤ FND 基本面结论", "⑤ FND fundamentals"),
+    "u_sig": ("⑤ SIG 信号", "⑤ SIG signals"),
+    "u_nar": ("⑥ NAR 叙述 · DOT-MATRIX", "⑥ NAR narrative · DOT-MATRIX"),
+    "u_rpt": ("⑥ RPT 分层报告 · 规则生成", "⑥ RPT layered report · rules"),
+    "rpt_open": ("逐层证据、交叉验证、情景与需要关注的信号", "Evidence by layer, cross-check, scenarios and signals to watch"),
+    "u_feed_r": ("⑦ FEED 数据源读数 · 10 CH", "⑦ FEED source readings · 10 CH"),
+    "u_warn": ("⑦ SIG 系统警示", "⑦ SIG system warnings"),
+    "u_raw": ("⑦ RAW 原始数据", "⑦ RAW raw data"),
+    "fnd_details": ("证据、计算与敏感性", "Evidence, calculations and sensitivity"),
+    "tab_fund": (["证据", "计算", "敏感性", "何时复查"], ["Evidence", "Calculations", "Sensitivity", "When to review"]),
     "prob_none": ("数据不足，无法计算概率", "Not enough data to compute a probability"),
     "target": ("目标价", "Target"), "now_price": ("现价", "Now"),
     "r_layers": ("数据分层", "Evidence by layer"), "r_analysis": ("交叉验证", "Cross-check"),
@@ -162,8 +185,8 @@ S = {
     "cat_up": ("截止日前已知的日期", "Known dates before the deadline"),
     "cat_up_none": ("截止日前没有已知日期：既没有财报日期，档案里也没有带时间的催化剂。", "No known dates before the deadline: no earnings date and no dated catalyst in the register."),
     "cat_use": ("→ 情景", "→ scenario"),
-    "cat_use_help": ("把这个日期和期权定价的幅度填进 RPT · CH2 情景推演。", "Fills this date and the option-priced move into RPT · CH2 Scenario."),
-    "cat_used": ("已填入 RPT · CH2 情景推演：{name}，{day}。", "Filled into RPT · CH2 Scenario: {name}, {day}."),
+    "cat_use_help": ("把这个日期和期权定价的幅度填进下方情景推演。", "Fills this date and the option-priced move into the scenario below."),
+    "cat_used": ("已填入下方情景推演：{name}，{day}。", "Filled into the scenario below: {name}, {day}."),
     "cat_reg": ("档案 · 已确认的催化剂", "Register · confirmed catalysts"),
     "cat_reg_none": ("这只股票的档案还是空的。按下面的 SCAN，让 Claude 根据 8-K 新闻稿和新闻标题提出催化剂，核对后由你确认。",
                      "This stock's register is empty. Press SCAN below: Claude proposes catalysts from 8-K press releases and headlines, code checks them, you confirm."),
@@ -284,17 +307,17 @@ S = {
     "no_public": ("本次没有取到公开数据，见下方运行记录中的数据错误。", "No public data in this run; see the data errors in the run log below."),
     "prob_model": ("旧版概率参考（按你填写的漂移率）", "Older model reference (your drift)"),
     "prob_extra": ("模型输出，不参与首页概率，也不是价格预测。", "A model output; not part of the headline probability and not a price prediction."),
-    "prob_off": ("未计算：在「申报范围与附加项」里填写年化漂移率 μ（例如 0.07）后重新生成。", "Not computed: enter a yearly drift μ (e.g. 0.07) under “Filing window and extras” and build again."),
+    "prob_off": ("未计算：在 ② 核对页的「高级参数」里填写年化漂移率 μ（例如 0.07）后重新运行。", "Not computed: enter a yearly drift μ (e.g. 0.07) under “More inputs” on ② Check and run again."),
     "prob_na": ("无法计算：", "Not computable: "),
     "assumptions": ("假设", "Assumptions"), "limitations": ("限制", "Limitations"),
     "run_log": ("运行记录", "Run log"), "data_errors": ("数据错误", "Data errors"), "missing_items": ("缺失项", "Missing inputs"),
     "notes": ("提示（{n}）", "Notes ({n})"),
     "download": ("下载报告 JSON", "Download report JSON"),
     # history
-    "u_hist_all": ("UNIT 01 · HIST 全部磁带", "UNIT 01 · HIST all tapes"),
+    "u_hist_all": ("HIST · 全部磁带", "HIST · all tapes"),
     "history_empty": ("还没有保存的报告。", "No saved reports yet."),
     "history_hint": ("选一行打开报告；选两行或更多进行对比。", "Select one row to open a report; select two or more to compare."),
-    "compare": ("UNIT 02 · CMP 对比", "UNIT 02 · CMP comparison"),
+    "compare": ("CMP · 对比", "CMP · comparison"),
 }
 
 FIELD_META = {
@@ -339,8 +362,6 @@ MODE_NOTES = {
     "synthetic": ("虚构公司 SYNT 的示例数据，不是真实行情，只用来演示。", "Example data for the fictional company SYNT; not real market data, for demos only."),
 }
 EXAMPLES = {"ps": REPO_ROOT / "examples" / "synthetic_claim_ps.json", "pe": REPO_ROOT / "examples" / "synthetic_claim_pe.json"}
-VERDICT_STYLE = {"supported_today": ("✔", "good"), "partially_supported": ("◐", "warn"),
-                 "not_supported_today": ("✖", "bad"), "insufficiently_specified": ("?", "neutral")}
 STANCE = {"supporting": ("✔", "支持", "Supporting", "good"), "contrary": ("✖", "反对", "Contrary", "bad"),
           "missing": ("…", "缺失", "Missing", "neutral"), "neutral": ("·", "背景", "Context", "neutral")}
 STATUS = {
@@ -384,8 +405,13 @@ STEP_LABELS = {
 }
 TONE_OF_ROW = {"good": "good", "bad": "bad", "missing": "neutral", "neutral": "neutral"}
 NARR_BADGE = {"verified": "✔", "qualitative": "○", "cited_elsewhere": "⚠", "unsupported": "✖"}
-JUMPS = (("u-clm", "CLM"), ("u-kln", "KLN"), ("u-prb", "PRB"), ("u-mkt", "MKT"), ("u-cat", "CAT"), ("u-feed", "FEED"), ("u-rpt", "RPT"), ("u-sig", "SIG"), ("u-nar", "NAR"))
-KLINE_HEIGHT = 600
+INPUT_STEPS = {"claim": ("观点", "Claim"), "check": ("核对", "Check"), "run": ("运行", "Run")}
+REPORT_PAGES = {"answer": ("答案", "Answer"), "methods": ("方法", "Methods"), "market": ("市场", "Market"), "events": ("事件", "Events"),
+                "fund": ("基本面", "Fundamentals"), "nar": ("叙述", "Narrative"), "data": ("数据", "Data")}
+CIRCLED = "①②③④⑤⑥⑦"
+KEY_FIELDS = ("ticker", "target_price", "horizon_years", "reference_price", "reference_price_date")  # on ② Check; the rest fold into "More inputs"
+MORE_FIELDS = [n for n in TEXT_FIELDS if n not in KEY_FIELDS and n not in ("claim_text", "target_assumed_shares")]
+KLINE_HEIGHT = 520
 
 
 def lang() -> str:
@@ -538,7 +564,9 @@ def _init_state() -> None:
     st.session_state.setdefault("tube", "grn")
     st.session_state.setdefault("booted", False)  # the start-up screen shows once per session
     st.session_state.setdefault("boot_n", 0)  # bumped by "replay": a new container key replays the start-up motion
-    st.session_state.setdefault("page", "home")  # "home" (console) or "result" (report) inside the "new" view
+    st.session_state.setdefault("page", "claim")  # an input step (claim, check, run) or "result" inside the "new" view
+    st.session_state.setdefault("rpage", "answer")  # the report page shown, in the case and in the history view
+    st.session_state.setdefault("run_pending", False)  # RUN pressed: the run page fetches and computes once
     st.session_state.setdefault("ai_auto", False)
     st.session_state.setdefault("animated", set())  # case ids whose report has already played its first-view motion
     for key in ("confirmation", "confirm_feedback", "result", "result_mode", "run_error", "prefill_msg", "prefill_snapshot", "sec_msg",
@@ -571,7 +599,7 @@ def _load_example(key: str) -> None:
     st.session_state["example_values"] = {name: st.session_state[f"f_{name}"] for name in TEXT_FIELDS} | {"share_mode": st.session_state["f_share_mode"]}
     st.session_state["sec_mode"] = "synthetic"
     st.session_state["view"] = "new"
-    st.session_state["page"] = "home"
+    st.session_state["page"] = "check"  # an example is complete: next is checking it
     st.session_state["prefill_sources"] = {}
     st.session_state["prefill_msg"] = None
     st.session_state["extract_msg"] = None
@@ -598,7 +626,7 @@ def _new_claim() -> None:
     st.session_state["extraction"] = None
     st.session_state["result"] = None
     st.session_state["run_error"] = None
-    st.session_state["page"] = "home"
+    st.session_state["page"] = "claim"
 
 
 def _metric_suggestion(snap: ReferenceSnapshot, method: str):
@@ -868,6 +896,28 @@ def _go(page: str) -> None:
     st.session_state["page"] = page
 
 
+def _go_report(rpage: str) -> None:
+    st.session_state["page"] = "result"
+    st.session_state["rpage"] = rpage
+
+
+def _read_and_next() -> None:
+    """READ on ① Claim: read the sentence and fill in; when there is something to check, ② Check opens."""
+    _extract_and_fill()
+    if st.session_state["f_ticker"].strip():
+        st.session_state["page"] = "check"
+
+
+def _start_run() -> None:
+    """RUN: the run page fetches and computes once, then opens ① Answer."""
+    draft = current_draft()
+    if confirmation_state(draft, st.session_state["confirmation"]) != "confirmed":
+        return
+    st.session_state["run_pending"] = True
+    st.session_state["run_error"] = None
+    st.session_state["page"] = "run"
+
+
 def _enter_console() -> None:
     st.session_state["booted"] = True
 
@@ -879,6 +929,7 @@ def _replay_boot() -> None:
 def _open_tape(case_id: str) -> None:
     st.session_state["view"] = "history"
     st.session_state["open_case"] = case_id
+    st.session_state["rpage"] = "answer"
 
 
 def _show_history() -> None:
@@ -908,9 +959,9 @@ def current_draft() -> ClaimDraft:
     return ClaimDraft(**values)
 
 
-def show_msg(key: str, container=None) -> None:
+def show_msg(key: str, container=None, only: tuple[str, ...] = ("success", "warning", "error", "info")) -> None:
     msg = st.session_state.get(key)
-    if not msg:
+    if not msg or msg[0] not in only:
         return
     kind, (zh_text, en_text) = msg
     target = container or st
@@ -944,7 +995,7 @@ def view_boot() -> None:
             st.button(t("boot_replay"), key="btn_boot_replay", on_click=_replay_boot)
 
 
-# ------------------------------------------------------------------ bridge and footer (every page)
+# ------------------------------------------------------------------ bridge, step keys and footer (every page)
 
 
 def bridge_unit(*, result_page: bool, warn: int) -> None:
@@ -956,10 +1007,9 @@ def bridge_unit(*, result_page: bool, warn: int) -> None:
         left.markdown(ck.bridge(zh(), sys_on=result_page, link=link, warn=warn, chips=chips), unsafe_allow_html=True)
         with right, st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small"):
             if result_page:
-                st.button(t("back_edit"), key="btn_edit", on_click=_go, args=("home",), help=t("back_edit_help"))
                 st.button(t("back_new"), key="btn_new", on_click=_new_claim, help=t("back_new_help"))
-            st.radio(t("view"), options=["new", "history"], format_func=labels({"new": S["view_new"], "history": S["view_history"]}), key="view",
-                     horizontal=True, label_visibility="collapsed")
+            st.radio(t("view"), options=["new", "history", "sys"], key="view", horizontal=True, label_visibility="collapsed",
+                     format_func=labels({"new": S["view_new"], "history": S["view_history"], "sys": S["view_sys"]}))
             st.radio(t("tube"), options=["grn", "amb"], format_func=lambda x: "GRN" if x == "grn" else "AMB", key="tube", horizontal=True,
                      label_visibility="collapsed")
             st.radio(t("language"), options=["zh", "en"], format_func=lambda x: "中" if x == "zh" else "EN", key="lang", horizontal=True,
@@ -971,7 +1021,78 @@ def footer_unit() -> None:
         html_block(ck.footer(zh()))
 
 
-# ------------------------------------------------------------------ console page
+def step_label(steps: dict, key: str) -> str:
+    """'② 核对' / '② Check'."""
+    return f"{CIRCLED[list(steps).index(key)]} {steps[key][0 if zh() else 1]}"
+
+
+def _set_rpage(rpage: str) -> None:
+    st.session_state["rpage"] = rpage
+
+
+def nav_keys(*, here: str, inputs: bool, report_on: bool, run_on: bool, report_click, warn: int = 0) -> None:
+    """The step keys: the three input steps (case view only), then the seven report pages. The current one is lit."""
+    with st.container(horizontal=True, vertical_alignment="center", gap="small", key="navrow"):
+        if inputs:
+            st.markdown(ck.dymo(t("nav_input"), small=True), unsafe_allow_html=True, width="content")
+            for k in INPUT_STEPS:
+                click, args = (_start_run, None) if k == "run" else (_go, (k,))
+                st.button(step_label(INPUT_STEPS, k), key=f"nav_{k}", type="primary" if here == k else "secondary", on_click=click, args=args,
+                          disabled=k == "run" and not run_on and here != "run")
+            st.markdown('<span class="tc-navsep"></span>', unsafe_allow_html=True, width="content")
+        st.markdown(ck.dymo(t("nav_report"), small=True), unsafe_allow_html=True, width="content")
+        for k in REPORT_PAGES:
+            label = step_label(REPORT_PAGES, k) + (f" ● {warn}" if k == "data" and warn else "")
+            st.button(label, key=f"nav_{k}", type="primary" if here == k else "secondary", on_click=report_click, args=(k,), disabled=not report_on)
+
+
+def nav_foot(back: Optional[tuple[str, object, tuple]], on: Optional[tuple[str, object, tuple]]) -> None:
+    """◀ back and next ▶ at the bottom of a page: (label, callback, args) each."""
+    with st.container(horizontal=True, vertical_alignment="center", key="navfoot"):
+        if back:
+            st.button(t("prev", p=back[0]), key="nav_prev", on_click=back[1], args=back[2])
+        st.space("stretch")
+        if on:
+            st.button(t("next", p=on[0]), key="nav_next", type="primary", on_click=on[1], args=on[2])
+
+
+def info(*texts: str) -> None:
+    """The explanations of a part, folded under ⓘ: the page shows the result first."""
+    texts = [x for x in texts if x]
+    if texts:
+        with st.expander(t("info")):
+            for x in texts:
+                st.caption(x)
+
+
+def _sync_url(**params) -> None:
+    """Keep the open report in the address, so a reload opens the same page (inputs that were never run are not kept)."""
+    want = {k: str(v) for k, v in params.items() if v}
+    if st.query_params.to_dict() != want:
+        st.query_params.from_dict(want)
+
+
+def _restore_from_url() -> None:
+    """First run of a session: reopen the report page (or view) the address names."""
+    if st.session_state.get("url_read"):
+        return
+    st.session_state["url_read"] = True
+    qp = st.query_params
+    case_id, page, view = qp.get("case"), qp.get("p"), qp.get("v")
+    store = get_service().store
+    case = None
+    if case_id and store is not None:
+        try:
+            case = store.load(case_id)
+        except (ValueError, OSError):
+            case = None
+    if case is not None:
+        st.session_state.update(view="history", open_case=case.case_id, rpage=page if page in REPORT_PAGES else "answer", booted=True)
+    elif view in ("history", "sys"):
+        st.session_state["view"] = view
+
+
+# ------------------------------------------------------------------ input steps
 
 
 def field(name: str, container=None) -> None:
@@ -995,7 +1116,16 @@ def field(name: str, container=None) -> None:
         target.markdown(line, unsafe_allow_html=True)
 
 
+def render_sec_form() -> None:
+    st.caption(t("sec_missing"))
+    c = st.columns([3, 1], vertical_alignment="bottom")
+    c[0].text_input(t("sec_email"), key="sec_email_input", placeholder="you@example.org")
+    c[1].button(t("sec_save"), key="btn_sec_save", on_click=_save_sec_contact, width="stretch")
+    show_msg("sec_msg")
+
+
 def render_clm() -> None:
+    i = 0 if zh() else 1
     html_block(ck.unit_head(t("u_clm"), ck.chip(t("clm_flow")), "u-clm") + ck.hero(zh()))
     field("claim_text")
     with st.container(horizontal=True, vertical_alignment="center", gap="small"):
@@ -1003,24 +1133,26 @@ def render_clm() -> None:
         st.button(t("ex_pe"), on_click=_load_example, args=("pe",), key="btn_example_pe")
         st.button(t("clear"), on_click=_clear_form, key="btn_clear")
         st.space("stretch")
-        st.button(t("prefill"), key="btn_prefill", on_click=_extract_and_fill, help=t("prefill_help"), type="primary")
-    show_msg("extract_msg")
-    show_msg("prefill_msg")
+        st.button(t("prefill"), key="btn_prefill", on_click=_read_and_next, help=t("prefill_help"), type="primary")
+    show_msg("extract_msg", only=("error",))  # a READ that found something moves on to ② Check and shows its messages there
+    show_msg("prefill_msg", only=("error",))
+    st.radio(t("mode"), options=list(MODES), format_func=labels(MODES), key="sec_mode", horizontal=True,
+             help=t("mode_help") + " " + MODE_NOTES[st.session_state["sec_mode"]][i])
+    if sec_gate() and st.session_state["sec_mode"] in ("live", "record"):
+        render_sec_form()
 
 
 def render_sys() -> None:
     i = 0 if zh() else 1
-    html_block(ck.unit_head("SYS · " + ("系统" if zh() else "SYSTEM")))
+    html_block(ck.unit_head(t("u_sys"), "", "u-sys"))
     st.radio(t("mode"), options=list(MODES), format_func=labels(MODES), key="sec_mode", horizontal=True, help=t("mode_help"))
     st.caption(MODE_NOTES[st.session_state["sec_mode"]][i])
     html_block(ck.sub_head(t("sec_setup")))
     if sec_gate():
-        st.caption(t("sec_missing"))
-        st.text_input(t("sec_email"), key="sec_email_input", placeholder="you@example.org")
-        st.button(t("sec_save"), key="btn_sec_save", on_click=_save_sec_contact)
+        render_sec_form()
     else:
         html_block(ck.lamp_row("green", t("sec_ok")))
-    show_msg("sec_msg")
+        show_msg("sec_msg")
     html_block(ck.sub_head(t("ai_setup")))
     st.caption(t("ai_optional"))
     if not get_service().settings.anthropic_api_key:
@@ -1060,10 +1192,10 @@ def render_share_input() -> None:
     st.caption(t("shares_result", n=f"{n:,.0f}", c=f"{c:,.0f}", sign="+" if r >= 0 else "−", r=f"{abs(r) * 100:.2f}", y=format(y.normalize(), "f")))
 
 
-def render_groups() -> None:
-    a, b = st.columns(2)
-    with a, st.container(key="g-claim"):
-        group("g_claim")
+def render_key_inputs() -> None:
+    """The five values a claim stands on: what counts, ticker, target, time, and the price it starts from."""
+    with st.container(key="g-claim"):
+        group("key_inputs")
         src = st.session_state["prefill_sources"].get("price_condition")
         mark = " ✎" if src and src[0] == st.session_state["f_price_condition"] else ""
         st.radio(t("condition") + mark, options=["touch", "end"], format_func=labels({x: S[f"cond_{x}"] for x in ("touch", "end")}), key="f_price_condition",
@@ -1072,44 +1204,66 @@ def render_groups() -> None:
         field("ticker", c[0])
         field("target_price", c[1])
         field("horizon_years", c[2])
-    with b, st.container(key="g-price"):
-        group("g_price")
-        c = st.columns(3)
+        c = st.columns([2, 2, 2], vertical_alignment="bottom")
         field("reference_price", c[0])
         field("reference_price_date", c[1])
-        field("currency", c[2])
-        field("reference_price_source")
-        c = st.columns(2)
-        field("current_shares", c[0])
-        c[1].selectbox(t("share_mode"), options=list(SHARE_MODES), format_func=labels({x: S[f"sm_{x}"] for x in SHARE_MODES}), key="f_share_mode",
-                       help=t("share_mode_help"))
-        render_share_input()
-    a, b = st.columns(2)
-    with a, st.container(key="g-val"):
-        group("g_val")
-        c = st.columns(2)
-        c[0].selectbox(t("method"), options=list(METHODS), format_func=labels({"price_to_sales": S["m_ps"], "price_to_earnings": S["m_pe"]}),
-                       key="f_valuation_method", on_change=_method_changed, help=t("method_help"))
-        field("valuation_multiple", c[1])
-        field("base_annual_metric")
-        c = st.columns(2)
-        field("base_metric_currency", c[0])
-        field("base_metric_period", c[1])
-    with b, st.container(key="g-extra"):
-        group("g_extra")
-        field("peer_tickers")
-        field("filings_since")
-        c = st.columns(2)
-        field("probability_drift", c[0])
-        field("probability_volatility", c[1])
-        st.caption(t("prob_note"))
+        c[2].button(t("refill"), key="btn_refill", on_click=_prefill, help=t("refill_help"), width="stretch")
+
+
+def _more_defaults() -> int:
+    """How many of the folded inputs still hold a default assumption (◇)."""
+    sources = st.session_state["prefill_sources"]
+    return sum(1 for n in MORE_FIELDS if n in sources and sources[n][1].startswith(DEFAULT_PREFIX) and st.session_state.get(f"f_{n}") == sources[n][0])
+
+
+MORE_ISSUE_FIELDS = set(MORE_FIELDS) | {"share_change_rate", "share_change_mode", "valuation_method", "target_assumed_shares"}
+
+
+def render_more_inputs(validation) -> None:
+    """Valuation, shares, peers and extras, folded; open by themselves when one of them is wrong or missing."""
+    trouble = any(i.field in MORE_ISSUE_FIELDS for i in validation.issues) or any(m.blocking and m.field in MORE_ISSUE_FIELDS for m in validation.missing_fields)
+    d = _more_defaults()
+    label = t("more_inputs", n=len(MORE_FIELDS) + 2) + (t("more_defaults", d=d) if d else "")
+    with st.expander(label, expanded=trouble):
+        a, b = st.columns(2)
+        with a, st.container(key="g-price"):
+            group("g_price")
+            c = st.columns(2)
+            field("currency", c[0])
+            field("current_shares", c[1])
+            field("reference_price_source")
+            st.selectbox(t("share_mode"), options=list(SHARE_MODES), format_func=labels({x: S[f"sm_{x}"] for x in SHARE_MODES}), key="f_share_mode",
+                         help=t("share_mode_help"))
+            render_share_input()
+        with b, st.container(key="g-val"):
+            group("g_val")
+            c = st.columns(2)
+            c[0].selectbox(t("method"), options=list(METHODS), format_func=labels({"price_to_sales": S["m_ps"], "price_to_earnings": S["m_pe"]}),
+                           key="f_valuation_method", on_change=_method_changed, help=t("method_help"))
+            field("valuation_multiple", c[1])
+            field("base_annual_metric")
+            c = st.columns(2)
+            field("base_metric_currency", c[0])
+            field("base_metric_period", c[1])
+        with st.container(key="g-extra"):
+            group("g_extra")
+            c = st.columns(2)
+            field("peer_tickers", c[0])
+            field("filings_since", c[1])
+            c = st.columns(2)
+            field("probability_drift", c[0])
+            field("probability_volatility", c[1])
+            st.caption(t("prob_note"))
 
 
 def render_checks(validation) -> None:
-    html_block(ck.sub_head(t("checks")))
+    blocking = [m for m in validation.missing_fields if m.blocking]
+    if not validation.issues and not blocking:  # heading and lamp in one block, so the lamp sits under the rule
+        html_block(ck.sub_head(t("checks")) + f'<div style="margin:8px 0 14px">{ck.lamp_row("green", t("checks_ok"))}</div>')
+    else:
+        html_block(ck.sub_head(t("checks")))
     for issue in validation.issues:
         st.error(issue_text(issue))
-    blocking = [m for m in validation.missing_fields if m.blocking]
     if blocking:
         st.warning(t("missing_core") + ("、" if zh() else ", ").join(label_of(m.field) for m in blocking))
     optional = [m for m in validation.missing_fields if not m.blocking]
@@ -1117,12 +1271,10 @@ def render_checks(validation) -> None:
         st.caption(t("optional_missing") + ("；" if zh() else "; ").join(missing_text(m) for m in optional))
     for w in (validation.warnings_zh if zh() else validation.warnings):
         st.caption("⚠ " + w)
-    if not validation.issues and not blocking:
-        html_block(ck.lamp_row("green", t("checks_ok")))
 
 
 def run_case(draft: ClaimDraft, confirmation: Confirmation, board) -> None:
-    """Fetch and evaluate, showing each data step on the pipeline screen, then open the report page."""
+    """Fetch and evaluate, showing each data step on the pipeline screen, then open ① Answer."""
     st.session_state["result"] = None
     st.session_state["run_error"] = None
     st.html(ck.page_css([], flowing=True))
@@ -1146,6 +1298,7 @@ def run_case(draft: ClaimDraft, confirmation: Confirmation, board) -> None:
             except Exception as exc:  # the report stands without a narrative
                 _msg("ai_msg", "error", (S["ai_failed"][0] + f"{type(exc).__name__}: {exc}", S["ai_failed"][1] + f"{type(exc).__name__}: {exc}"))
         st.session_state["page"] = "result"
+        st.session_state["rpage"] = "answer"
     except Exception as exc:  # unexpected failure; keep page usable and show it
         st.session_state["run_error"] = f"{type(exc).__name__}: {exc}"
     st.rerun()
@@ -1154,12 +1307,23 @@ def run_case(draft: ClaimDraft, confirmation: Confirmation, board) -> None:
 def render_cnf(current: bool) -> None:
     filled = any(st.session_state[f"f_{n}"].strip() for n in TEXT_FIELDS if n != "claim_text") or bool(st.session_state["prefill_sources"])
     head = st.empty()
-    html_block(ck.para(t("cnf_hint") if filled else t("cnf_stby")) + (f'<div class="tc-note" style="margin-top:6px">{esc(t("marks"))}</div>' if filled else ""))
-    render_groups()
-    draft = current_draft()  # widgets above may have changed the values
-    validation = validate_draft(draft, today=get_service().today())
+    claim = st.session_state["f_claim_text"].strip()
+    if claim:
+        html_block(f'<div class="tc-quote"><span class="tc-tiny">{esc(t("claim_quote"))}</span><b class="tc-serif">{esc(claim)}</b></div>')
+    # what READ found: problems stay in sight, the rest of the log folds
+    show_msg("extract_msg", only=("warning", "error"))
+    show_msg("prefill_msg", only=("warning", "error"))
+    if any((st.session_state.get(k) or ("",))[0] in ("success", "info") for k in ("extract_msg", "prefill_msg")):
+        with st.expander(t("read_log")):
+            show_msg("extract_msg", only=("success", "info"))
+            show_msg("prefill_msg", only=("success", "info"))
+    validation = validate_draft(current_draft(), today=get_service().today())
+    render_key_inputs()
+    render_more_inputs(validation)
+    draft = current_draft()
     if filled:
         render_checks(validation)
+    info(t("cnf_hint") if filled else t("cnf_stby"), t("marks"))
     row = st.columns([3, 2, 2], vertical_alignment="center")
     if row[1].button(t("confirm"), key="btn_confirm", width="stretch"):
         try:
@@ -1170,7 +1334,7 @@ def render_cnf(current: bool) -> None:
             st.session_state["confirm_feedback"] = "invalid"
     confirmation = st.session_state["confirmation"]
     state = confirmation_state(draft, confirmation)
-    run_clicked = row[2].button(t("run"), key="btn_run", type="primary", disabled=state != "confirmed", width="stretch")
+    row[2].button(t("run"), key="btn_run", type="primary", disabled=state != "confirmed", width="stretch", on_click=_start_run)
     row[0].markdown(ck.keyswitch(state == "confirmed", zh()), unsafe_allow_html=True)
     if st.session_state["confirm_feedback"]:
         st.error(t("invalid_confirm"))
@@ -1182,18 +1346,12 @@ def render_cnf(current: bool) -> None:
         st.info(t("unconfirmed"))
     word = {"confirmed": "ARM", "stale": "SAFE · STALE"}.get(state, "SAFE" if filled else "STBY")
     head.markdown(ck.unit_head(t("u_cnf"), ck.chip(word), "u-cnf"), unsafe_allow_html=True)
-    board = st.empty()
-    if run_clicked:
-        run_case(draft, confirmation, board)
-    if st.session_state["run_error"]:
-        st.error(t("run_failed") + st.session_state["run_error"])
-        st.caption(t("run_kept"))
     result = st.session_state["result"]
     if result is None:
         return
     if current:
         html_block(ck.lamp_row("green", t("ready")) + ck.tape(result, zh()))
-        st.button(t("open_report"), key="btn_open", on_click=_go, args=("result",), type="primary")
+        st.button(t("open_report"), key="btn_open", on_click=_go_report, args=("answer",), type="primary")
     elif result.confirmed_claim is None:  # blocked before any data was fetched
         for issue in result.validation_issues:
             st.error(issue_text(issue))
@@ -1217,23 +1375,69 @@ def render_tapes() -> None:
     st.button(t("hist_all"), key="btn_hist_all", on_click=_show_history)
 
 
-def view_home(current: bool) -> None:
+def input_frame(page: str, current: bool) -> None:
+    """Bridge and step keys above an input step."""
     bridge_unit(result_page=False, warn=1 if sec_gate() and st.session_state["sec_mode"] in ("live", "record") else 0)
-    left, right = st.columns([2, 1])
-    with left, st.container(key="u-c-clm"):
+    state = confirmation_state(current_draft(), st.session_state["confirmation"])
+    with st.container(key="u-c-nav"):
+        nav_keys(here=page, inputs=True, report_on=current, run_on=state == "confirmed", report_click=_go_report)
+
+
+def view_claim(current: bool) -> None:
+    input_frame("claim", current)
+    with st.container(key="u-c-clm"):
         render_clm()
-    with right, st.container(key="u-o-sys"):
-        render_sys()
+    with st.container(key="u-c-hist"):
+        render_tapes()
+    nav_foot(None, (step_label(INPUT_STEPS, "check"), _go, ("check",)))
+    footer_unit()
+    st.html(ck.page_css([("u-c-clm", 1)]))
+
+
+def view_check(current: bool) -> None:
+    input_frame("check", current)
     with st.container(key="u-b-cnf"):
         render_cnf(current)
+    nav_foot((step_label(INPUT_STEPS, "claim"), _go, ("claim",)), (step_label(REPORT_PAGES, "answer"), _go_report, ("answer",)) if current else None)
+    footer_unit()
+    st.html(ck.page_css([("u-b-cnf", 2)]))
+
+
+def view_run(current: bool) -> None:
+    input_frame("run", current)
+    with st.container(key="u-c-run"):
+        html_block(ck.unit_head(t("u_run"), "", "u-run"))
+        claim = st.session_state["f_claim_text"].strip() or st.session_state["f_ticker"].strip()
+        if claim:
+            html_block(f'<h1 class="tc-claim tc-claim-dark">{esc(claim)}</h1>')
+        board = st.empty()
+        if st.session_state["run_pending"]:
+            st.session_state["run_pending"] = False
+            st.caption(t("run_wait"))
+            run_case(current_draft(), st.session_state["confirmation"], board)
+        elif st.session_state["run_error"]:
+            st.error(t("run_failed") + st.session_state["run_error"])
+            st.caption(t("run_kept"))
+            st.button(t("run_back"), key="btn_run_back", on_click=_go, args=("check",))
+        else:
+            st.info(t("run_none"))
+            st.button(t("run_back"), key="btn_run_back", on_click=_go, args=("check",))
+    footer_unit()
+    st.html(ck.page_css([("u-c-run", 3)]))
+
+
+def view_sys() -> None:
+    """Setup (data mode, SEC contact, Claude key) and the guide to the ten data sources and four methods."""
+    bridge_unit(result_page=False, warn=1 if sec_gate() and st.session_state["sec_mode"] in ("live", "record") else 0)
+    with st.container(key="u-o-sys"):
+        render_sys()
     with st.container(key="u-o-feed"):
         html_block(ck.feed_info(zh(), t("u_feed")))
     with st.container(key="u-b-mth"):
         html_block(ck.methods_info(zh(), t("u_mth")))
-    with st.container(key="u-c-hist"):
-        render_tapes()
     footer_unit()
-    st.html(ck.page_css([("u-c-clm", 1), ("u-b-cnf", 2), ("u-o-feed", 3), ("u-b-mth", 4), ("u-c-hist", 5)]))
+    _sync_url(v="sys")
+    st.html(ck.page_css([("u-o-sys", 1), ("u-o-feed", 2), ("u-b-mth", 3)]))
 
 
 # ------------------------------------------------------------------ report channel 1: layered report
@@ -1289,7 +1493,6 @@ def kpi(label: str, value: str, main: bool = False) -> str:
 @st.fragment
 def tab_scenario(result: CaseResult, key_suffix: str) -> None:
     o = result.oracle
-    st.caption(t("sc_intro"))
     vol0 = o.base_volatility or o.implied_volatility if o is not None else None
     if o is None or not o.spot or not vol0:
         st.info(t("sc_need"))
@@ -1354,7 +1557,7 @@ def tab_scenario(result: CaseResult, key_suffix: str) -> None:
         st.markdown(t("sc_break_none", p=pct_p(res.p_if_success)))
     if res.market_implied is not None:
         st.markdown(t("sc_implied", p=f"{res.market_implied * 100:.0f}%", u=f"{p_succ}%"))
-    st.caption(t("sc_note"))
+    info(t("sc_intro"), t("sc_note"))
 
 
 # ------------------------------------------------------------------ report channel 3: levels and methods
@@ -1428,16 +1631,6 @@ def tab_levels(result: CaseResult) -> None:
 # ------------------------------------------------------------------ report channel 4: fundamentals
 
 
-def render_verdict(result: CaseResult) -> None:
-    v = result.verdict
-    if v is None:
-        return
-    icon, tone = VERDICT_STYLE[v.label]
-    title = f"{icon} {(v.display_zh or VERDICT_DISPLAY_ZH[v.label]) if zh() else v.display}"
-    html_block(f'<div class="tc-card tc-verdict tc-{tone}"><div class="lbl">{esc(title)}</div>'
-               f'<div class="tc-sub">{esc(t("as_of", d=v.as_of, r=v.rules_version))}</div></div>')
-
-
 def render_key_numbers(result: CaseResult) -> None:
     calc = {c.name: c for c in result.calculations}
     claim = result.confirmed_claim.values
@@ -1455,9 +1648,13 @@ def render_key_numbers(result: CaseResult) -> None:
     html_block('<div class="tc-kpis">' + "".join(cards) + "</div>")
 
 
-def render_conclusion(result: CaseResult) -> None:
+def render_rationale(result: CaseResult) -> None:
     v = result.verdict
     html_block(f'<div class="tc-h">{esc(t("rationale"))}</div>' + bullets(v.rationale_zh if zh() and v.rationale_zh else v.rationale))
+
+
+def render_rechecks(result: CaseResult) -> None:
+    v = result.verdict
     html_block(f'<div class="tc-h">{esc(t("rechecks"))}</div>')
     cols = st.columns(2)
     for idx, r in enumerate(result.recheck_conditions):
@@ -1471,9 +1668,12 @@ def render_conclusion(result: CaseResult) -> None:
                 extra.append(t("linked") + ", ".join(r.linked_to))
             if extra:
                 st.caption(" · ".join(extra))
-    with st.expander(t("limits")):
-        for line in (v.limitations_zh if zh() and v.limitations_zh else v.limitations):
-            st.markdown(f"- {line}")
+    if v is not None:
+        with st.expander(t("limits")):
+            for line in (v.limitations_zh if zh() and v.limitations_zh else v.limitations):
+                st.markdown(f"- {line}")
+    with st.expander(t("verdict_kinds")):
+        st.markdown(t("verdict_kinds_body"))
 
 
 def render_evidence(result: CaseResult) -> None:
@@ -1558,19 +1758,6 @@ def render_calculations(result: CaseResult) -> None:
                       for k, v in result.confirmed_claim.value_provenance.items()], hide_index=True)
 
 
-def tab_fundamentals(result: CaseResult) -> None:
-    st.caption(t("f_intro"))
-    render_verdict(result)
-    render_key_numbers(result)
-    if result.verdict is not None:
-        render_conclusion(result)
-    render_evidence(result)
-    render_calculations(result)
-    render_sensitivity(result)
-    with st.expander(t("verdict_kinds")):
-        st.markdown(t("verdict_kinds_body"))
-
-
 # ------------------------------------------------------------------ report channel 5: raw data
 
 
@@ -1619,16 +1806,17 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
         html_block(f'<div class="tc-h">{esc(t("price_title"))} · {esc(market.symbol)}</div>')
         vol = fmt_pct(market.annualized_volatility) if market.annualized_volatility is not None else "—"
         close = f"{float(market.last_close):,.2f}"
-        st.caption(f"最新收盘 {close}（{market.last_date}），历史年化波动率 {vol}；K 线见 UNIT 02。" if zh()
-                   else f"Latest close {close} ({market.last_date}); historical volatility {vol}. The K-line is in UNIT 02.")
+        st.caption(f"最新收盘 {close}（{market.last_date}），历史年化波动率 {vol}；K 线见 ① 答案。" if zh()
+                   else f"Latest close {close} ({market.last_date}); historical volatility {vol}. The K-line is on ① Answer.")
     if result.structure is not None:
         stc = result.structure
         html_block(f'<div class="tc-h">{esc(t("mkt_title"))} · {stc.window_start} → {stc.window_end}</div>')
         st.caption(t("mkt_raw", b=f"{stc.beta_market:.3f}", bp="—" if stc.beta_peers is None else f"{stc.beta_peers:.3f}",
                      c="—" if stc.peers_market_beta is None else f"{stc.peers_market_beta:.3f}", r2=f"{stc.r_squared:.3f}",
                      sd=f"{stc.residual_sd * 100:.2f}%", e0=stc.estimation_start, e1=stc.estimation_end))
-        st.dataframe([{"day": d.day.isoformat(), "stock": round(d.stock, 5), "market_log": round(d.market, 5), "peers_log": round(d.peers, 5),
-                       "own_log": round(d.own, 5), "flagged": d.flagged, "filings": "; ".join(d.filings)} for d in stc.days], hide_index=True)
+        with st.expander(t("data_table")):
+            st.dataframe([{"day": d.day.isoformat(), "stock": round(d.stock, 5), "market_log": round(d.market, 5), "peers_log": round(d.peers, 5),
+                           "own_log": round(d.own, 5), "flagged": d.flagged, "filings": "; ".join(d.filings)} for d in stc.days], hide_index=True)
         with st.expander(t("mkt_sources")):
             for u in stc.source_urls:
                 st.caption(u)
@@ -1639,8 +1827,9 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
         rows = [{"form": r.form_type, "filed": r.filing_date.isoformat(), "period": r.report_date.isoformat() if r.report_date else "",
                  "document": r.document_url or "", "index": r.filing_index_url, "data_mode": r.data_mode.value}
                 for r in result.evidence_records]
-        st.dataframe(rows, hide_index=True, column_config={"document": st.column_config.LinkColumn(), "index": st.column_config.LinkColumn()})
-        st.caption(t("filings_note"))
+        with st.expander(t("data_table")):
+            st.dataframe(rows, hide_index=True, column_config={"document": st.column_config.LinkColumn(), "index": st.column_config.LinkColumn()})
+            st.caption(t("filings_note"))
     if facts is None and market is None and not result.evidence_records:
         st.info(t("no_public"))
     with st.expander(t("prob_model")):
@@ -1718,7 +1907,6 @@ def render_cat(result: CaseResult, key_suffix: str) -> None:
         st.caption(t("cat_reg_none"))
     else:
         html_block('<div class="tc-cats">' + "".join(ck.catalyst_card(c, z) for c in reg.catalysts) + "</div>")
-        st.caption(t("cat_reg_note"))
         with st.expander(t("cat_manage")):
             for c in reg.catalysts:
                 st.button(t("cat_remove", id=c.id) + f" · {c.name_zh if z and c.name_zh else c.name_en}", key=f"cat_rm_{k}_{c.id}",
@@ -1758,7 +1946,7 @@ def render_cat(result: CaseResult, key_suffix: str) -> None:
                     box.write("· " + label)
                 get_service().propose_catalysts(result, mode=_case_mode(result), progress=note)
             st.rerun()
-        st.caption(t("cat_scan_help", **model_kw))
+    info(t("cat_reg_note"), t("cat_scan_help", **model_kw))
     with st.expander(t("cat_heads")):
         html_block(ck.headlines_html(result.news, z))
 
@@ -1799,7 +1987,7 @@ def render_nar(result: CaseResult, key_suffix: str, anim: bool) -> None:
             show_msg("ai_msg")
         st.button(t("ai_button") if n is None else t("ai_retry"), key=f"btn_narrate_{key_suffix}", help=t("ai_button_help", **model_kw),
                   on_click=_narrate, args=(key_suffix,), type="primary", disabled=no_key)
-        st.caption(t("ai_button_help", **model_kw))
+        info(t("ai_button_help", **model_kw))
         return
     summary = t("ai_summary", ok=n.verified, total=n.total, bad=n.unsupported, model=n.model + (f" · effort {n.effort}" if n.effort else ""))
     if rechecked:
@@ -1810,7 +1998,7 @@ def render_nar(result: CaseResult, key_suffix: str, anim: bool) -> None:
     elif cost is not None:
         summary += " · " + t("ai_usage", inp=n.usage.get("input_tokens", 0), out=n.usage.get("output_tokens", 0), cost=cost)
     html_block(ck.unit_head(t("u_nar"), ck.chip(summary), "u-nar") + ck.nar_paper(n, zh(), anim))
-    st.caption(t("ai_legend"))
+    info(t("ai_legend"))
     with st.expander(t("ai_facts")):
         for k, x in [(k, x) for k, v in n.sections.items() for x in v if x.problems]:
             st.markdown(f"- {NARR_BADGE[x.status]} **{ck.L(zh(), *ck.NARR_TITLES.get(k, (k, k)))}**: {'；'.join(x.problems)}")
@@ -1819,74 +2007,150 @@ def render_nar(result: CaseResult, key_suffix: str, anim: bool) -> None:
     st.button(t("ai_retry"), key=f"btn_narrate_{key_suffix}", on_click=_narrate, args=(key_suffix, True), help=t("ai_retry_help", **model_kw))
 
 
-def render_result_units(result: CaseResult, key_suffix: str, *, anim: bool, start: int = 1) -> list[tuple[str, int]]:
-    """The report units in order; returns (container key, junction number) for the data bus."""
+# ------------------------------------------------------------------ report pages (one question each)
+
+
+def page_answer(result: CaseResult, key_suffix: str, anim: bool) -> None:
+    """① Answer: the claim, the probability range, and the price against the target."""
+    z = zh()
+    with st.container(key="u-b-clm"):
+        html_block(ck.claim_unit(result, z, t("u_clm_r")))
+    with st.container(key="u-c-prb"):
+        html_block(ck.unit_head(t("u_prb"), ck.chip(t("prb_chip")), "u-prb"))
+        if result.oracle is None:
+            st.info(t("prob_none"))
+        else:
+            html_block(ck.prb_screen(result, z, anim))
+            info(tr(result.oracle.agreement))
+    with st.container(key="u-c-kln"):
+        render_kline(result)
+
+
+def page_methods(result: CaseResult, key_suffix: str, anim: bool) -> None:
+    """② Methods: each method's reading, the curve over price levels, how each method works."""
+    with st.container(key="u-c-mth"):
+        html_block(ck.unit_head(t("u_mth_r"), ck.chip(t("prb_chip")), "u-mth"))
+        if result.oracle is None:
+            st.info(t("prob_none"))
+            return
+        html_block(ck.method_strips(result, zh(), anim, solo=True))
+        html_block(ck.sub_head(t("u_lvl")))
+        with st.container(key="scr-levels"):
+            tab_levels(result)
+
+
+def page_market(result: CaseResult, key_suffix: str, anim: bool) -> None:
+    """③ Market: the last 20 days split into market, peers and own; why the probability moved since the last run."""
+    z = zh()
+    with st.container(key="u-c-mkt"):
+        html_block(ck.mkt_unit(result, z, t("u_mkt"), anim, notes=False))
+        stc, ch = result.structure, result.change
+        info(*([tr(n) for n in stc.notes] if stc is not None else []), tr(ch.note) if ch is not None and ch.note else "",
+             ck.L(z, *ck.DELTA_HOW) if ch is not None else "")
+
+
+def page_events(result: CaseResult, key_suffix: str, anim: bool) -> None:
+    """④ Events: the catalyst register and known dates, and the event scenario they feed."""
+    with st.container(key="u-c-cat"):
+        render_cat(result, key_suffix)
+    with st.container(key="u-c-scn"):
+        html_block(ck.unit_head(t("u_scn"), "", "u-scn"))
+        if result.oracle is None:
+            st.info(t("sc_need"))
+        else:
+            with st.container(key="scr-scn"):
+                tab_scenario(result, key_suffix)
+
+
+def page_fund(result: CaseResult, key_suffix: str, anim: bool) -> None:
+    """⑤ Fundamentals: can the business carry the target; the signals that agree and diverge; the evidence behind it."""
+    z = zh()
+    left, right = st.columns([1, 2])
+    with left, st.container(key="u-r-fnd"):
+        html_block(ck.fnd_unit(result, z, t("u_fnd")))
+    with right, st.container(key="u-c-sig"):
+        html_block(ck.sig_unit(result, z, t("u_sig"), warnings=False))
+    with st.container(key="u-c-fdt"):
+        with st.container(key="scr-fnd"):
+            render_key_numbers(result)
+            if result.verdict is not None:
+                render_rationale(result)
+        info(t("f_intro"))
+        html_block(ck.sub_head(t("fnd_details")))
+        tabs = st.tabs(S["tab_fund"][0 if z else 1])
+        with tabs[0]:
+            render_evidence(result)
+        with tabs[1]:
+            render_calculations(result)
+        with tabs[2]:
+            render_sensitivity(result)
+        with tabs[3]:
+            render_rechecks(result)
+
+
+def page_nar(result: CaseResult, key_suffix: str, anim: bool) -> None:
+    """⑥ Narrative: the AI write-up (optional), and the rules-based layered report."""
+    with st.container(key="u-b-nar"):
+        render_nar(result, key_suffix, anim)
+    n = result.narratives.get(lang())
+    written = n is not None and n.status == "ok"
+    with st.container(key="u-c-rpt"):
+        html_block(ck.unit_head(t("u_rpt"), "", "u-rpt"))
+        with st.expander(t("rpt_open"), expanded=not written):  # folded when the narrative above already tells the story
+            with st.container(key="scr-rpt"):
+                render_report(result.report)
+
+
+def page_data(result: CaseResult, key_suffix: str, anim: bool) -> None:
+    """⑦ Data: what every source returned, system warnings, the raw tables and the run log."""
+    z = zh()
+    with st.container(key="u-o-feed"):
+        html_block(ck.feeds_unit(result, z, t("u_feed_r"), anim))
+    with st.container(key="u-c-sig"):
+        html_block(ck.sig_unit(result, z, t("u_warn"), signals=False))
+    with st.container(key="u-c-raw"):
+        html_block(ck.unit_head(t("u_raw"), "", "u-raw"))
+        with st.container(key="scr-raw"):
+            tab_raw(result, key_suffix)
+
+
+PAGES = {"answer": (page_answer, "u-b-clm"), "methods": (page_methods, "u-c-mth"), "market": (page_market, "u-c-mkt"), "events": (page_events, "u-c-cat"),
+         "fund": (page_fund, "u-r-fnd"), "nar": (page_nar, "u-b-nar"), "data": (page_data, "u-o-feed")}
+
+
+def render_report_page(result: CaseResult, key_suffix: str, *, history: bool) -> list[tuple[str, object]]:
+    """Status bar and step keys, one report page, back / next; returns (container key, junction label) for the data bus."""
     if result.validation_issues:
         for i in result.validation_issues:
             st.error(issue_text(i))
         return []
     if result.confirmed_claim is None:
         return []
-    z = zh()
-    keys: list[str] = []
+    rpage = st.session_state["rpage"] if st.session_state["rpage"] in REPORT_PAGES else "answer"
+    click = _set_rpage if history else _go_report
+    seen = f"{result.case_id}:{rpage}"
+    anim = seen not in st.session_state["animated"]  # the first view of each page of a new report plays its motion once
+    st.session_state["animated"].add(seen)
+    warn = len(ck.warnings_of(result, zh()))
     with st.container(key="u-c-status-bar"):
-        html_block(ck.status_bar(result, z, [j for j in JUMPS if result.oracle is not None or j[0] != "u-prb"]))
-    with st.container(key="u-b-clm"):
-        html_block(ck.claim_unit(result, z, t("u_clm_r")))
-    keys.append("u-b-clm")
-    with st.container(key="u-c-kln"):
-        render_kline(result)
-    keys.append("u-c-kln")
-    if result.oracle is not None:
-        with st.container(key="u-c-prb"):
-            html_block(ck.prb_unit(result, z, t("u_prb"), anim))
-        keys.append("u-c-prb")
-    with st.container(key="u-c-mkt"):
-        html_block(ck.mkt_unit(result, z, t("u_mkt"), anim))
-    keys.append("u-c-mkt")
-    with st.container(key="u-c-cat"):
-        render_cat(result, key_suffix)
-    keys.append("u-c-cat")
-    with st.container(key="u-o-feed"):
-        html_block(ck.feeds_unit(result, z, t("u_feed_r"), anim))
-    keys.append("u-o-feed")
-    with st.container(key="u-c-rpt"):
-        html_block(ck.unit_head(t("u_rpt"), ck.chip(t("rpt_note")), "u-rpt"))
-        tabs = st.tabs(S["tabs"][0 if z else 1])
-        with tabs[0]:
-            render_report(result.report)
-        with tabs[1]:
-            if result.oracle is not None:
-                tab_scenario(result, key_suffix)
-            else:
-                st.info(t("sc_need"))
-        with tabs[2]:
-            if result.oracle is not None:
-                tab_levels(result)
-            else:
-                st.caption(t("r_none"))
-        with tabs[3]:
-            tab_fundamentals(result)
-        with tabs[4]:
-            tab_raw(result, key_suffix)
-    keys.append("u-c-rpt")
-    left, right = st.columns([2, 1])
-    with left, st.container(key="u-c-sig"):
-        html_block(ck.sig_unit(result, z, t("u_sig"), notes=notes_of(result)))
-    with right, st.container(key="u-r-fnd"):
-        html_block(ck.fnd_unit(result, z, t("u_fnd"), t("fnd_more")))
-    keys.append("u-c-sig")
-    with st.container(key="u-b-nar"):
-        render_nar(result, key_suffix, anim)
-    keys.append("u-b-nar")
-    return [(k, start + i) for i, k in enumerate(keys)]
+        html_block(ck.status_bar(result, zh()))
+        run_on = not history and confirmation_state(current_draft(), st.session_state["confirmation"]) == "confirmed"
+        nav_keys(here=rpage, inputs=not history, report_on=True, run_on=run_on, report_click=click, warn=warn)
+    render, first = PAGES[rpage]
+    render(result, key_suffix, anim)
+    keys = list(REPORT_PAGES)
+    i = keys.index(rpage)
+    back = (step_label(REPORT_PAGES, keys[i - 1]), click, (keys[i - 1],)) if i > 0 else (
+        None if history else (step_label(INPUT_STEPS, "check"), _go, ("check",)))
+    on = (step_label(REPORT_PAGES, keys[i + 1]), click, (keys[i + 1],)) if i < len(keys) - 1 else None
+    nav_foot(back, on)
+    _sync_url(case=result.case_id, p=rpage)
+    return [(first, i + 1)]
 
 
 def view_result(result: CaseResult) -> None:
-    anim = result.case_id not in st.session_state["animated"]  # first view of a new report plays its motion once
-    st.session_state["animated"].add(result.case_id)
     bridge_unit(result_page=True, warn=len(ck.warnings_of(result, zh())))
-    nodes = render_result_units(result, "current", anim=anim)
+    nodes = render_report_page(result, "current", history=False)
     footer_unit()
     st.html(ck.page_css(nodes))
 
@@ -1934,11 +2198,13 @@ def view_history() -> None:
                 st.session_state["open_case"] = None
             elif st.session_state["open_case"]:  # a tape played from the console
                 selected = [c for c in cases if c.case_id == st.session_state["open_case"]][:1]
-    nodes = [("u-c-hist", 1)]
+    nodes = [("u-c-hist", "H")]
     if len(selected) == 1:
         st.session_state["history_selected"] = selected[0]
-        nodes += render_result_units(selected[0], selected[0].case_id, anim=False, start=2)
-    elif len(selected) >= 2:
+        nodes += render_report_page(selected[0], selected[0].case_id, history=True)
+    else:
+        _sync_url(v="history")
+    if len(selected) >= 2:
         tbl = {}
         for c in selected:
             v = c.confirmed_claim.values if c.confirmed_claim else None
@@ -1974,15 +2240,23 @@ def view_new() -> None:
     result: Optional[CaseResult] = st.session_state["result"]
     current = (result is not None and result.confirmed_claim is not None and result.input_fingerprint == fingerprint(draft)
                and st.session_state["result_mode"] == st.session_state["sec_mode"])
-    if current and st.session_state["page"] == "result":
-        view_result(result)
-    else:
-        view_home(current)
+    page = st.session_state["page"]
+    if page == "result":
+        if current:
+            view_result(result)
+            return
+        page = st.session_state["page"] = "check"  # the report no longer matches the inputs
+    if page not in INPUT_STEPS:
+        page = st.session_state["page"] = "claim"
+    if page != "run":
+        _sync_url()
+    {"claim": view_claim, "check": view_check, "run": view_run}[page](current)
 
 
 def main() -> None:
     st.set_page_config(page_title="TickerCase", page_icon="📈", layout="wide", initial_sidebar_state="collapsed")
     _init_state()
+    _restore_from_url()
     _keep_widget_state()
     st.html(ck.CSS)
     if st.session_state["tube"] == "amb":
@@ -1992,6 +2266,8 @@ def main() -> None:
         return
     if st.session_state["view"] == "history":
         view_history()
+    elif st.session_state["view"] == "sys":
+        view_sys()
     else:
         view_new()
 

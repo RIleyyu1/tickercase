@@ -2,11 +2,11 @@
 
 **Write one sentence about a stock, such as "NVDA will hit $300 in 3 years", and get a probability range you can trace.** Four independent methods are computed from free public data, every number carries its source and time, and an optional AI narrative has each of its numbers checked against the facts it cites.
 
-![Console page: claim input, system settings, check and confirm](docs/screenshots/console.jpg)
+![Step 2 of 3: the key inputs with their sources, more inputs folded, confirm and run](docs/screenshots/console.jpg)
 
-![Report page: status bar, claim and K-line](docs/screenshots/report-kline.jpg)
+![Report page 1 of 7, Answer: step keys, the claim and the probability range](docs/screenshots/report-kline.jpg)
 
-![Report page: probability range from four methods, and the eight data sources](docs/screenshots/report-probability.jpg)
+![Report page 3 of 7, Market: the last 20 days split into market, peers and own, and why the probability moved](docs/screenshots/report-probability.jpg)
 
 ## What it does
 
@@ -16,7 +16,8 @@
 - **Checks the AI.** The optional narrative (Claude) sees only a numbered fact table. A verifier checks every number in every sentence against the facts it cites, and a narrative already written for the same facts is reused. Measured cost: about $0.06 per narrative.
 - **Separates the market from the stock.** The last 20 trading days are split into the part that came with the market, the part that came with similar stocks and the stock's own part, day by day with the SEC filings of each day; when the same claim is run again, the page shows why the probability moved (price parts, volatility, time, rate).
 - **Tracks what the price is waiting for.** A catalyst register per stock (a product launch, a deal, an approval): Claude proposes catalysts and their dated history from 8-K press releases and headlines, code checks every citation, date and number, you confirm, and each event shows how the stock reacted. Dated catalysts feed the event scenario.
-- **Reproducible.** Live, record, replay and synthetic data modes, exact `Decimal` arithmetic, and 269 offline tests.
+- **One step per page.** Three input steps (claim, check, run) and seven report pages (answer, methods, market, events, fundamentals, narrative, data), each answering one question, with explanations folded under ⓘ.
+- **Reproducible.** Live, record, replay and synthetic data modes, exact `Decimal` arithmetic, and 273 offline tests.
 
 Chinese and English interface. Research use only; not investment advice.
 
@@ -40,6 +41,20 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 | M4 own history | share of past windows of the same length in which this stock rose enough | monthly closes; used in the range only when the history holds ≥ 4 non-overlapping windows |
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
+
+## Step pages (v0.13)
+
+The console and the report were two long pages: the report ran to about 13 screens (11,600 px for an RKLB case) with nine units one after another, and the console mixed the input with the guide to every data source and method. v0.13 shows one step per page. Logic, inputs, stored cases, the API and the CLI are unchanged.
+
+- **Step keys.** Under the bridge a row of keys shows where you are: INPUT ① Claim ② Check ③ Run, then REPORT ① Answer ② Methods ③ Market ④ Events ⑤ Fundamentals ⑥ Narrative ⑦ Data. The current key is lit, and any key opens its page. ③ Run is live only once the inputs are confirmed, and the report keys only while the inputs have a report. On report pages the keys sit in the status bar (claim, range, the other condition, the last run, warnings), which stays on screen; ⑦ Data shows the warning count. Every page ends with ◀ back and next ▶.
+- **Input.** ① Claim holds the sentence, the two examples and READ, the data source, and the three most recent tapes. READ opens ② Check when it finds a ticker; problems stay on ① with the message. ② Check shows the sentence and the five key inputs (what counts as coming true, ticker, target, time, reference price and date) with their sources, and "↻ Fill again" for a changed ticker. Valuation, shares, peers and the extras fold under "More inputs · 14 more, n of them ◇ default assumptions", which opens by itself when one of them is wrong or missing. ARM and RUN sit at the bottom. ③ Run shows the pipeline screen and opens ① Answer when it finishes; a failure stays there with "◀ Back to ② Check".
+- **Report.** ① Answer: the claim, the probability screen and the K-line. ② Methods: the four method strips, the curve over price levels and how each method works. ③ Market: the market, peer and own split and the change since the last run. ④ Events: the catalyst register and known dates, with the event scenario below it ("→ scenario" fills it on the same page). ⑤ Fundamentals: the verdict panel, the signals that agree and diverge, the key numbers and rationale, then evidence, calculations, sensitivity and recheck conditions as four channel keys. ⑥ Narrative: the AI narrative; the rules-based layered report folds under it once a narrative exists. ⑦ Data: the ten source readings, system warnings, the raw tables (folded) and the run log.
+- **Less text in view.** Explanations (how the scenario is computed, the split's caveats, the Shapley note, the register and scan notes, the seal legend) fold under "ⓘ Notes" on the part they explain. Nothing was removed.
+- **Setup and guide.** A third view on the bridge, "SYS · setup", holds the data source, the SEC contact email, the Claude key and the narrative-after-RUN switch, and the guide to the ten data sources and four methods that used to fill the console. A missing SEC email is still asked for on ① Claim in live mode.
+- **Reload.** The address carries the open report (`?case=…&p=market`), so a reload reopens the same page from the case store without the start-up screen. Inputs that were never run are not kept.
+- **Phone width.** The keys wrap; the market screen no longer overflows its unit, and its day table scrolls sideways.
+
+Measured on the same RKLB case, opened from HIST both times: the pages are 2,100 to 3,000 px each (⑥ Narrative 3,600 px, as the case has an AI narrative), instead of one 11,600 px page.
 
 ## Catalyst register (v0.12)
 
@@ -144,9 +159,9 @@ Page:
 streamlit run app.py
 ```
 
-The page is in Chinese and English (中 / EN on the bridge at the top). On the console press "EX-1 合成示例 P/S" (or EX-2 for P/E), then "ARM 确认输入", then "RUN 生成报告". The examples use the fictional company `SYNT` and synthetic data.
+The page is in Chinese and English (中 / EN on the bridge at the top). On ① Claim press "EX-1 合成示例 P/S" (or EX-2 for P/E); ② Check opens with the example's inputs. Press "ARM 确认输入", then "RUN 生成报告"; the report opens on ① Answer, and the step keys or next ▶ lead through the seven pages. The examples use the fictional company `SYNT` and synthetic data.
 
-For a real company choose LIVE in the SYS unit. If no SEC contact is configured, the SYS unit asks for an email and saves `SEC_USER_AGENT` to the local `.env`. Write the claim, press READ, check the values and their sources in UNIT 02, then ARM and RUN. "◀ EDIT" goes back to the console with the inputs kept; "+ NEW" starts an empty claim. Past cases are under HIST, where two or more can be compared side by side; ▶ PLAY on a tape on the console opens one directly.
+For a real company choose LIVE on ① Claim. If no SEC contact is configured, the page asks for an email and saves `SEC_USER_AGENT` to the local `.env` (also under SYS · setup, with the Claude key). Write the claim and press READ, check the values and their sources on ② Check, then ARM and RUN. The ② Check key goes back to the inputs with everything kept; "+ NEW" starts an empty claim. Past cases are under HIST, where two or more can be compared side by side; ▶ PLAY on a tape on ① Claim opens one directly.
 
 API:
 
@@ -279,7 +294,7 @@ Statuses: `evaluated`, `evaluated_with_provider_errors`, `blocked_invalid_input`
 ## Layout
 
 ```
-app.py                              Streamlit page (console and report)
+app.py                              Streamlit page (three input steps, seven report pages, history, setup)
 src/tickercase/ui/cockpit.py        console look: page CSS and the HTML of each unit
 src/tickercase/ui/kline.py          K-line chart page (iframe)
 static/                             screen fonts (OFL) and textures, served at /app/static
