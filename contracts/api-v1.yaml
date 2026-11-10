@@ -1,0 +1,317 @@
+# TickerCase API contract, version 1 (Lab Manual Ch 7).
+#
+# Scope: the operations of A2 Acquire Dated Evidence (C.2 Evidence Acquisition Subsystem) and the
+# operations of the use case UC.1 that reach it. Every operation names the IDEF0 function it carries
+# out (x-function-id), the information product it returns (x-idef0-flow) and the requirement it
+# answers (x-requirements), with the numbers of Innoslate project 650.
+#
+# The three internal flows of the A2 diagram each have one operation:
+#   IO.37 Filing Records   A2.1 -> A2.4   POST /evidence/filings
+#   IO.38 Market Records   A2.2 -> A2.4   POST /evidence/market
+#   IO.39 Context Records  A2.3 -> A2.4   POST /evidence/context
+# and the assembled output of A2.4, with the output of A2.5, is POST /evidence.
+#
+# Served by src/tickercase/api.py; the full generated schemas are at GET /openapi.json.
+# tests/test_functional_requirements.py checks that every operationId below is served.
+
+openapi: 3.1.0
+info:
+  title: TickerCase API
+  version: "1.0.0"
+  description: >
+    Turn one sentence about a stock into a probability range from free public data.
+    This contract covers evidence acquisition (A2) and the case operations around it.
+servers:
+  - url: http://localhost:8000
+    description: uvicorn --factory tickercase.api:app_factory
+
+tags:
+  - name: A2 Acquire Dated Evidence
+    description: Function A2, performed by C.2 Evidence Acquisition Subsystem (src/tickercase/acquisition.py).
+  - name: UC.1 Evaluate a Stock Claim
+    description: The case operations of the use case that A2 serves.
+
+paths:
+  /evidence:
+    post:
+      tags: [A2 Acquire Dated Evidence]
+      operationId: acquireDatedEvidence
+      summary: Acquire the evidence set of a confirmed claim (A2).
+      x-function-id: A2
+      x-performed-by: C.2 Evidence Acquisition Subsystem
+      x-module: src/tickercase/acquisition.py::acquire_dated_evidence
+      x-idef0-inputs: [IO.5 Confirmed Claim, IO.7 Source Evidence and Reference Snapshot]
+      x-idef0-controls: [C2 Provider Access Terms, C3 Data Mode Setting]
+      x-idef0-outputs: [IO.6 Evidence Query, IO.29 Evidence Set, IO.30 Source Error Records]
+      x-requirements: [SR.1.2, SR.1.2.1, SR.1.2.2, CR.2.0.2, CR.2.4.1, CR.2.4.2, CR.2.5.1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmedClaimRequest" }
+      responses:
+        "200":
+          description: The evidence set, the requests that were sent and the failures that were isolated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvidenceResponse" }
+        "409": { $ref: "#/components/responses/NotConfirmed" }
+        "422": { $ref: "#/components/responses/InvalidClaim" }
+
+  /evidence/filings:
+    post:
+      tags: [A2 Acquire Dated Evidence]
+      operationId: requestFilingsAndReportedFacts
+      summary: Internal flow IO.37 Filing Records (A2.1 to A2.4).
+      x-function-id: A2.1
+      x-performed-by: C.2.1 SEC EDGAR Client
+      x-module: src/tickercase/acquisition.py::request_filings_and_reported_facts
+      x-idef0-flow: IO.37 Filing Records
+      x-conduit: IF.18 SEC Exchange
+      x-requirements: [SR.1.2.3, SS.2.1, CR.2.1.1, CR.2.1.2]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmedClaimRequest" }
+      responses:
+        "200":
+          description: Filing metadata, reported XBRL facts and Form 4 insider trades, each with its provenance.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FlowResponse" }
+        "409": { $ref: "#/components/responses/NotConfirmed" }
+        "422": { $ref: "#/components/responses/InvalidClaim" }
+
+  /evidence/market:
+    post:
+      tags: [A2 Acquire Dated Evidence]
+      operationId: requestMarketAndOptionData
+      summary: Internal flow IO.38 Market Records (A2.2 to A2.4).
+      x-function-id: A2.2
+      x-performed-by: C.2.2 Market Data Client
+      x-module: src/tickercase/acquisition.py::request_market_and_option_data
+      x-idef0-flow: IO.38 Market Records
+      x-conduit: IF.19 Market Exchange
+      x-requirements: [SR.1.2.4, SS.2.2, CR.2.2.1, CR.2.2.2, CR.2.2.3]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmedClaimRequest" }
+      responses:
+        "200":
+          description: Daily prices, the option chain with its term structure, the Treasury yield, price history rates and the earnings date.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FlowResponse" }
+        "409": { $ref: "#/components/responses/NotConfirmed" }
+        "422": { $ref: "#/components/responses/InvalidClaim" }
+
+  /evidence/context:
+    post:
+      tags: [A2 Acquire Dated Evidence]
+      operationId: requestContextSignals
+      summary: Internal flow IO.39 Context Records (A2.3 to A2.4).
+      x-function-id: A2.3
+      x-performed-by: C.2.3 Context Signal Client
+      x-module: src/tickercase/acquisition.py::request_context_signals
+      x-idef0-flow: IO.39 Context Records
+      x-conduit: IF.20 Context Exchange
+      x-requirements: [SR.1.2.5, SS.2.3, CR.2.3.1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmedClaimRequest" }
+      responses:
+        "200":
+          description: Prediction markets, the Fear & Greed reading and dated headlines, labelled context_only.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FlowResponse" }
+        "409": { $ref: "#/components/responses/NotConfirmed" }
+        "422": { $ref: "#/components/responses/InvalidClaim" }
+
+  /claims/confirm:
+    post:
+      tags: [UC.1 Evaluate a Stock Claim]
+      operationId: confirmClaim
+      summary: Confirm exactly these inputs; the answer carries the fingerprint that A2 requires (A1.4).
+      x-function-id: A1.4
+      x-idef0-flow: IO.5 Confirmed Claim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClaimDraft" }
+      responses:
+        "200":
+          description: The confirmation of these inputs.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Confirmation" }
+        "422": { $ref: "#/components/responses/InvalidClaim" }
+
+  /cases:
+    post:
+      tags: [UC.1 Evaluate a Stock Claim]
+      operationId: runCase
+      summary: Run the whole use case for a confirmed claim (A2 to A6); the evidence of A2 is part of the result.
+      x-function-id: A0
+      x-use-case: UC.1 Evaluate a Stock Claim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmedClaimRequest" }
+      responses:
+        "200":
+          description: The case result (generated schema CaseResult at /openapi.json).
+        "409": { $ref: "#/components/responses/NotConfirmed" }
+        "422": { $ref: "#/components/responses/InvalidClaim" }
+
+  /health:
+    get:
+      tags: [UC.1 Evaluate a Stock Claim]
+      operationId: getHealth
+      summary: Version and the default data mode.
+      responses:
+        "200":
+          description: The service is up.
+
+components:
+  responses:
+    NotConfirmed:
+      description: The claim is not confirmed, or it changed after the confirmation. No source request is sent.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { type: string, enum: [blocked_unconfirmed, blocked_confirmation_stale] }
+    InvalidClaim:
+      description: The claim inputs are not valid. No source request is sent.
+
+  schemas:
+    DataMode:
+      description: C3 Data Mode Setting. One mode for every request of a case (CR.2.4.2).
+      type: string
+      enum: [live, record, replay, synthetic]
+
+    ClaimDraft:
+      description: The claim inputs as the user wrote or corrected them (generated schema at /openapi.json).
+      type: object
+      properties:
+        claim_text: { type: string }
+        ticker: { type: string, examples: [SYNT] }
+        target_price: { type: string, description: Decimal as a string. }
+        horizon_years: { type: string, description: Decimal as a string. }
+      additionalProperties: true
+
+    Confirmation:
+      type: object
+      required: [fingerprint, confirmed_at]
+      properties:
+        fingerprint: { type: string, description: SHA-256 of the confirmed inputs. }
+        confirmed_at: { type: string, format: date-time }
+
+    ConfirmedClaimRequest:
+      description: IO.5 Confirmed Claim (the draft with its confirmation) and the data mode.
+      type: object
+      required: [draft]
+      properties:
+        draft: { $ref: "#/components/schemas/ClaimDraft" }
+        confirmation: { $ref: "#/components/schemas/Confirmation" }
+        sec_mode: { $ref: "#/components/schemas/DataMode" }
+
+    Provenance:
+      description: The provenance record every evidence record carries (SR.1.2.1).
+      type: object
+      required: [retrieved_at, data_mode]
+      properties:
+        source_url: { type: string, format: uri }
+        retrieved_at: { type: string, format: date-time, description: Capture time of this response. }
+        source_captured_at: { type: string, format: date-time, description: Original capture time when the response is a replay. }
+        data_mode: { type: string, enum: [live, replay, synthetic] }
+
+    SourceErrorRecord:
+      description: IO.30 Source Error Records. One failed source request (SR.1.2.2).
+      type: object
+      required: [provider_id, code, message]
+      properties:
+        provider_id: { type: string, examples: [sec_xbrl_companyfacts] }
+        code: { type: string, examples: [timeout, forbidden, rate_limited, snapshot_missing] }
+        message: { type: string }
+        url: { type: string }
+        http_status: { type: integer }
+        retry_after_seconds: { type: number }
+        data_mode: { type: string }
+
+    FilingRecords:
+      description: IO.37 Filing Records.
+      type: object
+      properties:
+        found: { type: boolean }
+        records: { type: array, items: { allOf: [{ $ref: "#/components/schemas/Provenance" }] } }
+        coverage: { type: object }
+        warnings: { type: array, items: { type: string } }
+        reported_facts: { allOf: [{ $ref: "#/components/schemas/Provenance" }] }
+        insiders: { allOf: [{ $ref: "#/components/schemas/Provenance" }] }
+
+    MarketRecords:
+      description: IO.38 Market Records.
+      type: object
+      properties:
+        price_history: { allOf: [{ $ref: "#/components/schemas/Provenance" }] }
+        options: { allOf: [{ $ref: "#/components/schemas/Provenance" }] }
+        risk_free_rate: { type: string }
+        price_base_rate: { allOf: [{ $ref: "#/components/schemas/Provenance" }] }
+        benchmarks: { type: array, items: { type: object } }
+        earnings: { allOf: [{ $ref: "#/components/schemas/Provenance" }] }
+
+    ContextRecords:
+      description: IO.39 Context Records. Context only; no verdict rule reads them (SR.1.2.5).
+      type: object
+      properties:
+        label: { type: string, const: context_only }
+        prediction_markets: { type: object }
+        sentiment: { allOf: [{ $ref: "#/components/schemas/Provenance" }] }
+        news: { allOf: [{ $ref: "#/components/schemas/Provenance" }] }
+
+    EvidenceSet:
+      description: IO.29 Evidence Set, assembled by A2.4.
+      type: object
+      properties:
+        filing: { $ref: "#/components/schemas/FilingRecords" }
+        market: { $ref: "#/components/schemas/MarketRecords" }
+        context: { $ref: "#/components/schemas/ContextRecords" }
+        data_modes:
+          description: The data-mode stamp of each group of records, or "unavailable".
+          type: object
+          additionalProperties: { type: string }
+
+    EvidenceResponse:
+      description: The three outputs of A2.
+      type: object
+      required: [function_id, status]
+      properties:
+        function_id: { type: string, const: A2 }
+        status: { type: string, enum: [evaluated, evaluated_with_provider_errors, blocked_invalid_input, blocked_unconfirmed, blocked_confirmation_stale] }
+        evidence_query: { description: IO.6 Evidence Query. Every URL requested., type: array, items: { type: string, format: uri } }
+        evidence_set: { $ref: "#/components/schemas/EvidenceSet" }
+        source_error_records: { type: array, items: { $ref: "#/components/schemas/SourceErrorRecord" } }
+
+    FlowResponse:
+      description: One internal flow of the A2 diagram.
+      type: object
+      required: [function_id, flow_id, status]
+      properties:
+        function_id: { type: string, enum: [A2.1, A2.2, A2.3] }
+        flow_id: { type: string, enum: [IO.37, IO.38, IO.39] }
+        status: { type: string }
+        evidence_query: { type: array, items: { type: string, format: uri } }
+        filing_records: { $ref: "#/components/schemas/FilingRecords" }
+        market_records: { $ref: "#/components/schemas/MarketRecords" }
+        context_records: { $ref: "#/components/schemas/ContextRecords" }
+        source_error_records: { type: array, items: { $ref: "#/components/schemas/SourceErrorRecord" } }

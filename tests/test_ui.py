@@ -104,7 +104,7 @@ def test_dollar_amounts_cannot_turn_into_inline_math(case):
 
 def test_formats():
     assert ck.amount(215_938_000_000, True) == "2,159.38 亿" and ck.amount(215_938_000_000, False) == "215.94B"
-    assert ck.amount(None, True) == "—" and ck.amount(1_000_000_000_000, False) == "1T"
+    assert ck.amount(None, True) == "—" and ck.amount(1_000_000_000_000, False) == "1.00T"  # two decimals, as the report writes amounts
     assert ck.pct(0.7263, 0) == "73%" and ck.pct(None) == "—"
     css = ck.page_css([("u-b-clm", 1), ("u-c-kln", 2)], flowing=True)
     assert '.st-key-u-b-clm::after{content:"1"}' in css and "tc-fdown" in css
@@ -171,3 +171,31 @@ def test_kline_page_with_candles_escapes_data_and_follows_the_tube(case):
     assert cfg["series"]["mode"] == "candles" and set(cfg["series"]["data"]) == {"D", "M"}  # bars after last_day are dropped
     assert cfg["series"]["data"]["D"][-1] == [bars[19].day.isoformat(), 29, 31, 28, 30, 1000]
     assert cfg["touch"] == "</script><b>x" and "--ph:#FFB23E" in page and '<html lang="zh-CN">' in page
+
+
+def test_signals_are_sorted_by_direction(case):
+    from tickercase.models import PlainReport, Text
+
+    T = lambda en, zh: Text(en=en, zh=zh)  # noqa: E731
+    # a report stored before v0.13.1: the insider line among the agreeing checks, and a filler as a "divergence"
+    old = PlainReport(headline=T("h", "h"), verdict_meaning=T("m", "m"), agreements=[
+        T("Insiders made no open-market purchases in 12 months while selling $405.00M.", "内部人 12 个月内没有任何公开市场买入，同时卖出 4.05 亿美元。"),
+        T("2 checks point against the claim: E1, E3.", "有 2 项检查都对观点不利：E1、E3。"),
+        T("2 checks support it: E2, E5.", "有 2 项检查支持观点：E2、E5。")],
+        divergences=[T("No notable disagreement between the checks.", "各项检查之间没有明显矛盾。")])
+    agree, against, split, notes = ck.sorted_signals(old)
+    assert [m for _, m, _ in agree] == ["−−", "++"] and [m for _, m, _ in against] == ["▼"] and split == [] and notes == []
+    html = ck.sig_unit(case.model_copy(update={"report": old}), True, "SIG", warnings=False)
+    assert "<b>++</b>　内部人" not in html and "<b>▼</b>　内部人" in html
+    assert "<b>—</b>　各项检查之间没有明显矛盾" in html and "<b>!!</b>" not in html  # "!!" appears only in the legend
+    # a new report keeps them apart itself
+    new = case.report
+    assert not any(x.en.startswith("Insiders made") for x in new.agreements)
+    assert not any(x.en.startswith(("No notable", "No two checks")) for x in new.agreements + new.divergences)
+
+
+def test_a_close_above_claim_is_about_the_date(case):
+    end = case.model_copy(update={"oracle": case.oracle.model_copy(update={"condition": "end"})})
+    zh, en = ck.prb_screen(end, True, anim=False), ck.prb_screen(end, False, anim=False)
+    assert "前收在" not in zh and "收在 100 以上)" in zh and "close above 100 on " in en
+    assert "前触及 100" in ck.prb_screen(case, True, anim=False)

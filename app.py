@@ -11,7 +11,9 @@ The look lives in tickercase/ui.
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+import os
+import re
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Optional
@@ -22,6 +24,7 @@ import streamlit as st
 
 from tickercase import __version__
 from tickercase.config import REPO_ROOT, load_settings, write_env_value
+from tickercase.fmt import pct, prob
 from tickercase.http_client import validate_user_agent
 from tickercase.models import VERDICT_DISPLAY_ZH, CaseResult, ClaimDraft, Confirmation, PlainReport, ReferenceSnapshot, Text
 from tickercase.narrative import estimate_cost, recheck
@@ -79,7 +82,7 @@ S = {
     "need_text": ("先写一句观点。", "Write the claim first."),
     "need_ticker": ("先填写股票代码。", "Enter a ticker first."),
     "recognized": ("从原文识别：{items}", "Read from the claim: {items}"),
-    "recognized_none": ("没有从原文识别出代码、目标价或时间。", "Nothing could be read from the claim."),
+    "recognized_none": ("没有从原文读出代码、目标价或时间", "Nothing could be read from the claim"),
     "kept_user": ("保留了你手动填写的：{items}。要改用原文的值，请先清空这些框再点识别。",
                   "Kept the values you typed: {items}. To use the claim's values, clear those fields and read again."),
     "multiple_target": ("目标价 = 参考价 {ref} × {x}（原文「{text}」）", "Target = reference {ref} × {x} (from “{text}”)"),
@@ -100,6 +103,14 @@ S = {
     "refill": ("↻ 按代码重新补全", "↻ Fill again"),
     "refill_help": ("用公开数据重新补全价格、股本和财务数据；你改过的假设不会被覆盖。", "Fills price, shares and financials again from public data for this ticker; assumptions you changed are kept."),
     "read_log": ("ⓘ 读取记录", "ⓘ What was read"),
+    "ticker_switched": ("句子讲的是 {new}，不是之前的 {old}：代码、目标价和时间都按这句话重新读取。",
+                        "The sentence is about {new}, not {old}: ticker, target and time are read from it again."),
+    "target_of": ("目标为参考价的 {x} 倍（「{text}」）", "target {x} times the reference price (“{text}”)"),
+    "no_xbrl": ("SEC 没有这家公司的{what}数据（外国公司按 IFRS 申报时常见）：请在「高级参数」里手动填写，否则无法确认。",
+                "SEC has no {what} data for this company (common for foreign filers reporting under IFRS): enter it under “More inputs”, or the inputs cannot be confirmed."),
+    "mode_dropped": ("数据源换成了 {m}：原来的确认已解除，之前按另一个数据源补全的价格、股本、财务数据和估值假设已清空。",
+                     "The data source is now {m}: the confirmation was released, and the price, shares, financials and valuation assumptions filled from the other source were cleared."),
+    "data_dropped": ("代码换了（{old} → {new}）：上一只股票的价格、股本、财务数据和估值假设已清空。", "The ticker changed ({old} → {new}): the previous stock's price, shares, financials and valuation assumptions were cleared."),
     "cnf_stby": ("按 READ 后，这里列出读到的每一项输入和它的来源：✎ 原文、ⓘ 公开数据、◇ 默认假设。核对无误后按 ARM 确认，RUN 才会亮；之后改动任何一项，都需要重新确认。",
                  "After READ, every input and its source is listed here: ✎ claim, ⓘ public data, ◇ default assumption. Check them and press ARM to confirm; only then does RUN light up. Any later edit needs a new confirmation."),
     "cnf_hint": ("核对每一项和它的来源，尤其是 ◇ 默认假设。无误后按 ARM 确认，RUN 才会亮。", "Check every input and its source, especially ◇ defaults. Press ARM when they are right; then RUN lights up."),
@@ -139,6 +150,8 @@ S = {
     "run_wait": ("正在拉取数据并计算，完成后自动打开报告。", "Fetching data and computing; the report opens when it is done."),
     "run_none": ("还没有要运行的输入：在 ② 核对页确认后按 RUN。", "Nothing to run yet: confirm on ② Check, then press RUN."),
     "run_back": ("◀ 回到 ② 核对", "◀ Back to ② Check"),
+    "run_ready": ("输入已确认，还没有运行。按 RUN 拉取数据并生成报告。", "Inputs are confirmed and not run yet. Press RUN to fetch data and build the report."),
+    "rerun": ("↻ 重新运行（重新拉取数据）", "↻ Run again (fetch the data again)"),
     # setup and guide page, recent tapes
     "u_sys": ("SYS · 系统设置", "SYS · setup"),
     "u_feed": ("FEED · 采用的信息 · 10 CH", "FEED · data we use · 10 CH"),
@@ -150,6 +163,7 @@ S = {
     "u_clm_r": ("① CLM 观点", "① CLM claim"),
     "u_kln": ("① KLN K 线 · {tk}", "① KLN K-line · {tk}"),
     "kln_src": ("YAHOO · 截至 {d} 收盘 · 与案例同一份数据", "YAHOO · to the {d} close · the same data as the case"),
+    "kln_src_syn": ("合成示例 · 截至 {d} 收盘 · 不是真实行情", "SYNTHETIC · to the {d} close · not real prices"),
     "kln_none": ("这份报告没有行情数据，画不出 K 线。", "This report has no price data, so there is no K-line."),
     "u_prb": ("① PRB 概率", "① PRB probability"),
     "prb_chip": ("平方根刻度 · 同一把尺子", "square-root scale · one ruler"),
@@ -171,7 +185,16 @@ S = {
     "prob_none": ("数据不足，无法计算概率", "Not enough data to compute a probability"),
     "target": ("目标价", "Target"), "now_price": ("现价", "Now"),
     "r_layers": ("数据分层", "Evidence by layer"), "r_analysis": ("交叉验证", "Cross-check"),
-    "r_agree": ("一致的信号", "Signals that agree"), "r_diverge": ("关键分歧", "Key divergences"),
+    "r_agree": ("一致的信号", "Signals that agree"), "r_diverge": ("关键分歧", "Key divergences"), "r_against": ("对观点不利的信号", "Signals against the claim"),
+    "r_agree_none": ("没有两项检查明显指向同一方向，请逐层查看。", "No two checks point clearly the same way; read the layers one by one."),
+    "r_notes": ("说明", "Notes"),
+    "mkt_how": ("拆分口径：每天的涨跌按对数收益分成大盘、同类和个股三部分。顶部 20 天合计时，三部分的对数和按同一比例换算成简单收益，所以三部分相加等于总涨跌。"
+                "逐日表里每一列各自从对数换算成百分比，所以同一行的「大盘+同类」加「个股」和「本股」会差一点，个股一列直接相加也会和顶部略有出入。原始对数值在 ⑦ 数据页。",
+                "How the split adds up: each day's move is split in log returns into market, peers and own. For the 20-day totals at the top, the three log sums "
+                "are scaled by one factor into simple returns, so the three parts add up to the total. In the daily table each column is converted from logs to "
+                "percent on its own, so “mkt+peers” plus “own” in a row differs slightly from “stock”, and adding the own column differs slightly from the top. "
+                "The raw log values are on ⑦ Data."),
+    "r_diverge_none": ("各项检查之间没有明显矛盾。", "No notable disagreement between the checks."),
     "r_time": ("时间维度", "Time view"), "r_scen": ("情景推演", "Scenarios"),
     "r_concl": ("结论", "Conclusion"), "r_up": ("什么会让判断变好", "What would strengthen the case"),
     "r_down": ("什么会让判断变差", "What would weaken the case"), "r_monitor": ("需要关注的信号", "Signals to watch"),
@@ -183,7 +206,11 @@ S = {
     # catalyst register
     "cat_chip": ("Claude 提议 · 代码核对 · 你确认", "Claude proposes · code checks · you confirm"),
     "cat_up": ("截止日前已知的日期", "Known dates before the deadline"),
-    "cat_up_none": ("截止日前没有已知日期：既没有财报日期，档案里也没有带时间的催化剂。", "No known dates before the deadline: no earnings date and no dated catalyst in the register."),
+    "target_not_above": ("目标价 {t} 不高于参考价 {r}：观点今天已经成立，或者其实是看跌。下面的概率仍按这个目标价计算。",
+                         "The target {t} is not above the reference price {r}: the claim is already met today, or it is about a fall. The probability below is still computed for this target."),
+    "cat_up_none": ("截止日前没有已知日期：下一次财报在截止日之后，档案里也没有带时间的催化剂。", "No known dates before the deadline: the next earnings come after it and no catalyst in the register is dated."),
+    "cat_up_none_nodate": ("截止日前没有已知日期：暂未取得下一次财报日期（Yahoo 日历还没列出，不代表这段时间没有财报），档案里也没有带时间的催化剂。",
+                           "No known dates before the deadline: the next earnings date is not available yet (the Yahoo calendar does not list it; that does not mean there are no earnings in this time), and no catalyst in the register is dated."),
     "cat_use": ("→ 情景", "→ scenario"),
     "cat_use_help": ("把这个日期和期权定价的幅度填进下方情景推演。", "Fills this date and the option-priced move into the scenario below."),
     "cat_used": ("已填入下方情景推演：{name}，{day}。", "Filled into the scenario below: {name}, {day}."),
@@ -234,6 +261,10 @@ S = {
     "sc_market": ("期权市场怎么看这个日期", "What the option market prices for this date"),
     "sc_move_ok": ("期权价格里为 {d} 前后额外留出了约 **±{m}** 的波动（一个标准差），依据 {b} 和 {a} 两个到期日的隐含波动率。同一段时间里的财报等消息也会算在里面。",
                    "Option prices set aside about **±{m}** of extra movement around {d} (one standard deviation), from the implied volatility of the {b} and {a} expiries. Earnings and other news in the same stretch are included too."),
+    "sc_too_close": ("截止日 {d} 离这份报告的数据日太近，中间放不下一个事件日期，所以没有事件情景。",
+                     "The deadline {d} is too close to this report's data day to place an event before it, so there is no event scenario."),
+    "sc_move_ok_first": ("期权价格里为 {d} 前后额外留出了约 **±{m}** 的波动（一个标准差），依据从今天到 {a} 这个最近到期日的隐含波动率（事件前没有可用的到期日）。同一段时间里的财报等消息也会算在里面。",
+                         "Option prices set aside about **±{m}** of extra movement around {d} (one standard deviation), from the implied volatility from today to the nearest expiry, {a} (no expiry before the event can be used). Earnings and other news in the same stretch are included too."),
     "sc_move_flat": ("期权价格没有为 {d} 前后额外加价波动：市场目前不认为这个日期特别。", "Option prices add no extra volatility around {d}: the market does not treat the date as special right now."),
     "sc_move_na": ("算不出来：", "Not computable: "),
     "sc_use_market": ("用市场幅度填入", "Use the market's size"),
@@ -248,7 +279,7 @@ S = {
     "sc_break": ("要让概率达到 50%，你需要相信事件成功的可能性至少是 **{p}**。", "For a 50% chance you would need to believe the event succeeds at least **{p}** of the time."),
     "sc_break_zero": ("即使事件失败，概率也已超过 50%。", "Even if the event fails the chance is already above 50%."),
     "sc_break_none": ("即使事件一定成功，按这个幅度概率也只有 **{p}**，到不了 50%。", "Even if the event certainly succeeds, this size gives only **{p}**, short of 50%."),
-    "sc_implied": ("按你填的涨跌幅，现在的期权价格相当于市场认为成功的可能性约 **{p}**。你填的是 {u}。", "With your move sizes, today's option prices amount to the market giving the event about **{p}**. You entered {u}."),
+    "sc_implied": ("按你填的涨跌幅，现在的期权价格相当于市场认为成功的可能性{p}。你填的是 {u}。", "With your move sizes, today's option prices amount to the market giving the event {p}. You entered {u}."),
     "sc_note": ("算法：普通波动之外，在事件日期加一次跳动。「到期站上」是精确解；「期间触及」把事件当天的价格近似为今天的价格。用的是无风险利率作漂移，与期权方法一致。",
                 "Method: ordinary volatility plus one jump on the event date. Exact for “on the date”; for “touch” the price on the event day is approximated by today's. The drift is the risk-free rate, as in the option method."),
     "sc_need": ("这份报告缺少现价或波动率，无法推演情景。", "This report lacks a current price or volatility, so no scenario can be computed."),
@@ -274,8 +305,11 @@ S = {
         "- Missing data is listed, never filled in.\n"
         "- Insider trades are separated by type: grants, exercises and tax withholding are not counted as selling."),
     # fundamentals
-    "f_intro": ("这一页检查业绩能否撑起目标价：按你确认的估值假设，算出目标价需要多少营收或利润，再和已披露的数据比较（课程文档 OA.13/OA.14 的结论与复查条件）。",
-                "This page checks whether the business can carry the target: under your valuation assumptions it works out the revenue or profit the target needs and compares it with reported data (the course's OA.13/OA.14 verdict and rechecks)."),
+    "f_intro": ("这一页检查业绩能否撑起目标价：按你确认的估值假设，算出目标价需要多少营收或利润，再和已披露的数据比较；结论描述的是当日的证据，并列出什么时候需要重新评估。",
+                "This page checks whether the business can carry the target: under your valuation assumptions it works out the revenue or profit the target needs and compares it with reported data; the verdict describes the evidence on that date and lists when to review it again."),
+    "disclaimer": ("TickerCase 用公开数据计算观点的概率区间，并按你的假设检查观点需要什么。概率是期权市场隐含或模型的输出，基本面结论描述的是某一天的证据；都不是价格预测、保证或投资建议。",
+                   "TickerCase computes probability ranges for a claim from public data and checks what the claim requires under your assumptions. Probabilities are market-implied or model outputs, and the fundamentals verdict describes the evidence on a date; neither is a price prediction, a guarantee or investment advice."),
+    "inputs_of": ("输入：", "Inputs: "), "data_modes": ("各数据步骤的模式：", "Data mode per step: "),
     "as_of": ("证据截至 {d} · {r}", "Evidence as of {d} · {r}"),
     "rationale": ("判断依据", "Rationale"), "rechecks": ("何时需要重新评估", "When to review again"),
     "watch": ("观察：", "Watch: "), "threshold": ("阈值：", "Threshold: "), "linked": ("关联：", "Linked to: "),
@@ -287,15 +321,17 @@ S = {
     "sens": ("敏感性：不同估值倍数和时间下所需的年增速", "Sensitivity: required yearly growth for other multiples and horizons"),
     "sens_note": ("行是估值倍数，列是时间（年）。基数：{b}。对比已披露增速 {h}：✔ 不高于，◐ 高出不超过 5 个百分点，✖ 高出更多。加粗为你的假设。",
                   "Rows are multiples, columns are horizons (years). Base: {b}. Compared with reported growth {h}: ✔ at or below, ◐ up to 5 pp above, ✖ more. Bold marks your assumption."),
+    "sens_offset": ("列是从参考价日（{ref}）算起的年数；增速从基期财年末算起，所以每一列都多算 {y} 年（例如“{h} 年”一列按 {t} 年算）。各列都沿用观点期限下的目标期股份数。",
+                    "Columns count years from the reference date ({ref}); the growth runs from the base fiscal year end, so each column adds {y} years (the “{h} y” column uses {t} years). Every column keeps the target-date share count of the claim's horizon."),
     "sens_none": ("没有可用的基期数值，无法计算敏感性。", "No base value available, so no sensitivity table."),
     "verdict_kinds": ("结论的四种结果", "The four verdicts"),
     "verdict_kinds_body": (
         "- **✔ 目前证据支持**：所需增长不高于已披露增长，且没有反对证据\n- **◐ 部分支持**：有支持，也有差距或反对项\n"
-        "- **✖ 目前证据不支持**：所需增长远高于已披露增长，或还有其他反对项\n- **? 信息不足**：核心检查缺数据，无法判断\n\n规则为 rules-v1，阈值待团队验证。",
+        "- **✖ 目前证据不支持**：所需增长远高于已披露增长，或还有其他反对项\n- **? 信息不足**：核心检查缺数据，无法判断\n\n规则为 v1（临时），阈值待团队验证；E1 的增速差距超过 15 个百分点时直接判为「目前证据不支持」。",
         "- **✔ Supported Today**: required growth is at or below reported growth and nothing is contrary\n"
         "- **◐ Partially Supported**: some support, with gaps or contrary items\n"
         "- **✖ Not Supported Today**: required growth far above reported growth, or other contrary items\n"
-        "- **? Insufficiently Specified**: the core check lacks data\n\nRules are rules-v1; thresholds await team validation."),
+        "- **? Insufficiently Specified**: the core check lacks data\n\nRules are v1 (provisional); thresholds await team validation; an E1 growth gap above 15 percentage points makes the verdict Not Supported Today on its own."),
     # raw data
     "facts_title": ("SEC 已披露财务数据", "SEC reported financials"), "data_table": ("数据表", "Data table"),
     "price_title": ("股价历史", "Price history"), "filings_title": ("SEC 申报记录", "SEC filings"),
@@ -379,7 +415,7 @@ CALC = {
     "target_assumed_shares": ("目标期股份数（推算）", "Target-date shares (derived)"),
     "required_annual_revenue": ("所需年营收", "Required annual revenue"),
     "required_annual_net_income": ("所需年净利润", "Required annual net income"),
-    "required_metric_cagr": ("所需指标年增速（相对你填写的基期）", "Required metric growth (from your base)"),
+    "required_metric_cagr": ("所需指标年增速（从基期算起）", "Required metric growth (from the base period)"),
 }
 ISSUE_ZH = {
     "not_a_number": "{f}：不是数字", "nan_not_allowed": "{f}：不能是 NaN", "infinity_not_allowed": "{f}：不能是无穷大",
@@ -402,6 +438,7 @@ STEP_LABELS = {
     "benchmarks": ("大盘对标", "Benchmarks"), "base_rate": ("同规模公司基准率", "Peer base rate"), "insiders": ("内部人交易", "Insider trades"),
     "prediction_markets": ("预测市场", "Prediction markets"), "fear_greed": ("恐惧贪婪指数", "Fear & Greed"),
     "market_structure": ("市场结构", "Market structure"), "news": ("新闻标题", "Headlines"), "earnings_date": ("财报日期", "Earnings date"),
+    "claim_inputs": ("观点输入", "Claim inputs"), "market_prices": ("日线行情", "Daily prices"), "analysis": ("分析规则", "Analysis rules"),
 }
 TONE_OF_ROW = {"good": "good", "bad": "bad", "missing": "neutral", "neutral": "neutral"}
 NARR_BADGE = {"verified": "✔", "qualitative": "○", "cited_elsewhere": "⚠", "unsupported": "✖"}
@@ -411,7 +448,19 @@ REPORT_PAGES = {"answer": ("答案", "Answer"), "methods": ("方法", "Methods")
 CIRCLED = "①②③④⑤⑥⑦"
 KEY_FIELDS = ("ticker", "target_price", "horizon_years", "reference_price", "reference_price_date")  # on ② Check; the rest fold into "More inputs"
 MORE_FIELDS = [n for n in TEXT_FIELDS if n not in KEY_FIELDS and n not in ("claim_text", "target_assumed_shares")]
+# values that belong to one company: they are cleared when the ticker changes (the claim, the target, the time and the drift stay)
+COMPANY_FIELDS = [n for n in TEXT_FIELDS if n not in ("claim_text", "ticker", "target_price", "horizon_years", "probability_drift")]
 KLINE_HEIGHT = 520
+
+
+SCROLL_TOP = ("<script>(() => { const top = () => { const m = document.querySelector('[data-testid=\"stMain\"]'); if (m) m.scrollTo(0, 0); "
+              "window.scrollTo(0, 0); }; setTimeout(top, 60); setTimeout(top, 400); })()</script>")
+# HIST keeps its table above the open report: a page of that report opens at the report's status bar, not at the table
+SCROLL_REPORT = ("<script>(() => { const go = () => { const el = document.getElementById('tc-report-top'); "
+                 "const m = document.querySelector('[data-testid=\"stMain\"]'); if (!el) return; "
+                 "if (m && m.scrollHeight > m.clientHeight) m.scrollTo(0, el.getBoundingClientRect().top + m.scrollTop - 12); "
+                 "else window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 12); }; "
+                 "setTimeout(go, 60); setTimeout(go, 400); })()</script>")
 
 
 def lang() -> str:
@@ -472,6 +521,8 @@ def finish(chart: alt.Chart) -> alt.Chart:
 def fmt_amount(value: Optional[Decimal], unit: str = "") -> str:
     if value is None:
         return "—"
+    if zh() and unit in ("USD", "shares"):  # 亿 / 万亿 with the unit in words
+        return f"{ck.amount(value, True)} {'美元' if unit == 'USD' else '股'}"
     v = abs(value)
     sign = "-" if value < 0 else ""
     for size, suffix in ((Decimal("1e12"), "T"), (Decimal("1e9"), "B"), (Decimal("1e6"), "M")):
@@ -481,17 +532,11 @@ def fmt_amount(value: Optional[Decimal], unit: str = "") -> str:
 
 
 def fmt_pct(value: Optional[Decimal]) -> str:
-    return "—" if value is None else f"{value * 100:,.2f}%"
+    return pct(value, 2)
 
 
 def pct_p(p) -> str:
-    if p is None:
-        return "—"
-    if p < 0.001:
-        return "<0.1%"
-    if p > 0.999:
-        return ">99.9%"
-    return f"{p * 100:.1f}%"
+    return prob(p, 1)
 
 
 def fmt_calc(item) -> str:
@@ -548,6 +593,10 @@ def notes_of(result: CaseResult) -> list[str]:
 @st.cache_resource
 def get_service() -> CaseService:
     settings = load_settings()
+    fixed = os.environ.get("TICKERCASE_TODAY", "").strip()  # a fixed evaluation day, so a replayed or synthetic case gives the same pages on any day
+    if fixed:
+        moment = datetime.combine(date.fromisoformat(fixed), time(12, 0), tzinfo=timezone.utc)
+        return CaseService(settings, store=CaseStore(settings.case_dir), now=lambda: moment)
     return CaseService(settings, store=CaseStore(settings.case_dir))
 
 
@@ -574,11 +623,21 @@ def _init_state() -> None:
         st.session_state.setdefault(key, None)
     st.session_state.setdefault("prefill_sources", {})
     st.session_state.setdefault("history_selected", None)
+    st.session_state.setdefault("data_ticker", None)  # the ticker the price, shares and financials in the form belong to
+
+
+SCENARIO_KEYS = ("sc_name_", "sc_date_", "sc_p_", "sc_vol_", "sc_up_", "sc_down_", "cat_acc_")
 
 
 def _keep_widget_state() -> None:
-    """The console's inputs are not drawn on the report page; writing them back keeps Streamlit from dropping them meanwhile."""
-    for key in [f"f_{n}" for n in TEXT_FIELDS] + ["f_valuation_method", "f_share_mode", "f_price_condition", "sec_mode", "ai_auto"]:
+    """Widgets that are not drawn on every page, or whose label changes with the language, would lose their value.
+
+    Writing the value back keeps it: the inputs while a report page is shown, the bridge switches (view, phosphor,
+    language) when the language changes their labels, and the scenario controls.
+    """
+    keys = [f"f_{n}" for n in TEXT_FIELDS] + ["f_valuation_method", "f_share_mode", "f_price_condition", "sec_mode", "ai_auto", "view", "tube", "lang"]
+    keys += [k for k in list(st.session_state.keys()) if isinstance(k, str) and k.startswith(SCENARIO_KEYS)]
+    for key in keys:
         if key in st.session_state:
             st.session_state[key] = st.session_state[key]
 
@@ -592,11 +651,14 @@ def _load_example(key: str) -> None:
     draft = json.loads(Path(EXAMPLES[key]).read_text(encoding="utf-8"))["draft"]
     for name in TEXT_FIELDS:
         st.session_state[f"f_{name}"] = str(draft.get(name) or "")
+    for name in ("reference_price_source", "base_metric_period"):  # labels, written in the page's language
+        st.session_state[f"f_{name}"] = source_text(st.session_state[f"f_{name}"])
     st.session_state["f_valuation_method"] = draft["valuation_method"]
     st.session_state["f_share_mode"] = "absolute" if draft.get("target_assumed_shares") else "trend"
     st.session_state["f_price_condition"] = draft.get("price_condition") or "end"
     # example values count as untouched, so "Read and fill in" for another ticker replaces them
     st.session_state["example_values"] = {name: st.session_state[f"f_{name}"] for name in TEXT_FIELDS} | {"share_mode": st.session_state["f_share_mode"]}
+    st.session_state["data_ticker"] = (draft.get("ticker") or "").strip().upper() or None
     st.session_state["sec_mode"] = "synthetic"
     st.session_state["view"] = "new"
     st.session_state["page"] = "check"  # an example is complete: next is checking it
@@ -617,7 +679,72 @@ def _clear_form() -> None:
     st.session_state["prefill_msg"] = None
     st.session_state["extract_msg"] = None
     st.session_state["prefill_snapshot"] = None
+    st.session_state["data_ticker"] = None
+    st.session_state["claim_valuation"] = None
     _reset_confirmation()
+
+
+def _drop_company_data() -> None:
+    """Clear every value that belongs to the previous stock: public data, defaults and the user's own valuation inputs."""
+    sources = st.session_state["prefill_sources"]
+    for name in COMPANY_FIELDS:
+        st.session_state[f"f_{name}"] = ""
+        sources.pop(name, None)
+    st.session_state["f_share_mode"] = "trend"
+    st.session_state["f_valuation_method"] = "price_to_sales"  # the new stock starts from the default method, not the old one's
+    if st.session_state["example_values"].get("probability_drift") and _is_untouched("probability_drift"):
+        st.session_state["f_probability_drift"] = ""  # an example's μ is not this stock's
+    st.session_state["claim_valuation"] = None
+    st.session_state["example_values"] = {}
+    st.session_state["prefill_snapshot"] = None
+    _reset_confirmation()
+
+
+def _is_number(text: str) -> bool:
+    try:
+        return Decimal(text.strip().replace(",", "")).is_finite()
+    except Exception:
+        return False
+
+
+def _sync_company_data() -> Optional[tuple[str, str]]:
+    """When the ticker is no longer the one the form's data belongs to, that data goes; returns the (zh, en) note saying so."""
+    old, new = st.session_state.get("data_ticker"), st.session_state["f_ticker"].strip().upper()
+    if not old or new == old:
+        return None
+    _drop_company_data()
+    st.session_state["data_ticker"] = None
+    return S["data_dropped"][0].format(old=old, new=new or "—"), S["data_dropped"][1].format(old=old, new=new or "—")
+
+
+def _mode_changed() -> None:
+    """Another data source: the confirmation belonged to the old one (DEMO -> LIVE kept it, and RUN then took synthetic
+    values for real ones), and values filled from the old source's data or an example go; the stock's own data is filled again."""
+    _reset_confirmation()
+    filled = st.session_state["prefill_sources"] or st.session_state["example_values"] or st.session_state.get("data_ticker")
+    if not filled:
+        return
+    _drop_company_data()
+    st.session_state["data_ticker"] = None
+    mode = MODES[st.session_state["sec_mode"]]
+    note = (S["mode_dropped"][0].format(m=mode[0]), S["mode_dropped"][1].format(m=mode[1]))
+    st.session_state["prefill_msg"] = None
+    if st.session_state["f_ticker"].strip():
+        _prefill()
+    kind, (zh_text, en_text) = st.session_state["prefill_msg"] or ("warning", ("", ""))
+    _msg("prefill_msg", "error" if kind == "error" else "warning", (f"{note[0]} {zh_text}".strip(), f"{note[1]} {en_text}".strip()))
+
+
+def _ticker_changed() -> None:
+    """A ticker typed on ② Check: drop the old stock's data and fill in the new one's."""
+    dropped = _sync_company_data()
+    st.session_state["prefill_msg"] = None
+    st.session_state["extract_msg"] = None  # what READ said about the sentence's stock no longer applies
+    if st.session_state["f_ticker"].strip():
+        _prefill()
+    if dropped:
+        kind, (zh_text, en_text) = st.session_state["prefill_msg"] or ("warning", ("", ""))
+        _msg("prefill_msg", "error" if kind == "error" else "warning", (f"{dropped[0]} {zh_text}".strip(), f"{dropped[1]} {en_text}".strip()))
 
 
 def _new_claim() -> None:
@@ -651,8 +778,10 @@ def _pct_text(rate: str) -> str:
 
 
 def _apply(name: str, sug, sources: dict) -> None:
-    st.session_state[f"f_{name}"] = sug.value
-    sources[name] = (sug.value, sug.source)
+    # the two labels that are filled in as text are written in the page's language; the rest are numbers and tickers
+    value = source_text(sug.value) if name in ("reference_price_source", "base_metric_period") else sug.value
+    st.session_state[f"f_{name}"] = value
+    sources[name] = (value, sug.source)
 
 
 def _msg(key: str, kind: str, zh_en: tuple[str, str]) -> None:
@@ -669,6 +798,7 @@ def _prefill() -> None:
     except ValueError as exc:
         _msg("prefill_msg", "error", (str(exc), str(exc)))
         return
+    st.session_state["data_ticker"] = ticker.upper()
     sources: dict[str, tuple[str, str]] = dict(st.session_state["prefill_sources"])
     method = st.session_state["f_valuation_method"]
     for name, sug in snap.suggestions.items():  # public reference values are refreshed
@@ -684,7 +814,8 @@ def _prefill() -> None:
     for name, sug in (("valuation_multiple", _multiple_suggestion(snap, method)),
                       ("peer_tickers", snap.assumption_suggestions.get("peer_tickers")),
                       ("filings_since", snap.assumption_suggestions.get("filings_since"))):
-        if sug is not None and _is_untouched(name):  # assumptions only fill empty or untouched fields
+        claim_said = (sources.get(name) or ("", ""))[1].startswith(CLAIM_TEXT_PREFIX)
+        if sug is not None and _is_untouched(name) and not claim_said:  # assumptions only fill empty or untouched fields, never what the claim said
             _apply(name, sug, sources)
             if name != "filings_since":
                 defaults.append((name, sug.value))
@@ -701,6 +832,8 @@ def _prefill() -> None:
     st.session_state["prefill_snapshot"] = snap
     errors = "; ".join(f"{e.provider_id}: {e.code}" for e in snap.provider_errors)
     n = len(sources)
+    absent = [(zh_w, en_w) for name, zh_w, en_w in (("current_shares", "股本", "share count"), ("base_annual_metric", "营收或利润", "revenue or profit"))
+              if name not in sources and not st.session_state.get(f"f_{name}", "").strip()]
     if not sources:
         _msg("prefill_msg", "error", (S["nothing_fetched"][0].format(errors=errors), S["nothing_fetched"][1].format(errors=errors)))
     else:
@@ -711,8 +844,31 @@ def _prefill() -> None:
         if errors:
             zh_text += " " + S["not_fetched"][0].format(errors=errors)
             en_text += " " + S["not_fetched"][1].format(errors=errors)
-        _msg("prefill_msg", "warning" if errors else "success", (zh_text, en_text))
+        if absent and not errors:
+            zh_text += " " + S["no_xbrl"][0].format(what="、".join(a for a, _ in absent))
+            en_text += " " + S["no_xbrl"][1].format(what=" and ".join(b for _, b in absent))
+        _msg("prefill_msg", "warning" if errors or absent else "success", (zh_text, en_text))
+    _horizon_from_reference_date()
     _reset_confirmation()
+
+
+def _horizon_from_reference_date() -> None:
+    """A date in the sentence ("明年" = 31 December) was turned into years from today, but the deadline counts from the
+    reference price's date (the last close, often the day before): count the years from that date so the deadline is the date."""
+    ex = st.session_state.get("extraction")
+    src = st.session_state["prefill_sources"].get("horizon_years")
+    current = st.session_state["f_horizon_years"].strip()
+    if ex is None or ex.target_date is None or src is None or not src[1].startswith(CLAIM_TEXT_PREFIX) or current != src[0]:
+        return
+    try:
+        ref = date.fromisoformat(st.session_state["f_reference_price_date"].strip())
+    except ValueError:
+        return
+    if ex.target_date <= ref:
+        return
+    years = format((Decimal((ex.target_date - ref).days) / Decimal("365.25")).quantize(Decimal("0.0001")), "f")
+    st.session_state["f_horizon_years"] = years
+    st.session_state["prefill_sources"]["horizon_years"] = (years, src[1])
 
 
 def _extract_and_fill() -> None:
@@ -728,6 +884,15 @@ def _extract_and_fill() -> None:
     ex = get_service().extract(text, mode=st.session_state["sec_mode"])
     sources = dict(st.session_state["prefill_sources"])
     found_zh, found_en, kept_zh, kept_en = [], [], [], []
+    notes: list[tuple[str, str]] = []
+    new_t, old_t = (ex.ticker or "").upper(), st.session_state["f_ticker"].strip().upper()
+    if new_t and old_t and new_t != old_t:
+        # the sentence names another stock: what was typed for the old one does not carry over
+        for name in ("ticker", "target_price", "horizon_years"):
+            st.session_state[f"f_{name}"] = ""
+            sources.pop(name, None)
+            st.session_state["prefill_sources"].pop(name, None)
+        notes.append((S["ticker_switched"][0].format(new=new_t, old=old_t), S["ticker_switched"][1].format(new=new_t, old=old_t)))
     for name, value, src in (("ticker", ex.ticker, ex.ticker_text), ("target_price", ex.target_price, ex.target_text),
                              ("horizon_years", ex.horizon_years, ex.horizon_text)):
         current, old = st.session_state[f"f_{name}"].strip(), sources.get(name)
@@ -738,13 +903,17 @@ def _extract_and_fill() -> None:
                 sources.pop(name)
             continue
         val = format(value.normalize(), "f") if isinstance(value, Decimal) else str(value)
-        if not _is_untouched(name):
+        if not _is_untouched(name) and (name == "ticker" or _is_number(current)):  # a typed value that is not a number gives way
             if current != val:  # the user's own entry wins, but say so instead of skipping it silently
                 kept_zh.append(f"{FIELD_META[name][0]} {current}（原文是 {val}）")
                 kept_en.append(f"{FIELD_META[name][1]} {current} (the claim says {val})")
             continue
         st.session_state[f"f_{name}"] = val
         sources[name] = (val, f"{CLAIM_TEXT_PREFIX}{src}")
+        if name == "horizon_years" and ex.target_date is not None:
+            found_zh.append(f"截止日 {ex.target_date}（「{src}」）")
+            found_en.append(f"deadline {ex.target_date} (“{src}”)")
+            continue
         found_zh.append(f"{FIELD_META[name][0]} {val}（「{src}」）")
         found_en.append(f"{FIELD_META[name][1]} {val} (“{src}”)")
     cond_src = sources.get("price_condition")
@@ -758,15 +927,47 @@ def _extract_and_fill() -> None:
         sources.pop("price_condition")
     st.session_state["prefill_sources"] = sources
     st.session_state["extraction"] = ex
+    dropped = _sync_company_data()  # a new sentence about another stock (or none) must not keep the old stock's numbers
+    if ex.target_multiple is not None and ex.target_price is None:
+        x = format(ex.target_multiple.normalize(), "f")
+        found_zh.append(S["target_of"][0].format(x=x, text=ex.target_text))
+        found_en.append(S["target_of"][1].format(x=x, text=ex.target_text))
+    old_val = sources.get("valuation_multiple")
+    if not ex.valuation_method and old_val is not None and old_val[1].startswith(CLAIM_TEXT_PREFIX) \
+            and st.session_state["f_valuation_multiple"] == old_val[0]:
+        st.session_state["f_valuation_multiple"] = ""  # the earlier sentence's valuation is not in this one
+        sources.pop("valuation_multiple")
+        if st.session_state["claim_valuation"] is not None:
+            st.session_state["f_valuation_method"] = "price_to_sales"  # so is the method it named
+        st.session_state["claim_valuation"] = None
     zh_text = S["recognized"][0].format(items="；".join(found_zh)) if found_zh else S["recognized_none"][0]
     en_text = S["recognized"][1].format(items="; ".join(found_en)) if found_en else S["recognized_none"][1]
-    if ex.notes_zh:
-        zh_text += " " + " ".join(ex.notes_zh)
-        en_text += " " + " ".join(ex.notes_en)
+    if ex.valuation_method and ex.valuation_multiple is not None:
+        val = format(ex.valuation_multiple.normalize(), "f")
+        kind = ("市盈率 P/E", "P/E") if ex.valuation_method == "price_to_earnings" else ("市销率 P/S", "P/S")
+        current, old = st.session_state["f_valuation_multiple"].strip(), sources.get("valuation_multiple")
+        if not current or _is_untouched("valuation_multiple") or (old is not None and old[1].startswith(CLAIM_TEXT_PREFIX)):
+            st.session_state["f_valuation_method"] = ex.valuation_method
+            st.session_state["f_valuation_multiple"] = val
+            st.session_state["prefill_sources"]["valuation_multiple"] = (val, f"{CLAIM_TEXT_PREFIX}{ex.valuation_text}")
+            st.session_state["claim_valuation"] = (ex.valuation_method, val, ex.valuation_text)
+            zh_text = zh_text.rstrip("。") + f"；估值 {kind[0]} {val} 倍（「{ex.valuation_text}」）"
+            en_text = en_text.rstrip(".") + f"; valuation {kind[1]} {val} (“{ex.valuation_text}”)"
+        elif current != val:
+            kept_zh.append(f"估值倍数 {current}（原文是 {kind[0]} {val}）")
+            kept_en.append(f"valuation multiple {current} (the claim says {kind[1]} {val})")
+    parts_zh, parts_en = [zh_text], [en_text]
+    parts_zh += ex.notes_zh
+    parts_en += ex.notes_en
     if kept_zh:
-        zh_text += " " + S["kept_user"][0].format(items="；".join(kept_zh))
-        en_text += " " + S["kept_user"][1].format(items="; ".join(kept_en))
-    _msg("extract_msg", "warning" if (ex.notes_zh and not found_zh) or kept_zh else "info", (zh_text, en_text))
+        parts_zh.append(S["kept_user"][0].format(items="；".join(kept_zh)))
+        parts_en.append(S["kept_user"][1].format(items="; ".join(kept_en)))
+    parts_zh += [n[0] for n in notes] + ([dropped[0]] if dropped else [])
+    parts_en += [n[1] for n in notes] + ([dropped[1]] if dropped else [])
+    zh_text = " ".join(x if x.endswith(("。", "！", "？")) else x + "。" for x in parts_zh if x)
+    en_text = " ".join((x[0].upper() + x[1:]) if x.endswith((".", "!", "?")) else (x[0].upper() + x[1:] + ".") for x in parts_en if x)
+    _msg("extract_msg", "warning" if (ex.notes_zh and not found_zh) or kept_zh or dropped or notes else "info", (zh_text, en_text))
+    st.session_state["prefill_msg"] = None
     if st.session_state["f_ticker"].strip():
         _prefill()
     # "doubles" / "10x": the target is the reference price times the factor
@@ -782,7 +983,7 @@ def _extract_and_fill() -> None:
         note = (S["multiple_target"][0].format(ref=ref, x=ex.target_multiple, text=ex.target_text),
                 S["multiple_target"][1].format(ref=ref, x=ex.target_multiple, text=ex.target_text))
         kind, (mzh, men) = st.session_state["extract_msg"]
-        _msg("extract_msg", kind, (mzh + " " + note[0], men + " " + note[1]))
+        _msg("extract_msg", kind, (mzh + " " + note[0] + "。", men + " " + note[1] + "."))
 
 
 def _method_changed() -> None:
@@ -792,7 +993,12 @@ def _method_changed() -> None:
     if snap is None:
         return
     method = st.session_state["f_valuation_method"]
+    claim_val = st.session_state.get("claim_valuation")
     for name, sug in (("base_annual_metric", _metric_suggestion(snap, method)), ("valuation_multiple", _multiple_suggestion(snap, method))):
+        if name == "valuation_multiple" and claim_val and claim_val[0] == method:
+            st.session_state["f_valuation_multiple"] = claim_val[1]  # back to the method the claim named: its multiple again
+            sources[name] = (claim_val[1], f"{CLAIM_TEXT_PREFIX}{claim_val[2]}")
+            continue
         if name not in sources or st.session_state[f"f_{name}"] != sources[name][0]:
             continue  # empty or edited by the user; leave it alone
         if sug is None:
@@ -1019,6 +1225,15 @@ def bridge_unit(*, result_page: bool, warn: int) -> None:
 def footer_unit() -> None:
     with st.container(key="u-o-footer"):
         html_block(ck.footer(zh()))
+        # a new step or page opens at its top: Streamlit keeps the scroll position of the page before
+        hist = st.session_state.get("history_selected")
+        here = (st.session_state["view"], st.session_state["page"], st.session_state["rpage"], hist.case_id if hist is not None else "")
+        if st.session_state.get("shown_at") != here:
+            st.session_state["shown_at"] = here
+            st.session_state["scroll_n"] = st.session_state.get("scroll_n", 0) + 1
+            # identical markup in two runs in a row would be kept, not run again: the counter makes each one new
+            script = SCROLL_REPORT if st.session_state["view"] == "history" and hist is not None else SCROLL_TOP
+            st.html(script.replace("<script>", f"<script>/* {st.session_state['scroll_n']} */", 1), unsafe_allow_javascript=True)
 
 
 def step_label(steps: dict, key: str) -> str:
@@ -1036,9 +1251,9 @@ def nav_keys(*, here: str, inputs: bool, report_on: bool, run_on: bool, report_c
         if inputs:
             st.markdown(ck.dymo(t("nav_input"), small=True), unsafe_allow_html=True, width="content")
             for k in INPUT_STEPS:
-                click, args = (_start_run, None) if k == "run" else (_go, (k,))
-                st.button(step_label(INPUT_STEPS, k), key=f"nav_{k}", type="primary" if here == k else "secondary", on_click=click, args=args,
-                          disabled=k == "run" and not run_on and here != "run")
+                # the run key opens the run page; only its RUN button fetches and computes
+                st.button(step_label(INPUT_STEPS, k), key=f"nav_{k}", type="primary" if here == k else "secondary", on_click=_go, args=(k,),
+                          disabled=k == "run" and not run_on and not report_on and here != "run")
             st.markdown('<span class="tc-navsep"></span>', unsafe_allow_html=True, width="content")
         st.markdown(ck.dymo(t("nav_report"), small=True), unsafe_allow_html=True, width="content")
         for k in REPORT_PAGES:
@@ -1095,7 +1310,7 @@ def _restore_from_url() -> None:
 # ------------------------------------------------------------------ input steps
 
 
-def field(name: str, container=None) -> None:
+def field(name: str, container=None, on_change=None) -> None:
     zh_label, en_label, placeholder, help_zh, help_en = FIELD_META[name]
     label, help_text = (zh_label, help_zh) if zh() else (en_label, help_en)
     target = container or st
@@ -1103,7 +1318,7 @@ def field(name: str, container=None) -> None:
     line = ""
     if src and st.session_state.get(f"f_{name}") == src[0]:
         kind = "def" if src[1].startswith(DEFAULT_PREFIX) else "claim" if src[1].startswith(CLAIM_TEXT_PREFIX) else "data"
-        text = src[1].removeprefix(DEFAULT_PREFIX).removeprefix(CLAIM_TEXT_PREFIX)
+        text = source_text(src[1].removeprefix(DEFAULT_PREFIX).removeprefix(CLAIM_TEXT_PREFIX))
         label = f"{label} {ck.MARKS[kind]}"
         line = ck.src_line(kind, (f"「{text}」" if zh() else f"“{text}”") if kind == "claim" else text, zh())
     elif src and st.session_state.get(f"f_{name}", "").strip():
@@ -1111,7 +1326,8 @@ def field(name: str, container=None) -> None:
     if name == "claim_text":
         target.text_area(label, key=f"f_{name}", placeholder=placeholder[0 if zh() else 1], help=help_text, height=110, label_visibility="collapsed")
     else:
-        target.text_input(label, key=f"f_{name}", placeholder=placeholder, help=help_text)
+        hint = placeholder if not placeholder or placeholder.startswith("YYYY") else (f"例如 {placeholder}" if zh() else f"e.g. {placeholder}")
+        target.text_input(label, key=f"f_{name}", placeholder=hint, help=help_text, on_change=on_change)
     if line:
         target.markdown(line, unsafe_allow_html=True)
 
@@ -1134,10 +1350,12 @@ def render_clm() -> None:
         st.button(t("clear"), on_click=_clear_form, key="btn_clear")
         st.space("stretch")
         st.button(t("prefill"), key="btn_prefill", on_click=_read_and_next, help=t("prefill_help"), type="primary")
-    show_msg("extract_msg", only=("error",))  # a READ that found something moves on to ② Check and shows its messages there
-    show_msg("prefill_msg", only=("error",))
+    # a READ that found a ticker moves on to ② Check and shows its messages there; one that did not stays here and says why
+    stayed = not st.session_state["f_ticker"].strip()
+    show_msg("extract_msg", only=("success", "warning", "error", "info") if stayed else ("error",))
+    show_msg("prefill_msg", only=("success", "warning", "error", "info") if stayed else ("error",))
     st.radio(t("mode"), options=list(MODES), format_func=labels(MODES), key="sec_mode", horizontal=True,
-             help=t("mode_help") + " " + MODE_NOTES[st.session_state["sec_mode"]][i])
+             help=t("mode_help") + " " + MODE_NOTES[st.session_state["sec_mode"]][i], on_change=_mode_changed)
     if sec_gate() and st.session_state["sec_mode"] in ("live", "record"):
         render_sec_form()
 
@@ -1145,22 +1363,21 @@ def render_clm() -> None:
 def render_sys() -> None:
     i = 0 if zh() else 1
     html_block(ck.unit_head(t("u_sys"), "", "u-sys"))
-    st.radio(t("mode"), options=list(MODES), format_func=labels(MODES), key="sec_mode", horizontal=True, help=t("mode_help"))
+    st.radio(t("mode"), options=list(MODES), format_func=labels(MODES), key="sec_mode", horizontal=True, help=t("mode_help"), on_change=_mode_changed)
     st.caption(MODE_NOTES[st.session_state["sec_mode"]][i])
-    html_block(ck.sub_head(t("sec_setup")))
     if sec_gate():
+        html_block(ck.sub_head(t("sec_setup")))
         render_sec_form()
     else:
-        html_block(ck.lamp_row("green", t("sec_ok")))
+        html_block(ck.sub_head(t("sec_setup")) + f'<div style="margin:10px 0 14px">{ck.lamp_row("green", t("sec_ok"))}</div>')
         show_msg("sec_msg")
-    html_block(ck.sub_head(t("ai_setup")))
-    st.caption(t("ai_optional"))
+    html_block(ck.sub_head(t("ai_setup")) + f'<p class="tc-para" style="margin:10px 0 4px">{esc(t("ai_optional"))}</p>')
     if not get_service().settings.anthropic_api_key:
         st.caption(t("ai_missing"))
         st.text_input(t("ai_key"), key="ai_key_input", type="password", placeholder="sk-ant-...")
         st.button(t("ai_save"), key="btn_ai_save", on_click=_save_ai_key)
     else:
-        html_block(ck.lamp_row("green", t("ai_ok")))
+        html_block(f'<div style="margin:6px 0 10px">{ck.lamp_row("green", t("ai_ok"))}</div>')
         st.toggle(t("ai_auto"), key="ai_auto", help=t("ai_auto_help"))
     show_msg("ai_msg")
 
@@ -1201,7 +1418,7 @@ def render_key_inputs() -> None:
         st.radio(t("condition") + mark, options=["touch", "end"], format_func=labels({x: S[f"cond_{x}"] for x in ("touch", "end")}), key="f_price_condition",
                  horizontal=True, help=t("condition_help"))
         c = st.columns(3)
-        field("ticker", c[0])
+        field("ticker", c[0], on_change=_ticker_changed)
         field("target_price", c[1])
         field("horizon_years", c[2])
         c = st.columns([2, 2, 2], vertical_alignment="bottom")
@@ -1224,7 +1441,7 @@ def render_more_inputs(validation) -> None:
     trouble = any(i.field in MORE_ISSUE_FIELDS for i in validation.issues) or any(m.blocking and m.field in MORE_ISSUE_FIELDS for m in validation.missing_fields)
     d = _more_defaults()
     label = t("more_inputs", n=len(MORE_FIELDS) + 2) + (t("more_defaults", d=d) if d else "")
-    with st.expander(label, expanded=trouble):
+    with st.expander(label, expanded=trouble, key="more_inputs"):  # a key keeps it open while its label (the ◇ count) changes
         a, b = st.columns(2)
         with a, st.container(key="g-price"):
             group("g_price")
@@ -1265,12 +1482,19 @@ def render_checks(validation) -> None:
     for issue in validation.issues:
         st.error(issue_text(issue))
     if blocking:
-        st.warning(t("missing_core") + ("、" if zh() else ", ").join(label_of(m.field) for m in blocking))
+        st.warning(t("missing_core") + ("、" if zh() else ", ").join(label_of(m.field).replace("（可选）", "").replace(" (optional)", "") for m in blocking))
     optional = [m for m in validation.missing_fields if not m.blocking]
     if optional:
         st.caption(t("optional_missing") + ("；" if zh() else "; ").join(missing_text(m) for m in optional))
     for w in (validation.warnings_zh if zh() else validation.warnings):
         st.caption("⚠ " + w)
+
+
+def _forget_case_widgets(key_suffix: str) -> None:
+    """Drop the scenario sliders, date and catalyst ticks kept under this suffix, so a new report starts from its own values."""
+    for key in [k for k in list(st.session_state.keys()) if isinstance(k, str)]:
+        if key.startswith(SCENARIO_KEYS + ("cat_msg_",)) and (key.endswith(f"_{key_suffix}") or key.startswith(f"cat_acc_{key_suffix}_")):
+            del st.session_state[key]
 
 
 def run_case(draft: ClaimDraft, confirmation: Confirmation, board) -> None:
@@ -1299,6 +1523,7 @@ def run_case(draft: ClaimDraft, confirmation: Confirmation, board) -> None:
                 _msg("ai_msg", "error", (S["ai_failed"][0] + f"{type(exc).__name__}: {exc}", S["ai_failed"][1] + f"{type(exc).__name__}: {exc}"))
         st.session_state["page"] = "result"
         st.session_state["rpage"] = "answer"
+        _forget_case_widgets("current")  # the scenario and catalyst choices of the previous report belong to it
     except Exception as exc:  # unexpected failure; keep page usable and show it
         st.session_state["run_error"] = f"{type(exc).__name__}: {exc}"
     st.rerun()
@@ -1331,12 +1556,12 @@ def render_cnf(current: bool) -> None:
             st.session_state["confirm_feedback"] = None
         except ConfirmationError:
             st.session_state["confirmation"] = None
-            st.session_state["confirm_feedback"] = "invalid"
+            st.session_state["confirm_feedback"] = fingerprint(draft)  # shown until the inputs change
     confirmation = st.session_state["confirmation"]
     state = confirmation_state(draft, confirmation)
     row[2].button(t("run"), key="btn_run", type="primary", disabled=state != "confirmed", width="stretch", on_click=_start_run)
     row[0].markdown(ck.keyswitch(state == "confirmed", zh()), unsafe_allow_html=True)
-    if st.session_state["confirm_feedback"]:
+    if st.session_state["confirm_feedback"] and st.session_state["confirm_feedback"] == fingerprint(draft):
         st.error(t("invalid_confirm"))
     if state == "confirmed":
         st.success(t("confirmed", t=f"{confirmation.confirmed_at:%Y-%m-%d %H:%M:%S}"))
@@ -1415,13 +1640,24 @@ def view_run(current: bool) -> None:
             st.session_state["run_pending"] = False
             st.caption(t("run_wait"))
             run_case(current_draft(), st.session_state["confirmation"], board)
-        elif st.session_state["run_error"]:
-            st.error(t("run_failed") + st.session_state["run_error"])
-            st.caption(t("run_kept"))
-            st.button(t("run_back"), key="btn_run_back", on_click=_go, args=("check",))
         else:
-            st.info(t("run_none"))
-            st.button(t("run_back"), key="btn_run_back", on_click=_go, args=("check",))
+            confirmed = confirmation_state(current_draft(), st.session_state["confirmation"]) == "confirmed"
+            if st.session_state["run_error"]:
+                st.error(t("run_failed") + st.session_state["run_error"])
+                st.caption(t("run_kept"))
+            elif current:
+                html_block(ck.lamp_row("green", t("ready")) + ck.tape(st.session_state["result"], zh()))
+            elif confirmed:
+                st.info(t("run_ready"))
+            else:
+                st.info(t("run_none"))
+            with st.container(horizontal=True, key="runkeys"):
+                st.button(t("run_back"), key="btn_run_back", on_click=_go, args=("check",))
+                if current:
+                    st.button(t("open_report"), key="btn_run_open", on_click=_go_report, args=("answer",), type="primary")
+                if confirmed:
+                    st.button(t("rerun") if current or st.session_state["run_error"] else t("run"), key="btn_run_again",
+                              on_click=_start_run, type="secondary" if current else "primary")
     footer_unit()
     st.html(ck.page_css([("u-c-run", 3)]))
 
@@ -1453,9 +1689,15 @@ def render_report(report: Optional[PlainReport]) -> None:
         html_block(f'<div class="tc-layer">{esc(tr(layer.title))}</div>'
                    + table(S["r_cols"][i], [(tone_dot(TONE_OF_ROW[r.tone]), tr(r.signal), tr(r.data), tr(r.meaning)) for r in layer.rows], nums=(2,)))
     html_block(f'<div class="tc-h">{esc(t("r_analysis"))}</div>')
-    c1, c2 = st.columns(2)
-    c1.markdown(f'<div class="tc-card"><b>{esc(t("r_agree"))}</b>{bullets([tr(x) for x in report.agreements])}</div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="tc-card"><b>{esc(t("r_diverge"))}</b>{bullets([tr(x) for x in report.divergences])}</div>', unsafe_allow_html=True)
+    agree, against, split, notes = ck.sorted_signals(report)
+    cards = [(t("r_agree"), [f"{m} {tr(x)}" for _, m, x in agree] or [t("r_agree_none")]),
+             (t("r_diverge"), [tr(x) for _, _, x in split] or [t("r_diverge_none")])]
+    if against:
+        cards.append((t("r_against"), [tr(x) for _, _, x in against]))
+    if notes:
+        cards.append((t("r_notes"), [tr(x) for _, _, x in notes]))
+    for col, (title, items) in zip(st.columns(len(cards)), cards):
+        col.markdown(f'<div class="tc-card"><b>{esc(title)}</b>{bullets(items)}</div>', unsafe_allow_html=True)
     if report.time_view:
         html_block(f'<div class="tc-layer">{esc(t("r_time"))}</div>'
                    + table(S["r_time_cols"][i], [(tr(r.signal), tr(r.data), tr(r.meaning)) for r in report.time_view]))
@@ -1466,8 +1708,8 @@ def render_report(report: Optional[PlainReport]) -> None:
         st.caption(tr(report.scenario_note))
     html_block(f'<div class="tc-h">{esc(t("r_concl"))}</div><div class="tc-sub" style="font-size:.95rem;opacity:1">{esc(tr(report.verdict_meaning))}</div>')
     c1, c2 = st.columns(2)
-    c1.markdown(f'<div class="tc-card"><b class="tc-good">↑ {esc(t("r_up"))}</b>{bullets([tr(x) for x in report.upside])}</div>', unsafe_allow_html=True)
-    c2.markdown(f'<div class="tc-card"><b class="tc-bad">↓ {esc(t("r_down"))}</b>{bullets([tr(x) for x in report.downside])}</div>', unsafe_allow_html=True)
+    c1.markdown(f'<div class="tc-card"><b class="tc-good">↑ {esc(t("r_up"))}</b>{bullets([tr(x) for x in report.upside] or ["—"])}</div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="tc-card"><b class="tc-bad">↓ {esc(t("r_down"))}</b>{bullets([tr(x) for x in report.downside] or ["—"])}</div>', unsafe_allow_html=True)
     if report.monitor:
         html_block(f'<div class="tc-h">{esc(t("r_monitor"))}</div>'
                    + table(S["r_mon_cols"][i], [(tr(m.signal), tr(m.current), tr(m.threshold), tr(m.meaning)) for m in report.monitor]))
@@ -1482,8 +1724,8 @@ def _years_left(result: CaseResult) -> float:
 
 def _use_market_move(key_suffix: str, move: float) -> None:
     pct = int(round(min(move, 3.0) * 100))
-    st.session_state[f"sc_up_{key_suffix}"] = max(5, pct)
-    st.session_state[f"sc_down_{key_suffix}"] = -min(90, max(5, pct))
+    st.session_state[f"sc_up_{key_suffix}"] = max(1, pct)
+    st.session_state[f"sc_down_{key_suffix}"] = -min(90, max(1, pct))
 
 
 def kpi(label: str, value: str, main: bool = False) -> str:
@@ -1499,9 +1741,15 @@ def tab_scenario(result: CaseResult, key_suffix: str) -> None:
         return
     today = result.created_at.date()
     k = key_suffix
+    if o.target_date <= today + timedelta(days=1):  # no day is left between tomorrow and the deadline for an event
+        st.info(t("sc_too_close", d=o.target_date))
+        return
     c1, c2 = st.columns([2, 1])
     c1.text_input(t("sc_event"), key=f"sc_name_{k}", placeholder=t("sc_event_ph"))
     default_date = min(today + timedelta(days=182), o.target_date - timedelta(days=1))
+    kept = st.session_state.get(f"sc_date_{k}")
+    if kept is not None and not (today + timedelta(days=1) <= kept <= o.target_date):
+        st.session_state[f"sc_date_{k}"] = default_date  # a date from another report outside this one's span
     st.session_state.setdefault(f"sc_date_{k}", default_date)
     ev_date = c2.date_input(t("sc_date"), min_value=today + timedelta(days=1), max_value=o.target_date, key=f"sc_date_{k}")
 
@@ -1513,7 +1761,7 @@ def tab_scenario(result: CaseResult, key_suffix: str) -> None:
         else:
             ev = event_move(term, ev_date, today)
             if ev.status == "ok":
-                st.markdown(t("sc_move_ok", d=ev_date, m=f"{ev.move * 100:.0f}%", b=ev.before_expiry or today, a=ev.after_expiry))
+                st.markdown(t("sc_move_ok" if ev.before_expiry else "sc_move_ok_first", d=ev_date, m=f"{ev.move * 100:.0f}%", b=ev.before_expiry, a=ev.after_expiry))
                 st.button(t("sc_use_market"), key=f"sc_use_{k}", on_click=_use_market_move, args=(k, ev.move))
             elif ev.status == "not_priced":
                 st.markdown(t("sc_move_flat", d=ev_date))
@@ -1546,17 +1794,23 @@ def tab_scenario(result: CaseResult, key_suffix: str) -> None:
     lo, hi = ck.sqrt_x(res.p_if_failure), ck.sqrt_x(res.p_if_success)
     marks = [(res.probability, th["second"], f'{t("sc_result")} {pct_p(res.probability)}', ""), (0.5, th["muted"], "50%", "below")]
     if market_p is not None:
-        marks.append((market_p, th["accent"], f"M1 {pct_p(market_p)}", "below"))
-    mk = "".join(f'<div class="mk {cls}" style="left:{ck.sqrt_x(p):.2f}%;background:{col}"><b>{esc(lbl)}</b></div>' for p, col, lbl, cls in marks)
+        near_half = abs(ck.sqrt_x(market_p) - ck.sqrt_x(0.5)) < 12
+        near_result = abs(ck.sqrt_x(market_p) - ck.sqrt_x(res.probability)) < 12
+        marks.append((market_p, th["accent"], f"M1 {pct_p(market_p)}", "below2" if near_half and near_result else "" if near_half else "below"))
+    def edge(p: float) -> str:
+        x = ck.sqrt_x(p)
+        return " tc-edge-l" if x < 10 else " tc-edge-r" if x > 90 else ""
+    mk = "".join(f'<div class="mk {cls}{edge(p)}" style="left:{ck.sqrt_x(p):.2f}%;background:{col}"><b>{esc(lbl)}</b></div>' for p, col, lbl, cls in marks)
     html_block(f'<div class="tc-gauge"><div class="rail"></div><div class="fill" style="left:{lo:.2f}%;width:{max(hi - lo, .5):.2f}%"></div>{mk}</div>')
     if res.break_even == 0:
         st.markdown(t("sc_break_zero"))
     elif res.break_even is not None:
-        st.markdown(t("sc_break", p=f"{res.break_even * 100:.0f}%"))
+        st.markdown(t("sc_break", p=prob(res.break_even, 0)))
     else:
         st.markdown(t("sc_break_none", p=pct_p(res.p_if_success)))
     if res.market_implied is not None:
-        st.markdown(t("sc_implied", p=f"{res.market_implied * 100:.0f}%", u=f"{p_succ}%"))
+        p_txt = prob(res.market_implied, 0)
+        st.markdown(t("sc_implied", p=f" **{p_txt}**" if p_txt.startswith(("<", ">")) else (f"约 **{p_txt}**" if zh() else f"about **{p_txt}**"), u=f"{p_succ}%"))
     info(t("sc_intro"), t("sc_note"))
 
 
@@ -1623,7 +1877,7 @@ def tab_levels(result: CaseResult) -> None:
             for lim in m.limitations:
                 st.markdown(f"- {tr(lim)}")
             if m.inputs:
-                st.json(m.inputs, expanded=False)
+                st.caption(t("inputs_of") + " · ".join(f"{INPUT_NAMES.get(k, (k, k))[0 if zh() else 1]} {v}" for k, v in m.inputs.items()))
     with st.expander(t("why_trust")):
         st.markdown(t("why_trust_body"))
 
@@ -1639,13 +1893,199 @@ def render_key_numbers(result: CaseResult) -> None:
     req = Decimal(growth.measured["required_cagr_from_reported"]) if growth and "required_cagr_from_reported" in growth.measured else None
     hist = Decimal(growth.measured["reported_cagr"]) if growth and "reported_cagr" in growth.measured else None
     i = 0 if zh() else 1
-    cards = [kpi(CALC[name][i], fmt_calc(calc[name])) for name in ("required_return", "annualized_price_return", "target_market_cap", metric) if name in calc]
+    names = ("required_return", "annualized_price_return", "target_market_cap", metric) if claim.horizon_years >= 1 else ("required_return", "target_market_cap", metric)
+    cards = [kpi(CALC[name][i], fmt_calc(calc[name])) for name in names if name in calc]
     if req is not None:
         cards.append(kpi("所需指标年增速（相对已披露）" if zh() else "Required metric growth (from reported)", fmt_pct(req)))
         if hist is not None:
             cards.append(kpi("近年已披露增速" if zh() else "Reported growth", fmt_pct(hist)))
             cards.append(kpi("差距（百分点）" if zh() else "Gap (pp)", f"{(req - hist) * 100:+.2f}"))
     html_block('<div class="tc-kpis">' + "".join(cards) + "</div>")
+
+
+INPUT_NAMES = {
+    "spot": ("现价", "spot"), "target": ("目标价", "target"), "years": ("年数", "years"), "implied_volatility": ("隐含波动率", "implied volatility"),
+    "historical_volatility": ("历史波动率", "historical volatility"), "rate": ("无风险利率", "risk-free rate"), "windows": ("时间段", "windows"),
+    "hits": ("到期达到", "ended above"), "touch_hits": ("期间达到", "reached"), "companies": ("公司数", "companies"), "achieved": ("达到的公司", "reached"),
+    "required_cagr": ("所需年增速", "required growth"), "required_cagr_from_reported": ("所需年增速（相对已披露）", "required growth (from reported)"),
+    "reported_cagr": ("已披露年增速", "reported growth"), "latest_reported_revenue": ("最近年度营收", "latest revenue"),
+    "latest_reported_net_income": ("最近年度净利润", "latest net income"), "latest_period_end": ("最近财年末", "latest fiscal year end"),
+    "years_from_period_end_to_target": ("财年末到目标日的年数", "years from fiscal year end"), "current_multiple": ("当前倍数", "current multiple"),
+    "assumed_multiple": ("假设倍数", "assumed multiple"), "assumed_over_current": ("假设 ÷ 当前", "assumed / current"),
+    "current_market_cap": ("当前市值", "current market cap"), "reported_shares": ("已披露股数", "reported shares"), "reported_as_of": ("股数截至", "shares as of"),
+    "target_assumed_shares": ("目标期股数", "target-date shares"), "implied_annual_change": ("假设的年变化", "assumed yearly change"),
+    "years_to_target": ("到目标日的年数", "years to target"), "reported_annual_change": ("已披露年变化", "reported yearly change"),
+    "reported_window": ("已披露区间", "reported window"), "last_close": ("最近收盘", "last close"), "required_annual_revenue": ("所需年营收", "required revenue"),
+    "required_annual_net_income": ("所需年净利润", "required net income"), "latest_net_income": ("最近年度净利润", "latest net income"),
+    "past_annualized_price_change": ("过去的年化涨幅", "past yearly price change"),
+    "latest_reported_annual_revenue": ("最近年度营收", "latest revenue"), "latest_reported_annual_net_income": ("最近年度净利润", "latest net income"),
+    "gap": ("增速差距", "growth gap"), "age_days": ("距今天数", "days old"), "window": ("区间", "window"), "shares": ("股数", "shares"),
+    "latest_periodic_filing": ("最近定期报告", "latest periodic filing"),
+}
+MODE_WORDS = {"live": ("实时", "live"), "replay": ("回放", "replay"), "synthetic": ("合成", "synthetic"), "record": ("录制", "record"),
+              "unavailable": ("未取得", "unavailable"), "user_input": ("用户输入", "user input")}
+def mode_word(v: str) -> str:
+    """'live' -> '实时', 'live,replay' -> '实时、回放', 'deterministic rules-v1 (provisional)' -> '确定性规则 v1（临时）'."""
+    if v.startswith("deterministic "):
+        return "确定性规则 v1（临时）" if zh() and "rules-v1" in v else v
+    return ("、" if zh() else ", ").join(MODE_WORDS.get(x, (x, x))[0 if zh() else 1] for x in v.split(","))
+
+
+_RATE_WORDS = ("cagr", "rate", "change", "return", "over_current")
+
+
+def measured_text(key: str, raw) -> str:
+    """A measured value for reading: rates as percentages, amounts in 亿 / B, other numbers shortened."""
+    try:
+        value = Decimal(str(raw))
+    except Exception:
+        m = re.fullmatch(r"(\S+) to (\S+)", str(raw).strip())  # a period: '2022-12-31 to 2025-12-31'
+        return f"{m[1]} 至 {m[2]}" if m and zh() else str(raw)
+    if key == "gap":  # a difference of two yearly rates
+        return f"{value * 100:+.2f} 个百分点" if zh() else f"{value * 100:+.2f} pp"
+    if any(w in key for w in _RATE_WORDS) and abs(value) < 100:
+        return fmt_pct(value) if "over_current" not in key else f"{value:.2f}"
+    if abs(value) >= 1000:
+        return ck.amount(value, zh())
+    return f"{value:,.0f}" if value == value.to_integral_value() else f"{value:,.2f}"
+
+
+_SOURCE_ZH = [
+    (r"yahoo_finance_chart close (\S+) \((\w+)\)", lambda m: f"Yahoo 日线收盘价 {m[1]}（{MODE_WORDS.get(m[2], (m[2], m[2]))[0]}）"),
+    (r"SEC XBRL (\S+) as of (\S+), (\S+) filed (\S+) \((\w+)\)", lambda m: f"SEC XBRL {m[1]}，截至 {m[2]}，{m[4]} 提交的 {m[3]}（{MODE_WORDS.get(m[5], (m[5], m[5]))[0]}）"),
+    (r"SEC XBRL (\S+) FY ending (\S+), (\S+) filed (\S+) \((\w+)\)", lambda m: f"SEC XBRL {m[1]}，截至 {m[2]} 的财年，{m[4]} 提交的 {m[3]}（{MODE_WORDS.get(m[5], (m[5], m[5]))[0]}）"),
+    (r"SEC XBRL unit", lambda m: "SEC XBRL 的单位"),
+    (r"today's (\S+) \(close (\S+) x shares / FY ending (\S+)\)", lambda m: f"今天的 {m[1]}（{m[2]} 收盘价 × 股数 ÷ 截至 {m[3]} 的财年）"),
+    (r"Yahoo Finance similar stocks for (\S+)", lambda m: f"Yahoo Finance 的相似股票（{m[1]}）"),
+    (r"two calendar years of filings", lambda m: "两个日历年的申报"),
+    (r"no change from reported shares as of (\S+)", lambda m: f"与 {m[1]} 披露的股数相同"),
+    (r"reported share trend (\S+) to (\S+) \(after any split\)", lambda m: f"已披露股数 {m[1]} 至 {m[2]} 的趋势（拆股之后）"),
+    (r"no change \(not enough share history after the last split\)", lambda m: "不变（最近一次拆股后股数历史不够）"),
+    (r"(.+) x (\S+) of reference (\S+)", lambda m: f"{m[1]}：参考价 {m[3]} 的 {m[2]} 倍"),
+    (r"FY ending (\S+)", lambda m: f"截至 {m[1]} 的财年"),
+    (r"synthetic example value", lambda m: "合成示例值"),
+    (r"FY(\d{4}) \(synthetic\)", lambda m: f"FY{m[1]}（合成）"),
+    # evidence sources on ⑤
+    (r"([a-z ]+): (\S+), FY ending (\S+), (\S+) filed (\S+)", lambda m: f"{_WHAT_ZH.get(m[1], m[1])}：{m[2]}，截至 {m[3]} 的财年，{m[5]} 提交的 {m[4]}"),
+    (r"([a-z ]+): (\S+), as of (\S+), (\S+) filed (\S+)", lambda m: f"{_WHAT_ZH.get(m[1], m[1])}：{m[2]}，截至 {m[3]}，{m[5]} 提交的 {m[4]}"),
+    (r"close ([\d,.]+) on (\S+) \((\S+)\)", lambda m: f"{m[2]} 收盘价 {m[1]}（{_PROVIDER_ZH.get(m[3], m[3])}）"),
+    (r"daily closes \((\S+)\)", lambda m: f"日线收盘价（{_PROVIDER_ZH.get(m[1], m[1])}）"),
+    (r"(\S+) filed (\S+)", lambda m: f"{m[2]} 提交的 {m[1]}"),
+]
+_WHAT_ZH = {"latest annual revenue": "最近年度营收", "earlier annual revenue": "较早年度营收", "latest annual net income": "最近年度净利润",
+            "earlier annual net income": "较早年度净利润", "shares outstanding": "股份数", "earlier shares outstanding": "较早的股份数"}
+_PROVIDER_ZH = {"yahoo_finance_chart": "Yahoo 日线"}
+
+
+def source_text(text: str) -> str:
+    """Where a value came from, in the page's language (labels are stored in English, or in Chinese when a Chinese page filled them)."""
+    for pattern, fn in (_SOURCE_ZH if zh() else _SOURCE_EN):
+        m = re.fullmatch(pattern, text.strip())
+        if m:
+            return fn(m)
+    return text
+
+
+_MODE_EN = {zh_word: en for zh_word, en in MODE_WORDS.values()}
+_SOURCE_EN = [
+    (r"截至 (\S+) 的财年", lambda m: f"FY ending {m[1]}"),
+    (r"Yahoo 日线收盘价 (\S+)（(\S+)）", lambda m: f"Yahoo daily close {m[1]} ({_MODE_EN.get(m[2], m[2])})"),
+    (r"合成示例值", lambda m: "synthetic example value"),
+    (r"FY(\d{4})（合成）", lambda m: f"FY{m[1]} (synthetic)"),
+]
+
+
+_PROVENANCE = (("public_data:", ("公开数据：", "public data: ")), (CLAIM_TEXT_PREFIX, ("观点原文：", "claim text: ")),
+               (DEFAULT_PREFIX, ("默认假设：", "default assumption: ")), ("derived:", ("推算：", "derived: ")))
+
+
+RAW_COLS = {"metric": ("指标", "metric"), "period_end": ("期末", "period end"), "value": ("数值", "value"), "concept": ("XBRL 概念", "concept"),
+            "form": ("表格", "form"), "filed": ("申报日", "filed"), "accession": ("申报编号", "accession"), "day": ("日期", "day"),
+            "stock": ("本股（简单收益）", "stock (simple)"), "market_log": ("大盘（对数）", "market (log)"), "peers_log": ("同类（对数）", "peers (log)"),
+            "own_log": ("个股（对数）", "own (log)"), "flagged": ("标记 ◆", "flagged ◆"), "filings": ("SEC 申报", "SEC filings"),
+            "period": ("报告期", "period"), "document": ("文件", "document"), "index": ("索引", "index"), "data_mode": ("数据模式", "data mode")}
+
+
+def raw_cols(rows: list[dict]) -> list[dict]:
+    """The raw tables on ⑦ with column names in the page's language (and data modes as words)."""
+    i = 0 if zh() else 1
+    return [{RAW_COLS.get(k, (k, k))[i]: (mode_word(v) if k == "data_mode" else v) for k, v in row.items()} for row in rows]
+
+
+_TERMS = {"base_annual_revenue": ("基期年营收", "base annual revenue"), "base_annual_net_income": ("基期年净利润", "base annual net income"),
+          "assumed_price_to_sales": ("假设市销率", "assumed P/S"), "assumed_price_to_earnings": ("假设市盈率", "assumed P/E"),
+          "years_from_base_period_end": ("基期财年末到目标日的年数", "years from the base year end"), "base_period_end": ("基期财年末", "base year end"),
+          "share_change_rate": ("股份数年变化率", "yearly share change"), "valuation_method": ("估值方法", "valuation method")}
+_USER_CODES = {"user_input": ("你填写的", "entered by you"), "user_input:assumption": ("你填写的假设", "your assumption"),
+               "user_input:claim": ("你写的观点", "your claim"), "user_input:manual_reference_value": ("你填写的参考值", "reference value entered by you")}
+
+
+def term_label(name: str) -> str:
+    """A field or calculation name as the page calls it: 'target_price' -> '目标价'."""
+    i = 0 if zh() else 1
+    for table in (_TERMS, CALC, INPUT_NAMES):
+        if name in table:
+            return table[name][i]
+    return label_of(name)
+
+
+def formula_text(formula: str) -> str:
+    text = re.sub(r"[a-z]+(?:_[a-z]+)+", lambda m: term_label(m.group(0)), formula)
+    return text.replace(", rounded to whole shares", "，取整到股" if zh() else ", rounded to whole shares")
+
+
+_NOTES_ZH = [
+    (r"reference price is a manual value entered by the user", lambda m: "参考价是手动填写的值"),
+    (r"(\w+) is a user assumption \((\w+)\)", lambda m: f"{term_label(m[1])}是用户假设（{S.get('sm_' + m[2], (m[2], m[2]))[0]}）"),
+    (r"(\w+) is a user assumption", lambda m: f"{term_label(m[1])}是用户假设"),
+    (r"target_assumed_shares is the user's assumed share count at the target date, separate from the current count",
+     lambda m: "目标期股份数是用户对目标日股数的假设，和当前股数分开"),
+    (r"(\w+) is a manual reference value entered by the user", lambda m: f"{term_label(m[1])}是手动填写的参考值"),
+    (r"(\w+) at the target date is a user assumption", lambda m: f"目标日的{term_label(m[1])}是用户假设"),
+    (r"base period: (.+)", lambda m: f"基期：{source_text(m[1])}"),
+    (r"(.*?)base period: (.+)", lambda m: f"{m[1]}基期：{source_text(m[2])}"),
+    (r"the base is the reported fiscal year ending (\S+), so the growth runs (\S+) years from then to the target date",
+     lambda m: f"基期是截至 {m[1]} 的已披露财年，所以增速从那时算到目标日，共 {m[2]} 年"),
+    (r"base metric currency not provided", lambda m: "基期指标币种未填写"),
+    (r"base metric currency (\S+) differs from (\S+)", lambda m: f"基期指标币种 {m[1]} 与 {m[2]} 不同"),
+    (r"(\w+) not provided", lambda m: f"{term_label(m[1])}未填写"),
+    (r"(\w+) is (\S+); a compound growth rate from a zero or negative base is undefined",
+     lambda m: f"{term_label(m[1])}为 {m[2]}；从零或负数起算的复合增速没有意义"),
+]
+
+
+def note_text(text: str) -> str:
+    """An assumption or reason of a calculation in the page's language (stored in English)."""
+    if zh():
+        for pattern, fn in _NOTES_ZH:
+            m = re.fullmatch(pattern, text.strip())
+            if m:
+                return fn(m)
+        return text
+    m = re.fullmatch(r"base period: (.+)", text.strip())  # the period itself may have been filled on a Chinese page
+    return f"base period: {source_text(m[1])}" if m else text
+
+
+def provenance_text(raw: str) -> str:
+    """'public_data:yahoo_finance_chart close 2026-10-28 (live)' -> '公开数据：Yahoo 日线收盘价 2026-10-28（实时）'."""
+    if raw in _USER_CODES:
+        return _USER_CODES[raw][0 if zh() else 1]
+    for prefix, words in _PROVENANCE:
+        if raw.startswith(prefix):
+            rest = raw.removeprefix(prefix)
+            if prefix == "derived:":  # field names in the formula read as their labels
+                rest = re.sub(r"[a-z]+(?:_[a-z]+)+", lambda m: label_of(m.group(0)), rest)
+            return words[0 if zh() else 1] + source_text(rest)
+    return source_text(raw)
+
+
+def threshold_text(raw: str) -> str:
+    """'225634975' -> '2.26 亿' / '225.63M'; anything with words stays as written."""
+    try:
+        value = Decimal(raw.replace(",", ""))
+    except Exception:
+        return raw
+    return ck.amount(value, zh()) if abs(value) >= 1000 else format(value.normalize(), "f")
 
 
 def render_rationale(result: CaseResult) -> None:
@@ -1663,9 +2103,9 @@ def render_rechecks(result: CaseResult) -> None:
             st.caption(t("watch") + pick(r.watch, r.watch_zh))
             extra = []
             if r.threshold:
-                extra.append(t("threshold") + r.threshold)
+                extra.append(t("threshold") + threshold_text(r.threshold))
             if r.linked_to:
-                extra.append(t("linked") + ", ".join(r.linked_to))
+                extra.append(t("linked") + ("、" if zh() else ", ").join(x if x[:1] == "E" and x[1:].isdigit() else label_of(x) for x in r.linked_to))
             if extra:
                 st.caption(" · ".join(extra))
     if v is not None:
@@ -1690,10 +2130,11 @@ def render_evidence(result: CaseResult) -> None:
             if item.sources:
                 with st.expander(t("sources")):
                     for s in item.sources:
-                        text = s.label + (f" · {s.data_mode.value}" if s.data_mode else "")
+                        mode = MODE_WORDS.get(s.data_mode.value, (s.data_mode.value,) * 2)[0 if zh() else 1] if s.data_mode else ""
+                        text = source_text(s.label) + (f" · {mode}" if mode else "")
                         st.markdown(f"- [{text}]({s.url})" if s.url else f"- {text}")
                     if item.measured:
-                        st.json(item.measured, expanded=False)
+                        st.caption(" · ".join(f"{INPUT_NAMES.get(k, (k, k))[0 if zh() else 1]} {measured_text(k, v)}" for k, v in item.measured.items()))
 
 
 def render_sensitivity(result: CaseResult) -> None:
@@ -1710,7 +2151,7 @@ def render_sensitivity(result: CaseResult) -> None:
             return "—"
         d = Decimal(v)
         mark = "" if hist is None else (" ✔" if d <= hist else " ◐" if d - hist <= Decimal("0.05") else " ✖")
-        return f"{d * 100:.1f}%{mark}"
+        return f"{pct(d)}{mark}"
 
     unit = "年" if zh() else "y"
     cols = [f"{h} {unit}" for h in sens.horizons]
@@ -1734,7 +2175,14 @@ def render_sensitivity(result: CaseResult) -> None:
         return out
 
     st.dataframe(df.style.apply(style, axis=None))
-    st.caption(t("sens_note", b=f"{fmt_amount(sens.base_value)} ({sens.base_label})", h=fmt_pct(hist) if hist is not None else "—"))
+    base_label = re.sub(r"reported FY ending (\S+)", r"已披露的截至 \1 的财年", sens.base_label) if zh() else sens.base_label
+    base_label = re.sub(r"your base value \((.*)\)", r"你填写的基期值（\1）", base_label) if zh() else base_label
+    st.caption(t("sens_note", b=f"{fmt_amount(sens.base_value, 'USD')}（{base_label}）" if zh() else f"{fmt_amount(sens.base_value)} ({base_label})",
+                 h=fmt_pct(hist) if hist is not None else "—"))
+    if sens.base_offset_years and Decimal(sens.base_offset_years) > 0:
+        off = Decimal(sens.base_offset_years)
+        st.caption(t("sens_offset", ref=result.confirmed_claim.values.reference_price_date, y=format(off.normalize(), "f"), h=sens.assumed_horizon,
+                     t=format((Decimal(sens.assumed_horizon) + off).normalize(), "f")))
 
 
 def render_calculations(result: CaseResult) -> None:
@@ -1746,15 +2194,16 @@ def render_calculations(result: CaseResult) -> None:
             ("项目" if zh() else "Item"): CALC.get(c.name, (c.name, c.name))[i],
             ("数值" if zh() else "Value"): fmt_calc(c),
             ("原始值" if zh() else "Exact value"): "" if c.value is None else format(c.value, "f"),
-            ("公式" if zh() else "Formula"): c.formula,
-            ("输入" if zh() else "Inputs"): json.dumps(c.inputs, ensure_ascii=False),
-            ("假设/说明" if zh() else "Assumptions / notes"): "; ".join(c.assumptions + ([c.reason] if c.reason else [])),
+            ("公式" if zh() else "Formula"): formula_text(c.formula),
+            ("输入" if zh() else "Inputs"): ("；" if zh() else "; ").join(f"{term_label(k)} = {v}" for k, v in c.inputs.items()),
+            ("假设/说明" if zh() else "Assumptions / notes"): ("；" if zh() else "; ").join(note_text(x) for x in c.assumptions + ([c.reason] if c.reason else [])),
         }
         for c in result.calculations
+        if not (c.name == "annualized_price_return" and result.confirmed_claim.values.horizon_years < 1)  # no yearly rate for a claim under a year
     ]
     st.dataframe(rows, hide_index=True)
     with st.expander(t("provenance")):
-        st.dataframe([{("字段" if zh() else "Field"): label_of(k), ("来源" if zh() else "Source"): v}
+        st.dataframe([{("字段" if zh() else "Field"): term_label(k), ("来源" if zh() else "Source"): provenance_text(v)}
                       for k, v in result.confirmed_claim.value_provenance.items()], hide_index=True)
 
 
@@ -1780,27 +2229,29 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
         required = next((c.value for c in result.calculations if c.name in ("required_annual_revenue", "required_annual_net_income")), None)
         if series:
             label = ("年营收" if is_ps else "年净利润") if zh() else ("Annual revenue" if is_ps else "Annual net income")
-            df = pd.DataFrame({"FY": [f"FY{p.period_end.year}" for p in series], "v": [float(p.value) for p in series],
+            unit_div = 1e8 if zh() else 1.0
+            df = pd.DataFrame({"FY": [f"FY{p.period_end.year}" for p in series], "v": [float(p.value) / unit_div for p in series],
                                "end": [p.period_end.isoformat() for p in series], "filed": [f"{p.form} {p.filed}" for p in series]})
             chart = alt.Chart(df).mark_bar(size=26, color=th["accent"]).encode(
                 x=alt.X("FY:N", title=None, sort=None, axis=alt.Axis(labelAngle=0, labelColor=th["muted"], domain=False, ticks=False)),
-                y=alt.Y("v:Q", title=f"{label} (USD)", axis=alt.Axis(format="~s", **axis)),
+                y=alt.Y("v:Q", title=f"{label}（亿美元）" if zh() else f"{label} (USD)", axis=alt.Axis(format=",.0f" if zh() else "~s", **axis)),
                 tooltip=[alt.Tooltip("FY:N"), alt.Tooltip("v:Q", format=",.0f"), alt.Tooltip("end:N"), alt.Tooltip("filed:N")],
             )
-            peak = max(float(p.value) for p in series)
-            if required is not None and float(required) <= 5 * peak:
-                chart = chart + _rule(float(required), ("观点所需 " if zh() else "Claim needs ") + fmt_amount(required), th["second"])
+            peak = max(float(p.value) / unit_div for p in series)
+            if required is not None and float(required) / unit_div <= 5 * peak:
+                chart = chart + _rule(float(required) / unit_div, ("观点所需 " if zh() else "Claim needs ") + fmt_amount(required, "USD"), th["second"])
             st.altair_chart(finish(chart.properties(height=240)), width="stretch")
-            if required is not None and float(required) > 5 * peak:
-                st.caption(f"观点所需 {fmt_amount(required)}，超过图中最大值 5 倍，未画参考线。" if zh()
-                           else f"The claim needs {fmt_amount(required)}, more than 5x the chart's maximum; no line drawn.")
+            if required is not None and float(required) / unit_div > 5 * peak:
+                st.caption(f"观点所需 {fmt_amount(required, "USD")}，超过图中最大值 5 倍，未画参考线。" if zh()
+                           else f"The claim needs {fmt_amount(required, "USD")}, more than 5x the chart's maximum; no line drawn.")
         rows = []
-        for kzh, ken, pts in (("营收", "Revenue", facts.revenue), ("净利润", "Net income", facts.net_income), ("股份数", "Shares", facts.shares_outstanding)):
-            for p in pts[-5:]:
-                rows.append({"metric": kzh if zh() else ken, "period_end": p.period_end.isoformat(), "value": fmt_amount(p.value),
+        for kzh, ken, pts, unit in (("营收", "Revenue", facts.revenue, "USD"), ("净利润", "Net income", facts.net_income, "USD"),
+                                    ("股份数", "Shares", facts.shares_outstanding, "shares")):
+            for p in pts[-5:]:  # in 亿 like the chart above, not "26.91B"
+                rows.append({"metric": kzh if zh() else ken, "period_end": p.period_end.isoformat(), "value": fmt_amount(p.value, unit),
                              "concept": p.concept, "form": p.form, "filed": p.filed.isoformat(), "accession": p.accession})
         with st.expander(t("data_table")):
-            st.dataframe(rows, hide_index=True)
+            st.dataframe(raw_cols(rows), hide_index=True)
             st.caption(facts.source_url)
     if market is not None:
         html_block(f'<div class="tc-h">{esc(t("price_title"))} · {esc(market.symbol)}</div>')
@@ -1815,8 +2266,8 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
                      c="—" if stc.peers_market_beta is None else f"{stc.peers_market_beta:.3f}", r2=f"{stc.r_squared:.3f}",
                      sd=f"{stc.residual_sd * 100:.2f}%", e0=stc.estimation_start, e1=stc.estimation_end))
         with st.expander(t("data_table")):
-            st.dataframe([{"day": d.day.isoformat(), "stock": round(d.stock, 5), "market_log": round(d.market, 5), "peers_log": round(d.peers, 5),
-                           "own_log": round(d.own, 5), "flagged": d.flagged, "filings": "; ".join(d.filings)} for d in stc.days], hide_index=True)
+            st.dataframe(raw_cols([{"day": d.day.isoformat(), "stock": round(d.stock, 5), "market_log": round(d.market, 5), "peers_log": round(d.peers, 5),
+                                    "own_log": round(d.own, 5), "flagged": d.flagged, "filings": "; ".join(d.filings)} for d in stc.days]), hide_index=True)
         with st.expander(t("mkt_sources")):
             for u in stc.source_urls:
                 st.caption(u)
@@ -1828,7 +2279,7 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
                  "document": r.document_url or "", "index": r.filing_index_url, "data_mode": r.data_mode.value}
                 for r in result.evidence_records]
         with st.expander(t("data_table")):
-            st.dataframe(rows, hide_index=True, column_config={"document": st.column_config.LinkColumn(), "index": st.column_config.LinkColumn()})
+            st.dataframe(raw_cols(rows), hide_index=True, column_config={RAW_COLS[k][0 if zh() else 1]: st.column_config.LinkColumn() for k in ("document", "index")})
             st.caption(t("filings_note"))
     if facts is None and market is None and not result.evidence_records:
         st.info(t("no_public"))
@@ -1836,8 +2287,8 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
         render_model_probability(result)
     html_block(f'<div class="tc-h">{esc(t("run_log"))}</div>')
     status = STATUS[result.status.value][0 if zh() else 1]
-    st.caption(f"case_id {result.case_id} · {result.created_at.isoformat()} · {status}")
-    st.json(result.data_modes, expanded=False)
+    st.caption(f"{'案例编号' if zh() else 'case'} {result.case_id} · {result.created_at:%Y-%m-%d %H:%M:%S} UTC · {status}")
+    st.caption(t("data_modes") + " · ".join(f"{STEP_LABELS.get(k, (k, k))[0 if zh() else 1]} {mode_word(v)}" for k, v in result.data_modes.items()))
     notes = notes_of(result)
     if notes:
         st.markdown(f"**{t('notes', n=len(notes))}**")
@@ -1851,7 +2302,7 @@ def tab_raw(result: CaseResult, key_suffix: str) -> None:
         st.markdown(f"**{t('missing_items')}**")
         for m in result.missing_fields:
             st.write("- " + missing_text(m))
-    st.caption(result.disclaimer)
+    st.caption(t("disclaimer"))
     st.download_button(t("download"), result.model_dump_json(indent=2), file_name=f"tickercase_{result.case_id}.json",
                        mime="application/json", key=f"dl_{key_suffix}")
 
@@ -1890,7 +2341,7 @@ def render_cat(result: CaseResult, key_suffix: str) -> None:
     html_block(ck.sub_head(t("cat_up")))
     rows = ck.upcoming_rows(result, z)
     if not rows:
-        st.caption(t("cat_up_none"))
+        st.caption(t("cat_up_none" if result.earnings is not None else "cat_up_none_nodate"))
     for i, (row, data) in enumerate(rows):
         c = st.columns([7, 1], vertical_alignment="center")
         c[0].markdown(row, unsafe_allow_html=True)
@@ -1955,7 +2406,7 @@ def render_kline(result: CaseResult) -> None:
     v = result.confirmed_claim.values
     m = result.market
     has_data = m is not None and (m.price_series or (m.kline is not None and m.kline.daily))
-    html_block(ck.unit_head(t("u_kln", tk=v.ticker), ck.chip(t("kln_src", d=m.last_date)) if has_data else "", "u-kln"))
+    html_block(ck.unit_head(t("u_kln", tk=v.ticker), ck.chip(t("kln_src_syn" if m.data_mode.value == "synthetic" else "kln_src", d=m.last_date)) if has_data else "", "u-kln"))
     if not has_data:
         st.info(t("kln_none"))
         return
@@ -2015,6 +2466,9 @@ def page_answer(result: CaseResult, key_suffix: str, anim: bool) -> None:
     z = zh()
     with st.container(key="u-b-clm"):
         html_block(ck.claim_unit(result, z, t("u_clm_r")))
+        v = result.confirmed_claim.values
+        if v.target_price <= v.reference_price:  # the range then answers a claim that is already met (or is about a fall)
+            st.warning(t("target_not_above", t=format(v.target_price, "f"), r=format(v.reference_price, "f")))
     with st.container(key="u-c-prb"):
         html_block(ck.unit_head(t("u_prb"), ck.chip(t("prb_chip")), "u-prb"))
         if result.oracle is None:
@@ -2045,8 +2499,8 @@ def page_market(result: CaseResult, key_suffix: str, anim: bool) -> None:
     with st.container(key="u-c-mkt"):
         html_block(ck.mkt_unit(result, z, t("u_mkt"), anim, notes=False))
         stc, ch = result.structure, result.change
-        info(*([tr(n) for n in stc.notes] if stc is not None else []), tr(ch.note) if ch is not None and ch.note else "",
-             ck.L(z, *ck.DELTA_HOW) if ch is not None else "")
+        info(*([tr(n) for n in stc.notes] if stc is not None else []), t("mkt_how") if stc is not None else "",
+             tr(ch.note) if ch is not None and ch.note else "", ck.L(z, *ck.DELTA_HOW) if ch is not None else "")
 
 
 def page_events(result: CaseResult, key_suffix: str, anim: bool) -> None:
@@ -2132,6 +2586,7 @@ def render_report_page(result: CaseResult, key_suffix: str, *, history: bool) ->
     anim = seen not in st.session_state["animated"]  # the first view of each page of a new report plays its motion once
     st.session_state["animated"].add(seen)
     warn = len(ck.warnings_of(result, zh()))
+    html_block('<div id="tc-report-top"></div>')  # where a HIST report page scrolls to (the bar below sticks to the top)
     with st.container(key="u-c-status-bar"):
         html_block(ck.status_bar(result, zh()))
         run_on = not history and confirmation_state(current_draft(), st.session_state["confirmation"]) == "confirmed"
@@ -2167,7 +2622,7 @@ def view_history() -> None:
         o = c.oracle
         if o is None or o.low is None:
             return "—"
-        return f"{pct_p(o.low)} – {pct_p(o.high)}"
+        return ck.range_str(o.low, o.high)
 
     def verdict_text(c: CaseResult) -> str:
         if c.verdict is None:
@@ -2190,7 +2645,7 @@ def view_history() -> None:
                     ("概率" if zh() else "Probability"): prob_text(c),
                     ("基本面结论" if zh() else "Fundamentals"): verdict_text(c),
                     ("数据" if zh() else "Data"): MODES.get(c.data_modes.get("sec_filings", ""), ("—", "—"))[0 if zh() else 1]
-                    if c.data_modes.get("sec_filings") in MODES else c.data_modes.get("sec_filings", "—"),
+                    if c.data_modes.get("sec_filings") in MODES else mode_word(c.data_modes.get("sec_filings", "—")),
                 })
             event = st.dataframe(rows, hide_index=True, on_select="rerun", selection_mode="multi-row", key="history_table")
             selected = [cases[i] for i in (event.selection.rows if event and event.selection else [])]

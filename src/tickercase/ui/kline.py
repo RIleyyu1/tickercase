@@ -52,6 +52,11 @@ def _week52(market: MarketSnapshot, last_day: Optional[date]) -> tuple[Optional[
     return max(b.high for b in bars), min(b.low for b in bars)
 
 
+def _nobreak(text: str) -> str:
+    """A range such as '4–7%' must not wrap at its dash (word joiners on both sides); words wrap at spaces (keep-all in the CSS)."""
+    return (text or "").replace("–", "\u2060–\u2060")
+
+
 def kline_html(market: MarketSnapshot, *, target: float, deadline: date, zh: bool, ticker: str,
                last_day: Optional[date] = None, touch_text: str = "", end_text: str = "", anim: bool = True,
                phosphor: str = "grn") -> str:
@@ -73,7 +78,7 @@ def kline_html(market: MarketSnapshot, *, target: float, deadline: date, zh: boo
     }
     cfg = {
         "series": series, "target": target, "deadline": deadline.isoformat(), "ticker": ticker,
-        "hi52": hi52, "lo52": lo52, "touch": touch_text, "end": end_text, "L": labels, "zh": zh,
+        "hi52": hi52, "lo52": lo52, "touch": _nobreak(touch_text), "end": _nobreak(end_text), "L": labels, "zh": zh,
         "years": max(0.0, (deadline - (last_day or deadline)).days / 365.25),
     }
     data = json.dumps(cfg, ensure_ascii=False).replace("</", "<\\/")
@@ -106,7 +111,7 @@ body{font-family:'FusionPixel','VT323',monospace;color:var(--ph);-webkit-font-sm
 .grid{position:absolute;left:0;right:60px;height:0;border-top:1px dashed rgba(var(--ph-rgb),.22)}
 .gl{position:absolute;right:0;transform:translateY(-50%);font-size:12px;line-height:14px;color:var(--dim);padding:0 3px;background:#0A0D0A}
 .fut{position:absolute;top:0;bottom:0;right:60px;border-left:2px dashed rgba(var(--ph-rgb),.5);background:repeating-linear-gradient(135deg,rgba(var(--ph-rgb),.06) 0,rgba(var(--ph-rgb),.06) 2px,transparent 2px,transparent 10px)}
-.fut span{position:absolute;left:8px;right:6px;font-size:12px;line-height:14px}
+.fut span{position:absolute;left:8px;right:6px;font-size:12px;line-height:14px;word-break:keep-all}
 .tgt{position:absolute;left:0;right:60px;height:0;border-top:2px dashed var(--am);z-index:1}
 .tag{position:absolute;right:0;transform:translateY(-50%);font-size:12px;line-height:16px;padding:1px 5px;z-index:2;background:#0A0D0A;border:1px solid currentColor}
 .tag.inv{background:var(--ph);color:#0A0D0A;border-color:var(--ph)}
@@ -168,7 +173,8 @@ function render(snow) {
   const span = f(hi) - f(lo) || 1;
   const fmin = f(lo) - span * 0.05, fmax = f(hi) + span * 0.1;
   const Y = (p) => (1 - (f(p) - fmin) / (fmax - fmin)) * 100;
-  const fut = tf === 'M' ? Math.min(0.45, (C.years * 12) / (C.years * 12 + n)) : 0.16;
+  const scaled = tf === 'M' ? Math.min(0.45, (C.years * 12) / (C.years * 12 + n)) : 0;
+  const fut = Math.max(0.16, scaled);  // short claims: a readable zone, labelled "not to scale"
   const right = 'calc(60px + (100% - 60px) * ' + fut.toFixed(4) + ')';
   const h = hov == null || hov >= n ? n - 1 : hov;
   const vmax = line ? 1 : Math.max(1, ...ser.map((r) => r[5]));
@@ -189,18 +195,28 @@ function render(snow) {
   const levels = isLog ? [1, 2, 5, 10, 20, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000] : null;
   let grid = '';
   const lv = levels ? levels : (() => { const step = Math.pow(10, Math.floor(Math.log10((hi - lo) / 4))) * 2; const a = []; for (let p = Math.ceil(lo / step) * step; p < hi; p += step) a.push(+p.toFixed(6)); return a; })();
-  lv.filter((p) => p > lo && p < hi && Math.abs(p - C.target) / C.target > 0.03).forEach((p) => {
+  const lastPx = line ? ser[n - 1][1] : ser[n - 1][4];
+  const gap = Math.max(4.5, 2000 / Math.max(el('chart').clientHeight, 1));  // one tag's height (about 20px) in percent of the chart
+  lv.filter((p) => p > lo && p < hi && Math.abs(Y(p) - Y(C.target)) > gap && Math.abs(Y(p) - Y(lastPx)) > gap).forEach((p) => {
     grid += '<span class="grid" style="top:' + Y(p).toFixed(2) + '%"></span><span class="gl" style="top:' + Y(p).toFixed(2) + '%">' + p + '</span>';
   });
   const last = line ? ser[n - 1][1] : ser[n - 1][4];
   const tTop = Y(C.target).toFixed(2), lTop = Y(last).toFixed(2);
-  const futLabel = fmt(tf === 'M' ? L.futM : L.futX, { d: C.deadline });
-  const notes = (C.touch ? '<span class="am note" style="top:' + tTop + '%;transform:translateY(-120%)">' + esc(C.touch) + '</span>' : '')
-    + (C.end ? '<span class="dim note" style="top:' + tTop + '%;transform:translateY(35%)">' + esc(C.end) + '</span>' : '');
+  // a target close to the last price: the two tags are pushed apart (the target's above when it is higher) instead of overlapping
+  let tTag = +tTop, lTag = +lTop;
+  if (Math.abs(tTag - lTag) < gap) {
+    const mid = (tTag + lTag) / 2, up = C.target >= last ? -1 : 1;
+    tTag = mid + up * gap / 2; lTag = mid - up * gap / 2;
+  }
+  const futLabel = fmt(tf === 'M' && scaled >= 0.16 ? L.futM : L.futX, { d: C.deadline });
+  // the touch note sits above the target line, the close note below; a line near the chart's top puts both below it
+  const low = +tTop < 14;
+  const notes = (C.touch ? '<span class="am note" style="top:' + tTop + '%;transform:translateY(' + (low ? '6px' : '-120%') + ')">' + esc(C.touch) + '</span>' : '')
+    + (C.end ? '<span class="dim note" style="top:' + tTop + '%;transform:translateY(' + (low ? '44px' : '35%') + ')">' + esc(C.end) + '</span>' : '');
   el('chart').innerHTML = grid
     + '<div class="fut" style="width:calc((100% - 60px) * ' + fut.toFixed(4) + ')">' + notes + '<span class="dim" style="bottom:6px;text-align:right">' + esc(futLabel) + '</span></div>'
-    + '<span class="tgt" style="top:' + tTop + '%"></span><span class="tag am" style="top:' + tTop + '%">' + esc(L.target + ' ' + C.target) + '</span>'
-    + '<span class="tag inv" style="top:' + lTop + '%">' + last.toFixed(2) + '</span>'
+    + '<span class="tgt" style="top:' + tTop + '%"></span><span class="tag am" style="top:' + tTag.toFixed(2) + '%">' + esc(L.target + ' ' + C.target) + '</span>'
+    + '<span class="tag inv" style="top:' + lTag.toFixed(2) + '%">' + last.toFixed(2) + '</span>'
     + '<div class="bars" style="right:' + right + '">' + bars + '</div>';
   el('vol').style.marginRight = right;
   el('vol').innerHTML = vols;

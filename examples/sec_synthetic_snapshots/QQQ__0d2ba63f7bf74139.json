@@ -4,7 +4,7 @@
  "origin": "synthetic_fixture",
  "request": {
   "method": "GET",
-  "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?range=max&interval=1mo"
+  "url": "https://query1.finance.yahoo.com/v8/finance/chart/QQQ?period1=0&period2=9999999999&interval=1mo"
  },
  "response": {
   "chart": {

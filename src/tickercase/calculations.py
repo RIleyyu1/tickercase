@@ -15,13 +15,28 @@ display happens only in the presentation layer.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
-from typing import Optional
+from typing import Optional, Union
 
 from .models import CalculationItem, ValidatedClaim, ValuationMethod
 
 PRECISION = 34
 RATE_TOLERANCE = Decimal("1e-12")
+
+
+def deadline_from(start: date, horizon_years: Union[Decimal, float, int]) -> date:
+    """The claim's deadline: whole years are calendar years (the same day N years on; 29 February becomes 28 February),
+    other horizons are 365.25-day years rounded to the day."""
+    h = Decimal(str(horizon_years))
+    months = h * 12
+    if h > 0 and abs(months - months.to_integral_value()) < Decimal("0.01"):
+        # whole years and whole months ("a month", "two months", "half a year") are calendar spans
+        total = start.month - 1 + int(months.to_integral_value())
+        year, month = start.year + total // 12, total % 12 + 1
+        last = (date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1)).day
+        return date(year, month, min(start.day, last))
+    return start + timedelta(days=round(float(h) * 365.25))
 
 
 def _ctx() -> Context:

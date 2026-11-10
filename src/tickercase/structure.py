@@ -36,6 +36,7 @@ from decimal import Decimal
 from itertools import combinations
 from typing import Callable, Optional, Sequence
 
+from .fmt import pct
 from .models import (
     CaseResult,
     NewsItem,
@@ -313,8 +314,9 @@ def shifted_range(claim: ValidatedClaim, oracle: OracleSummary, spot_to: float, 
     if price_rate is not None and closes:
         required = claim.target_price / Decimal(str(spot_to)) - 1
         windows, hits, _, _ = price_base_rate(list(closes), price_rate.window_months, required)
-        moved_rate = price_rate.model_copy(update={"hits": hits, "rate": hits / windows if windows else None,
-                                                   "touch_hits": price_touch_hits(list(closes), price_rate.window_months, required)})
+        months = price_rate.window_months
+        moved_rate = price_rate.model_copy(update={"hits": hits, "rate": hits / windows if windows else None,  # one-month windows: no touch count, as in the run
+                                                   "touch_hits": price_touch_hits(list(closes), months, required) if months >= 2 else None})
     moved = market.model_copy(update={"last_close": Decimal(str(round(spot_to, 6)))}) if market is not None else None
     o = build_oracle(claim, market=moved, options=options, base_rate=base_rate, price_rate=moved_rate, risk_free=risk_free, today=today)
     touch = o.condition == "touch"
@@ -360,6 +362,16 @@ def _years_left(target_date: date, today: date) -> float:
     return max((target_date - today).days / 365.25, 1 / 365.25)
 
 
+def _left_en(years: float) -> str:
+    """Time left: days under a year (0.17 → 0.17 years hid a move of a day), years with two decimals beyond."""
+    days = round(years * 365.25)
+    return f"{days} day{'' if days == 1 else 's'}" if years < 1 else f"{years:.2f} years"
+
+
+def _left_zh(years: float) -> str:
+    return f"{round(years * 365.25)} 天" if years < 1 else f"{years:.2f} 年"
+
+
 def _pp(x: float) -> str:
     return f"{x * 100:+.1f}"
 
@@ -396,18 +408,21 @@ def probability_change(previous: CaseResult, *, oracle: OracleSummary, fit: Opti
 
         players = list(price_parts) + ["volatility", "time", "rate"]
         phi = shapley(players, f)
+        # the parts are shown as simple returns scaled like ③'s top, so market + peers + own add up to the move shown
+        k = carino(math.log(s1 / s0))
+        shown = {name: v * k for name, v in price_parts.items()}
         lab = {"M1": T("implied volatility", "隐含波动率"), "M2": T("historical volatility", "历史波动率")}[mid]
         details = {
-            "market": T(f"the market part of the price move ({math.expm1(price_parts.get('market', 0)) * 100:+.1f}%)",
-                        f"股价变动中跟随大盘的部分（{math.expm1(price_parts.get('market', 0)) * 100:+.1f}%）"),
-            "peers": T(f"the part that moved with the peer basket ({math.expm1(price_parts.get('peers', 0)) * 100:+.1f}%)",
-                       f"跟随同类篮子的部分（{math.expm1(price_parts.get('peers', 0)) * 100:+.1f}%）"),
-            "own": T(f"the stock's own part ({math.expm1(price_parts.get('own', 0)) * 100:+.1f}%)",
-                     f"个股自身的部分（{math.expm1(price_parts.get('own', 0)) * 100:+.1f}%）"),
+            "market": T(f"the market part of the price move ({pct(shown.get('market', 0), 1, True)})",
+                        f"股价变动中跟随大盘的部分（{pct(shown.get('market', 0), 1, True)}）"),
+            "peers": T(f"the part that moved with the peer basket ({pct(shown.get('peers', 0), 1, True)})",
+                       f"跟随同类篮子的部分（{pct(shown.get('peers', 0), 1, True)}）"),
+            "own": T(f"the stock's own part ({pct(shown.get('own', 0), 1, True)})",
+                     f"个股自身的部分（{pct(shown.get('own', 0), 1, True)}）"),
             "price": T(f"price {s0:,.2f} → {s1:,.2f} (not split: the daily data does not reach back to {d0})",
                        f"股价 {s0:,.2f} → {s1:,.2f}（日线数据不够早，无法拆分到 {d0}）"),
             "volatility": T(f"{lab.en} {vol0 * 100:.0f}% → {vol1 * 100:.0f}%", f"{lab.zh} {vol0 * 100:.0f}% → {vol1 * 100:.0f}%"),
-            "time": T(f"time left {y0:.2f} → {y1:.2f} years", f"剩余时间 {y0:.2f} → {y1:.2f} 年"),
+            "time": T(f"time left {_left_en(y0)} → {_left_en(y1)}", f"剩余时间 {_left_zh(y0)} → {_left_zh(y1)}"),
             "rate": T(f"risk-free rate {r0 * 100:.2f}% → {r1 * 100:.2f}%", f"无风险利率 {r0 * 100:.2f}% → {r1 * 100:.2f}%"),
         }
         methods.append(MethodChange(method=mid, before=f(frozenset()), after=f(frozenset(players)),

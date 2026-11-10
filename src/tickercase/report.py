@@ -23,8 +23,9 @@ from datetime import date, timedelta
 from decimal import Decimal, localcontext
 from typing import Optional
 
-from .analysis import _ctx, _history_start, _years, share_trend
-from .calculations import annualized_rate
+from .analysis import MULTIPLE_ROUNDING, _ctx, _history_start, _years, share_trend
+from .calculations import annualized_rate, deadline_from
+from .fmt import prob
 from .models import (
     BaseRate,
     BenchmarkReturn,
@@ -99,7 +100,7 @@ def pct(v: Decimal, signed: bool = False) -> str:
 
 
 def prob_text(p: float) -> str:
-    return "<0.1%" if p < 0.001 else f"{p * 100:.1f}%"
+    return prob(p, 1)
 
 
 def times(x: Decimal) -> tuple[str, str]:
@@ -108,6 +109,10 @@ def times(x: Decimal) -> tuple[str, str]:
 
 def _calc(calcs: list[CalculationItem], name: str) -> Optional[Decimal]:
     return next((c.value for c in calcs if c.name == name and c.status == "ok"), None)
+
+
+MODE_ZH = {"live": "实时", "replay": "回放", "synthetic": "合成", "record": "录制", "unavailable": "未取得", "user_input": "用户输入"}
+FG_ZH = {"extreme fear": "极度恐惧", "fear": "恐惧", "neutral": "中性", "greed": "贪婪", "extreme greed": "极度贪婪"}
 
 
 def _item(items: list[EvidenceItem], id_: str) -> Optional[EvidenceItem]:
@@ -157,7 +162,7 @@ def build_report(
     metric = T("revenue", "营收") if is_ps else T("net income", "净利润")
     mult = "P/S" if is_ps else "P/E"
     name = (facts.company_name if facts and facts.company_name else claim.ticker)
-    target_date = claim.reference_price_date + timedelta(days=round(float(claim.horizon_years) * 365.25))
+    target_date = deadline_from(claim.reference_price_date, claim.horizon_years)
     when = T(f"by about {target_date:%b %Y}", f"到 {target_date.year} 年 {target_date.month} 月前后")
     target_s = f"{claim.target_price:,}"
     series = (facts.revenue if is_ps else facts.net_income) if facts else []
@@ -175,6 +180,10 @@ def build_report(
     shares_now = facts.shares_outstanding[-1].value if facts and facts.shares_outstanding else claim.current_shares
     cap_now = market.last_close * shares_now if market and shares_now else None
     past_price = _dec(e6, "past_annualized_price_change")
+    price_years = 5
+    if e6 is not None and " to " in e6.measured.get("window", ""):
+        a, b = (date.fromisoformat(x) for x in e6.measured["window"].split(" to "))
+        price_years = max(1, round((b - a).days / 365.25))
 
     # ------------------------------------------------------------------ headline
     label = verdict.label
@@ -218,12 +227,21 @@ def build_report(
 
     # ------------------------------------------------------------------ layer 1: what the claim needs
     l1 = ReportLayer(title=T("Layer 3 · Fundamentals: what the claim needs", "第 3 层 · 基本面：观点需要什么"))
-    if total_ret is not None and annual_ret is not None:
-        means_en = f"{pct(annual_ret)} a year for {claim.horizon_years} years"
-        means_zh = f"相当于 {claim.horizon_years} 年里每年 {pct(annual_ret)}"
+    short = claim.horizon_years < 1  # shorter than a year: totals by the date, no yearly rates
+    if short:
+        annual_ret = None
+    if total_ret is not None and short:
+        means_en, means_zh = f"by {target_date}; shorter than a year, so not annualized", f"在 {target_date} 前完成，不足一年，不按年折算"
+    elif total_ret is not None and annual_ret is not None:
+        whole = claim.horizon_years == claim.horizon_years.to_integral_value()  # "1.1718 年" reads as nothing: name the date instead
+        means_en = (f"{pct(annual_ret)} a year for {claim.horizon_years.normalize()} years" if whole
+                    else f"{pct(annual_ret)} a year until {target_date}")
+        means_zh = (f"相当于 {claim.horizon_years.normalize()} 年里每年 {pct(annual_ret)}" if whole
+                    else f"相当于到 {target_date} 为止每年 {pct(annual_ret)}")
+    if total_ret is not None and (short or annual_ret is not None):
         if past_price is not None:
-            means_en += f"; the stock moved {pct(past_price, True)} a year over the last 5 years"
-            means_zh += f"；这只股票过去 5 年每年 {pct(past_price, True)}"
+            means_en += f"; the stock moved {pct(past_price, True)} a year over the last {price_years} year{'' if price_years == 1 else 's'}"
+            means_zh += f"；这只股票过去 {price_years} 年每年 {pct(past_price, True)}"
         l1.rows.append(ReportRow(signal=T("Share price", "股价"),
                                  data=T(f"{claim.reference_price} → {target_s} ({pct(total_ret, True)})", f"{claim.reference_price} → {target_s}（{pct(total_ret, True)}）"),
                                  meaning=T(means_en, means_zh)))
@@ -271,8 +289,8 @@ def build_report(
         if facts.revenue and facts.net_income and facts.revenue[-1].period_end == facts.net_income[-1].period_end and facts.revenue[-1].value > 0:
             margin = facts.net_income[-1].value / facts.revenue[-1].value
             l2.rows.append(ReportRow(signal=T("Profit margin", "利润率"), data=T(pct(margin), pct(margin)),
-                                     meaning=T(f"keeps about {margin * 100:.0f} cents of every $1 of sales as profit",
-                                               f"每卖 100 元，大约赚 {margin * 100:.0f} 元"),
+                                     meaning=T(f"keeps about {margin * 100:.0f} cents of every $1 of sales as profit" if margin >= 0 else f"loses about {-margin * 100:.0f} cents on every $1 of sales",
+                                               f"每 1 美元营收，大约赚 {margin * 100:.0f} 美分" if margin >= 0 else f"每 1 美元营收，大约亏 {-margin * 100:.0f} 美分"),
                                      tone="good" if margin > 0 else "bad"))
         trend = share_trend(facts.shares_outstanding) if facts.shares_outstanding else None
         if trend is not None:
@@ -296,9 +314,9 @@ def build_report(
     if current_mult is not None:
         l3.rows.append(ReportRow(
             signal=T(f"Valuation ({mult})", f"估值（{mult}）"),
-            data=T(f"today {current_mult:.1f}, claim assumes {claim.valuation_multiple}", f"今天 {current_mult:.1f}，观点假设 {claim.valuation_multiple}"),
+            data=T(f"today {current_mult:.2f}, claim assumes {claim.valuation_multiple}", f"今天 {current_mult:.2f}，观点假设 {claim.valuation_multiple}"),
             meaning=T(f"investors pay about ${current_mult:.0f} for each $1 of yearly {metric.en}",
-                      f"投资者愿意为每 1 元年{metric.zh}付约 {current_mult:.0f} 元"),
+                      f"投资者为每 1 美元年{metric.zh}付约 {current_mult:.0f} 美元"),
             tone=TONE[e2.stance] if e2 else "neutral"))
     if market is not None:
         if market.annualized_volatility is not None:
@@ -307,10 +325,12 @@ def build_report(
                                      meaning=T(f"moves of ±{v * 100:.0f}% within a year are common for this stock",
                                                f"一年内上下波动 {v * 100:.0f}% 左右对这只股票很常见")))
         if past_price is not None:
-            l3.rows.append(ReportRow(signal=T("Past 5 years", "过去 5 年股价"),
+            need_text = (T(f"the claim needs {pct(total_ret, True)} by {target_date}", f"观点需要在 {target_date} 前涨 {pct(total_ret, True)}")
+                         if short and total_ret is not None else
+                         T(f"the claim needs {pct(annual_ret)} a year from here", f"观点需要从现在起每年 {pct(annual_ret)}") if annual_ret is not None else T("", ""))
+            l3.rows.append(ReportRow(signal=T(f"Past {price_years} year{'' if price_years == 1 else 's'}", f"过去 {price_years} 年股价"),
                                      data=T(f"{pct(past_price, True)} a year", f"每年 {pct(past_price, True)}"),
-                                     meaning=T(f"the claim needs {pct(annual_ret)} a year from here" if annual_ret is not None else "",
-                                               f"观点需要从现在起每年 {pct(annual_ret)}" if annual_ret is not None else "")))
+                                     meaning=need_text))
     if not l3.rows:
         l3.rows.append(ReportRow(signal=T("Market data", "市场数据"), data=T("not available", "未取得"),
                                  meaning=T("no price data in this run", "本次没有取得股价数据"), tone="missing"))
@@ -325,7 +345,7 @@ def build_report(
     sources_zh = "SEC 申报与 XBRL 财务数据；每日收盘价" if facts or market else "没有公开数据"
     modes = {x.data_mode.value for x in (facts, market) if x is not None}
     l4.rows.append(ReportRow(signal=T("Sources", "数据来源"), data=T(sources_en, sources_zh),
-                             meaning=T(f"data mode: {', '.join(sorted(modes)) or 'none'}", f"数据模式：{'、'.join(sorted(modes)) or '无'}"),
+                             meaning=T(f"data mode: {', '.join(sorted(modes)) or 'none'}", f"数据模式：{'、'.join(MODE_ZH.get(m, m) for m in sorted(modes)) or '无'}"),
                              tone="bad" if "synthetic" in modes else "neutral"))
     missing = [i for i in items if i.stance == "missing"]
     if missing:
@@ -345,8 +365,6 @@ def build_report(
     if len(supporting) >= 2:
         agreements.append(T(f"{len(supporting)} checks support it: " + ", ".join(i.title for i in supporting) + ".",
                             f"有 {len(supporting)} 项检查支持观点：" + "、".join(i.title_zh for i in supporting) + "。"))
-    if not agreements:
-        agreements.append(T("No two checks point clearly the same way; read the layers one by one.", "没有两项检查明显指向同一方向，请逐层查看。"))
     s1, s2 = (e1.stance if e1 else None), (e2.stance if e2 else None)
     if s1 == "contrary" and s2 == "supporting":
         divergences.append(T("Valuation is not the problem (the assumed multiple is not above today's); the problem is results: "
@@ -356,28 +374,31 @@ def build_report(
         divergences.append(T("The business pace is close to what is needed, but the claim also needs the market to pay a higher multiple than today.",
                              "业绩增速接近需要的水平，但观点还要求市场给出比今天更高的估值。"))
     if past_price is not None and annual_ret is not None and hist is not None:
-        if past_price >= annual_ret and s1 == "contrary":
+        if past_price >= annual_ret and s1 == "contrary" and hist < past_price:
             divergences.append(T(f"The stock has risen at the needed pace before ({pct(past_price, True)} a year), but {metric.en} did not keep up "
                                  f"({pct(hist, True)}): past gains came mostly from a richer valuation, which is hard to repeat.",
                                  f"股价过去涨得够快（每年 {pct(past_price, True)}），但{metric.zh}没有跟上（每年 {pct(hist, True)}）："
                                  "过去的涨幅主要来自估值变贵，这很难一直重复。"))
+        elif past_price >= annual_ret and s1 == "contrary" and req is not None:
+            divergences.append(T(f"The stock has risen at the needed pace before ({pct(past_price, True)} a year), but the {metric.en} growth the claim needs "
+                                 f"({pct(req)} a year) is far above its record ({pct(hist, True)}).",
+                                 f"股价过去涨得够快（每年 {pct(past_price, True)}），但观点需要的{metric.zh}增速（每年 {pct(req)}）远高于过去（每年 {pct(hist, True)}）。"))
         if past_price < annual_ret and s1 == "supporting":
             divergences.append(T(f"{metric.en.capitalize()} has grown fast enough, but the share price has not followed so far.",
                                  f"{metric.zh}增长够快，但股价到目前为止没有跟上。"))
     if e3 is not None and "reported_annual_change" in e3.measured and Decimal(e3.measured["reported_annual_change"]) > Decimal("0.03"):
         divergences.append(T("The share count is growing quickly, so company-level growth turns into less per-share growth.",
                              "股数增长较快，公司整体的增长分到每股上会变少。"))
-    if not divergences:
-        divergences.append(T("No notable disagreement between the checks.", "各项检查之间没有明显矛盾。"))
 
     # ------------------------------------------------------------------ time view
     time_view: list[ReportRow] = []
     r1 = next((r for r in rechecks if r.id == "R1"), None)
     r4 = next((r for r in rechecks if r.id == "R4"), None)
-    if r4 is not None:
+    # rows that would fall after the deadline of a short claim are left out
+    if r4 is not None and (target_date - today).days >= 91:
         time_view.append(ReportRow(signal=T("Next 3 months", "未来 3 个月"), data=T(r4.trigger, r4.trigger_zh),
                                    meaning=T("new quarterly numbers update every check", "新的季度数据会更新所有检查")))
-    if r1 is not None and req is not None and latest is not None:
+    if r1 is not None and req is not None and latest is not None and latest.period_end + timedelta(days=365) <= target_date:
         path = latest.value * (1 + req)
         time_view.append(ReportRow(signal=T("Next fiscal year", "下一个财年"),
                                    data=T(f"{metric.en} about {money_en(path, ccy)}", f"{metric.zh}约 {money_zh(path, ccy)}"),
@@ -396,22 +417,27 @@ def build_report(
                 metric_t = latest.value * ((1 + growth).ln() * years_from_fy).exp()
                 return metric_t * multiple / claim.target_assumed_shares
 
-        def row(name_t: Text, growth: Decimal, multiple: Decimal, meaning_t: Text) -> ScenarioRow:
-            p = price_for(growth, multiple)
+        def row(name_t: Text, growth: Decimal, multiple: Decimal, meaning_t: Text, exact: Optional[Decimal] = None) -> ScenarioRow:
+            p = exact if exact is not None else price_for(growth, multiple)
             vs = p / claim.target_price - 1
             return ScenarioRow(name=name_t,
-                               assumptions=T(f"{metric.en} {pct(growth, True)} a year, {mult} {multiple:.1f}",
-                                             f"{metric.zh}每年 {pct(growth, True)}，{mult} {multiple:.1f}"),
+                               assumptions=T(f"{metric.en} {pct(growth, True)} a year, {mult} {multiple:.2f}",
+                                             f"{metric.zh}每年 {pct(growth, True)}，{mult} {multiple:.2f}"),
                                price=f"{p:,.2f}", vs_target=pct(vs, True), meaning=meaning_t)
 
-        if current_mult is not None:
-            scenarios.append(row(T("Past pace, today's valuation", "延续过去增速 + 今天的估值"), hist, current_mult,
-                                 T("if nothing changes", "如果一切照旧")))
-        scenarios.append(row(T("Past pace, claimed valuation", "延续过去增速 + 观点假设的估值"), hist, claim.valuation_multiple,
-                             T("the business keeps its record; valuation as the claim assumes", "业绩按过去的速度，估值按观点的假设")))
+        same = current_mult is not None and abs(claim.valuation_multiple / current_mult - 1) <= MULTIPLE_ROUNDING
+        if same:  # the claim assumes today's multiple: one row, not two that differ by a cent
+            scenarios.append(row(T("Past pace, today's valuation (as the claim assumes)", "延续过去增速 + 今天的估值（与观点假设相同）"), hist,
+                                 claim.valuation_multiple, T("if nothing changes", "如果一切照旧")))
+        else:
+            if current_mult is not None:
+                scenarios.append(row(T("Past pace, today's valuation", "延续过去增速 + 今天的估值"), hist, current_mult,
+                                     T("if nothing changes", "如果一切照旧")))
+            scenarios.append(row(T("Past pace, claimed valuation", "延续过去增速 + 观点假设的估值"), hist, claim.valuation_multiple,
+                                 T("the business keeps its record; valuation as the claim assumes", "业绩按过去的速度，估值按观点的假设")))
         if req is not None:
             scenarios.append(row(T("The claim's path", "观点需要的路径"), req, claim.valuation_multiple,
-                                 T("what has to happen for the target", "要达到目标价必须发生的情况")))
+                                 T("what has to happen for the target", "要达到目标价必须发生的情况"), exact=claim.target_price))
         note = T("Scenario prices are formulas: latest annual metric grown at the stated rate to the target date, times the multiple, "
                  "divided by the assumed share count. They are not forecasts and carry no probabilities.",
                  "情景价格只是公式推演：最近一年的指标按所列增速增长到目标日，乘以估值倍数，再除以届时的股数。它们不是预测，也没有概率。")
@@ -432,10 +458,12 @@ def build_report(
         else:
             downside.append(T(f"{metric.en.capitalize()} growth slowing below {pct(req)} a year.", f"{metric.zh}增速放慢到每年 {pct(req)} 以下。"))
     if current_mult is not None:
-        if claim.valuation_multiple > current_mult:
-            upside.append(T(f"A market willing to pay a {mult} near {claim.valuation_multiple} (today {current_mult:.1f}).",
-                            f"市场愿意给出接近 {claim.valuation_multiple} 的 {mult}（今天 {current_mult:.1f}）。"))
+        if claim.valuation_multiple > current_mult * (1 + MULTIPLE_ROUNDING):  # equal after rounding is not an expansion (as in E2)
+            upside.append(T(f"A market willing to pay a {mult} near {claim.valuation_multiple} (today {current_mult:.2f}).",
+                            f"市场愿意给出接近 {claim.valuation_multiple} 的 {mult}（今天 {current_mult:.2f}）。"))
         downside.append(T(f"A {mult} falling well below the assumed {claim.valuation_multiple}.", f"{mult} 明显跌破假设的 {claim.valuation_multiple}。"))
+    if latest is not None and latest.value <= 0 and not is_ps:
+        upside.append(T(f"Turning a profit: a P/E needs positive {metric.en} to apply to.", f"扭亏为盈：市盈率需要为正的{metric.zh}才能计算。"))
     downside.append(T("Faster share issuance than assumed.", "增发速度快于假设。"))
 
     monitor: list[MonitorRow] = []
@@ -450,10 +478,10 @@ def build_report(
                                   threshold=T(r2.trigger, r2.trigger_zh), meaning=T("above it: more dilution than assumed", "超过它：稀释多于假设")))
     r3 = next((r for r in rechecks if r.id == "R3"), None)
     if r3 is not None and current_mult is not None:
-        monitor.append(MonitorRow(signal=T(f"Today's {mult}", f"当前 {mult}"), current=T(f"{current_mult:.1f}", f"{current_mult:.1f}"),
+        monitor.append(MonitorRow(signal=T(f"Today's {mult}", f"当前 {mult}"), current=T(f"{current_mult:.2f}", f"{current_mult:.2f}"),
                                   threshold=T(r3.trigger, r3.trigger_zh), meaning=T("below it: the valuation assumption gets harder", "低于它：估值假设更难实现")))
     if r4 is not None:
-        monitor.append(MonitorRow(signal=T("Next report", "下一份财报"), current=T(e5.measured.get("latest_periodic_filing", "") if e5 else "", e5.measured.get("latest_periodic_filing", "") if e5 else ""),
+        monitor.append(MonitorRow(signal=T("Latest report (next one due)", "最近一份财报（等下一份）"), current=T(e5.measured.get("latest_periodic_filing", "") if e5 else "", e5.measured.get("latest_periodic_filing", "") if e5 else ""),
                                   threshold=T(r4.trigger, r4.trigger_zh), meaning=T("re-run the case with new numbers", "用新数据重新运行")))
 
     # ------------------------------------------------------------------ oracle layers
@@ -475,12 +503,14 @@ def build_report(
     if oracle is not None:
         m1 = next((m for m in oracle.methods if m.id == "M1" and m.status == "ok"), None)
         if m1 is not None:
+            touch_gap = bool(m1.touch_probability) and m1.touch_probability >= 0.01 and m1.touch_probability > 2 * m1.probability
             pricing.rows.append(ReportRow(
                 signal=T("Option-implied probability", "期权隐含概率"),
-                data=T(f"end above target {m1.probability * 100:.1f}%, touch {m1.touch_probability * 100:.1f}%",
-                       f"到期高于目标 {m1.probability * 100:.1f}%，期间触及 {m1.touch_probability * 100:.1f}%"),
-                meaning=T("touching is far likelier than staying there: a spike-and-fade path" if m1.touch_probability > 2 * m1.probability else "risk-neutral, priced by traders",
-                          "触及远比守住容易：更像冲高后回落" if m1.touch_probability > 2 * m1.probability else "风险中性概率，由交易者定价"),
+                data=T(f"end above target {prob(m1.probability)}, touch {prob(m1.touch_probability)}",
+                       f"到期高于目标 {prob(m1.probability)}，期间触及 {prob(m1.touch_probability)}"),
+                meaning=T("touching is far likelier than being there at the end; that follows from volatility itself, not a forecast of a fall"
+                          if touch_gap else "risk-neutral, priced by traders",
+                          "期间触及远比到期守住容易；这是波动本身带来的，不代表预计会回落" if touch_gap else "风险中性概率，由交易者定价"),
                 tone="bad" if m1.probability < 0.05 else "neutral"))
     if prediction is not None:
         if prediction.markets:
@@ -495,30 +525,39 @@ def build_report(
     rates = ReportLayer(title=T("Layer 2 · Base rates and peers", "第 2 层 · 历史基准率与对标"))
     if base_rate is not None and base_rate.companies:
         ex_en = ", ".join(f"{e['name']} ({float(e['cagr']) * 100:.0f}%/yr)" for e in base_rate.examples[:3])
+        ex_zh = "、".join(f"{e['name']}（每年 {float(e['cagr']) * 100:.0f}%）" for e in base_rate.examples[:3])
         rates.rows.append(ReportRow(
             signal=T(f"Similar-sized companies reaching {pct(base_rate.required_cagr)} {metric.en} growth", f"同规模公司达到每年 {pct(base_rate.required_cagr)} {metric.zh}增速"),
             data=T(f"{base_rate.achieved} of {base_rate.companies} ({(base_rate.rate or 0) * 100:.1f}%), {base_rate.start_year}–{base_rate.end_year}",
                    f"{base_rate.companies} 家中 {base_rate.achieved} 家（{(base_rate.rate or 0) * 100:.1f}%），{base_rate.start_year}–{base_rate.end_year}"),
-            meaning=T(f"median {pct(base_rate.median_cagr or Decimal(0))} a year; fastest: {ex_en}", f"中位数每年 {pct(base_rate.median_cagr or Decimal(0))}；最快的：{ex_en}"),
+            meaning=T(f"median {pct(base_rate.median_cagr or Decimal(0))} a year; fastest: {ex_en}", f"中位数每年 {pct(base_rate.median_cagr or Decimal(0))}；最快的：{ex_zh}"),
             tone="bad" if (base_rate.rate or 0) < 0.05 else "good" if (base_rate.rate or 0) > 0.3 else "neutral"))
     if price_rate is not None and price_rate.windows:
         rates.rows.append(ReportRow(
             signal=T(f"This stock over {price_rate.window_months}-month windows", f"这只股票的 {price_rate.window_months} 个月窗口"),
-            data=T(f"{price_rate.hits} of {price_rate.windows} rose ≥{float(price_rate.required_return) * 100:.0f}%", f"{price_rate.windows} 个中 {price_rate.hits} 个涨幅 ≥{float(price_rate.required_return) * 100:.0f}%"),
-            meaning=T(f"since {price_rate.history_start}; overlapping windows, context only unless the history is long",
-                      f"自 {price_rate.history_start} 起；窗口互相重叠，历史不够长时只作参考")))
+            data=T(f"{price_rate.hits} of {price_rate.windows} ended ≥{float(price_rate.required_return) * 100:.0f}% higher"
+                   + (f", {price_rate.touch_hits} reached it at a month-end" if price_rate.touch_hits is not None else ""),
+                   f"{price_rate.windows} 个中 {price_rate.hits} 个到期涨幅 ≥{float(price_rate.required_return) * 100:.0f}%"
+                   + (f"，{price_rate.touch_hits} 个在期间某个月末达到过" if price_rate.touch_hits is not None else "")),
+            meaning=T(f"since {price_rate.history_start}; " + ("overlapping windows, context only unless the history is long" if price_rate.window_months > 1
+                                                                 else "context only unless the history is long"),
+                      f"自 {price_rate.history_start} 起；" + ("窗口互相重叠，历史不够长时只作参考" if price_rate.window_months > 1 else "历史不够长时只作参考"))))
     for b in benchmarks or []:
         rates.rows.append(ReportRow(signal=T(b.label, b.label), data=T(f"{pct(b.total_return, True)} ({b.start}–{b.end})", f"{pct(b.total_return, True)}（{b.start}–{b.end}）"),
-                                    meaning=T(f"{pct(b.annual_return, True)} a year; the claim needs {pct(annual_ret)} a year" if annual_ret is not None else "",
-                                              f"每年 {pct(b.annual_return, True)}；观点需要每年 {pct(annual_ret)}" if annual_ret is not None else "")))
+                                    meaning=T(f"the claim needs {pct(total_ret, True)} by {target_date}", f"观点需要在 {target_date} 前涨 {pct(total_ret, True)}")
+                                    if short and total_ret is not None else
+                                    T(f"{pct(b.annual_return, True)} a year; the claim needs {pct(annual_ret)} a year" if annual_ret is not None else "",
+                                      f"每年 {pct(b.annual_return, True)}；观点需要每年 {pct(annual_ret)}" if annual_ret is not None else "")))
 
     env = ReportLayer(title=T("Layer 4 · Insiders and market environment", "第 4 层 · 内部人与市场环境"))
     if insiders is not None:
         plan_share = (insiders.plan_sale_value / insiders.sale_value) if insiders.sale_value else Decimal(0)
         env.rows.append(ReportRow(
             signal=T("Insider open-market trades (12 months)", "内部人公开市场交易（12 个月）"),
-            data=T(f"buys {insiders.purchases} ({money_en(insiders.purchase_value)}), sales {insiders.sales} ({money_en(insiders.sale_value)})",
-                   f"买入 {insiders.purchases} 笔（{money_zh(insiders.purchase_value)}），卖出 {insiders.sales} 笔（{money_zh(insiders.sale_value)}）"),
+            data=T(f"buys {insiders.purchases} ({money_en(insiders.purchase_value)}), sales {insiders.sales} ({money_en(insiders.sale_value)})"
+                   + (f" in the {insiders.filings_read} most recent of {insiders.filings_listed} filings" if insiders.filings_read < insiders.filings_listed else ""),
+                   f"买入 {insiders.purchases} 笔（{money_zh(insiders.purchase_value)}），卖出 {insiders.sales} 笔（{money_zh(insiders.sale_value)}）"
+                   + (f"，只统计了 {insiders.filings_listed} 份中最近的 {insiders.filings_read} 份" if insiders.filings_read < insiders.filings_listed else "")),
             meaning=T(f"{plan_share * 100:.0f}% of sales under pre-set 10b5-1 plans (less informative); {insiders.sellers} sellers, {insiders.buyers} buyers",
                       f"其中 {plan_share * 100:.0f}% 的卖出属于预先设定的 10b5-1 计划（信息量较低）；卖出 {insiders.sellers} 人，买入 {insiders.buyers} 人"),
             tone="bad" if insiders.purchases == 0 and insiders.sales > 0 else "good" if insiders.purchases > insiders.sales else "neutral"))
@@ -530,9 +569,11 @@ def build_report(
                       f"这些不是买卖决定；读取了 {insiders.filings_listed} 份中的 {insiders.filings_read} 份")))
     if sentiment is not None:
         env.rows.append(ReportRow(signal=T("CNN Fear & Greed", "CNN 恐惧贪婪指数"),
-                                  data=T(f"{sentiment.score:.0f} ({sentiment.rating})", f"{sentiment.score:.0f}（{sentiment.rating}）"),
-                                  meaning=T(f"a month ago {sentiment.previous_month:.0f}; below 30 means investors are fearful" if sentiment.previous_month is not None else "below 30 means fearful",
-                                            f"一个月前 {sentiment.previous_month:.0f}；低于 30 表示市场恐惧" if sentiment.previous_month is not None else "低于 30 表示市场恐惧"),
+                                  data=T(f"{sentiment.score:.0f} ({sentiment.rating})", f"{sentiment.score:.0f}（{FG_ZH.get(sentiment.rating.strip().lower(), sentiment.rating)}）"),
+                                  meaning=T(("" if sentiment.previous_month is None else f"a month ago {sentiment.previous_month:.0f}; ")
+                                            + "CNN's bands: 0–24 extreme fear, 25–44 fear, 45–55 neutral, 56–75 greed, 76–100 extreme greed",
+                                            ("" if sentiment.previous_month is None else f"一个月前 {sentiment.previous_month:.0f}；")
+                                            + "CNN 的分档：0–24 极度恐惧，25–44 恐惧，45–55 中性，56–75 贪婪，76–100 极度贪婪"),
                                   tone="bad" if sentiment.score < 30 else "good" if sentiment.score > 60 else "neutral"))
     if oracle is not None and oracle.risk_free_rate is not None:
         env.rows.append(ReportRow(signal=T("10-year Treasury yield", "10 年期美债收益率"), data=T(pct(oracle.risk_free_rate), pct(oracle.risk_free_rate)),
@@ -557,19 +598,27 @@ def build_report(
                          f"{reason_zh}{oracle.agreement.zh}")
         m1 = next((m for m in oracle.methods if m.id == "M1" and m.status == "ok"), None)
         m3 = next((m for m in oracle.methods if m.id == "M3" and m.status == "ok"), None)
-        if m1 and m3 and m3.probability is not None and m1.probability > 3 * max(m3.probability, 1e-9):
+        if m1 and m3 and m3.probability is not None and m1.probability >= 0.01 and m1.probability > 3 * max(m3.probability, 1e-9):  # not between two near-zeros
             divergences.insert(0, T(f"The option market ({m1.probability * 100:.1f}%) is more generous than the business base rate ({m3.probability * 100:.1f}%): "
                                     "traders pay for big swings, but the growth the claim needs is rare among similar companies.",
                                     f"期权市场（{m1.probability * 100:.1f}%）比业绩基准率（{m3.probability * 100:.1f}%）乐观："
                                     "交易者为大幅波动付费，但观点需要的增长在同规模公司里很少见。"))
-        if m1 and m1.touch_probability and m1.touch_probability > 2 * m1.probability:
+        if m1 and m1.touch_probability and m1.touch_probability >= 0.01 and m1.touch_probability > 2 * m1.probability:
             divergences.append(T(f"Touching {target_s} at some point ({m1.touch_probability * 100:.1f}%) is much likelier than being there at the end ({m1.probability * 100:.1f}%).",
                                  f"期间某个时点触及 {target_s}（{m1.touch_probability * 100:.1f}%）比到期时守在那里（{m1.probability * 100:.1f}%）容易得多。"))
-    if insiders is not None and insiders.purchases == 0 and insiders.sales > 0:
-        agreements.append(T(f"Insiders made no open-market purchases in 12 months while selling {money_en(insiders.sale_value)}.",
-                            f"内部人 12 个月内没有任何公开市场买入，同时卖出 {money_zh(insiders.sale_value)}。"))
+    headwinds: list[Text] = []
+    planned_only = insiders is not None and insiders.sale_value and insiders.plan_sale_value >= insiders.sale_value * Decimal("0.999")
+    if insiders is not None and insiders.purchases == 0 and insiders.sales > 0 and not planned_only:
+        if insiders.filings_read < insiders.filings_listed:
+            headwinds.append(T(f"Insiders made no open-market purchases in the {insiders.filings_read} most recent of {insiders.filings_listed} Form 4 filings "
+                               f"of the last 12 months, which show {money_en(insiders.sale_value)} sold.",
+                               f"在 12 个月内 {insiders.filings_listed} 份 Form 4 中读取的最近 {insiders.filings_read} 份里，内部人没有公开市场买入，"
+                               f"卖出 {money_zh(insiders.sale_value)}。"))
+        else:
+            headwinds.append(T(f"Insiders made no open-market purchases in 12 months while selling {money_en(insiders.sale_value)}.",
+                               f"内部人 12 个月内没有任何公开市场买入，同时卖出 {money_zh(insiders.sale_value)}。"))
     if sentiment is not None and sentiment.score < 30:
-        agreements.append(T(f"Market mood is fearful (Fear & Greed {sentiment.score:.0f}), a headwind for high-growth stories.",
+        headwinds.append(T(f"Market mood is fearful (Fear & Greed {sentiment.score:.0f}), a headwind for high-growth stories.",
                             f"市场情绪偏恐惧（恐惧贪婪指数 {sentiment.score:.0f}），对高增长故事不利。"))
 
     fundamentals = ReportLayer(title=T("Layer 3 · Fundamentals", "第 3 层 · 基本面"),
@@ -578,5 +627,5 @@ def build_report(
         agreements = [a for a in agreements if not a.en.startswith("No two checks")]
     layers = [layer for layer in (pricing, rates, fundamentals, env, l4) if layer.rows]
     return PlainReport(headline=headline, verdict_meaning=meaning, layers=layers, agreements=agreements,
-                       divergences=divergences, time_view=time_view, scenarios=scenarios, scenario_note=note,
+                       divergences=divergences, headwinds=headwinds, time_view=time_view, scenarios=scenarios, scenario_note=note,
                        upside=upside, downside=downside, monitor=monitor)

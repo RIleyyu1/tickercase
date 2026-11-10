@@ -107,7 +107,8 @@ class InsiderProvider(Provider):
             if filed >= start and isinstance(docs[i], str) and docs[i]:
                 listed.append((filed, accs[i], docs[i]))
         listed.sort(reverse=True)
-        summary = InsiderSummary(window_start=start, filings_listed=len(listed), filings_read=0, data_mode=fetched.data_mode)
+        summary = InsiderSummary(window_start=start, filings_listed=len(listed), filings_read=0, data_mode=fetched.data_mode,
+                                 source_url=fetched.url, retrieved_at=fetched.retrieved_at, source_captured_at=fetched.source_captured_at)
         buyers, sellers = set(), set()
         for filed, acc, doc in listed[:MAX_FILINGS]:
             url = xml_url(cik, acc, doc)

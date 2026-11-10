@@ -17,6 +17,7 @@ Each is one extra request; an expiry that fails is skipped.
 
 from __future__ import annotations
 
+import calendar
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping, Optional
@@ -28,8 +29,8 @@ from .market import yahoo_symbol
 
 OPTIONS_URL = "https://query2.finance.yahoo.com/v7/finance/options/{symbol}"
 MIN_IV, MAX_IV = 0.01, 5.0
-TERM_DAYS = (30, 60, 91, 121, 152, 182, 243, 304, 365, 456, 547, 730)
-TERM_MAX = 12
+TERM_DAYS = (7, 14, 21, 28, 35, 60, 91, 121, 152, 182, 243, 304, 365, 456, 547, 730)  # weekly near the front, where events sit
+TERM_MAX = 16
 
 
 def _f(value: Any) -> Optional[float]:
@@ -112,6 +113,28 @@ class YahooOptionsProvider(Provider):
             if iv:
                 points[d] = iv
         return [TermPoint(expiry=d, atm_iv=v) for d, v in sorted(points.items())]
+
+    def around(self, snap: OptionsSnapshot, days: list[date]) -> OptionsSnapshot:
+        """Add the expiries on both sides of known event dates (the last before, the first on or after), so the event move
+        is read from the nearest pair and not from a stretch of three weeks; a missing expiry only leaves the term as it was."""
+        have, spot = {p.expiry for p in snap.term}, float(snap.underlying_price or 0)
+        wanted: list[date] = []
+        for d in days:
+            before = max((e for e in snap.expirations if e < d), default=None)
+            after = next((e for e in sorted(snap.expirations) if e >= d), None)
+            wanted += [e for e in (before, after) if e is not None and e not in have and e not in wanted]
+        if not wanted or not spot:
+            return snap
+        points = {p.expiry: p.atm_iv for p in snap.term}
+        for e in wanted:
+            try:
+                res = self._result(self.client.get_json(f"{OPTIONS_URL.format(symbol=snap.symbol)}?date={calendar.timegm(e.timetuple())}"))
+            except Exception:
+                continue
+            iv, _ = iv_at(self._calls(res), spot)
+            if iv:
+                points[e] = iv
+        return snap.model_copy(update={"term": [TermPoint(expiry=d, atm_iv=v) for d, v in sorted(points.items())]})
 
     def fetch_chain(self, ticker: str, target_date: date, target_price: Decimal, *, today: Optional[date] = None) -> OptionsSnapshot:
         symbol = yahoo_symbol(ticker)

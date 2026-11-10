@@ -42,7 +42,8 @@ from datetime import date, timedelta
 from decimal import Decimal, localcontext
 from typing import Optional
 
-from .calculations import _ctx, annualized_rate, market_cap, required_metric
+from .calculations import _ctx, annualized_rate, market_cap, required_metric, deadline_from
+from .fmt import pct
 from .models import (
     VERDICT_DISPLAY,
     VERDICT_DISPLAY_ZH,
@@ -68,6 +69,7 @@ MIN_HISTORY_DAYS = 540
 GROWTH_NEUTRAL_GAP = Decimal("0.05")
 GROWTH_SEVERE_GAP = Decimal("0.15")
 MULTIPLE_NEUTRAL_RATIO = Decimal("1.25")
+MULTIPLE_ROUNDING = Decimal("0.005")  # assumed / current within half a percent counts as equal (two-decimal defaults)
 SHARES_SUPPORT_DIFF = Decimal("-0.01")
 SHARES_NEUTRAL_DIFF = Decimal("-0.03")
 FRESHNESS_DAYS = 135
@@ -100,11 +102,15 @@ def _s(value: Decimal) -> str:
 
 
 def _pct(value: Decimal) -> str:
-    return f"{value * 100:.2f}%"
+    return pct(value, 2)
 
 
 def _pp(value: Decimal) -> str:
-    return f"{value * 100:.2f} pp"
+    return f"{format((value * 100).quantize(Decimal('0.01')).normalize(), 'f')} pp"
+
+
+def _pp_zh(value: Decimal) -> str:
+    return f"{format((value * 100).quantize(Decimal('0.01')).normalize(), 'f')} 个百分点"
 
 
 def _amount(value: Decimal) -> str:
@@ -238,8 +244,10 @@ class _Checks:
         m = self.metric
         title = Bilingual(f"Required {m.en} growth vs reported history", f"所需{m.zh}增速 vs 已披露增速")
         rule = Bilingual(
-            f"supporting if required CAGR <= reported CAGR; neutral if gap <= {_pp(GROWTH_NEUTRAL_GAP)}; contrary otherwise",
-            f"所需年增速不高于已披露增速为支持；差距不超过 {_pp(GROWTH_NEUTRAL_GAP)} 为背景；否则为反对",
+            f"supporting if required CAGR <= reported CAGR; neutral if gap <= {_pp(GROWTH_NEUTRAL_GAP)}; contrary otherwise; "
+            f"a gap above {_pp(GROWTH_SEVERE_GAP)} makes the verdict Not Supported Today on its own",
+            f"所需年增速不高于已披露增速为支持；差距不超过 {_pp_zh(GROWTH_NEUTRAL_GAP)} 为背景；否则为反对；"
+            f"差距超过 {_pp_zh(GROWTH_SEVERE_GAP)} 时，结论直接为「目前证据不支持」",
         )
 
         def missing(en: str, zh: str, **kw) -> EvidenceItem:
@@ -288,13 +296,13 @@ class _Checks:
         sources.append(_fact_source(self.facts, start, f"earlier annual {m.en}"))
         measured.update(reported_cagr=_s(hist), reported_window=f"{start.period_end} to {latest.period_end}", gap=_s(gap))
         stance = "supporting" if gap <= 0 else "neutral" if gap <= GROWTH_NEUTRAL_GAP else "contrary"
-        target_date = self.claim.reference_price_date + timedelta(days=round(float(self.claim.horizon_years) * 365.25))
+        target_date = deadline_from(self.claim.reference_price_date, self.claim.horizon_years)
         detail = Bilingual(
-            f"the claim needs {m.en} to grow {_pct(self.req_cagr)} per year from {_amount(latest.value)} (FY ending {latest.period_end}) "
+            f"the claim needs {m.en} to {'grow' if self.req_cagr >= 0 else 'change'} {_pct(self.req_cagr)} per year from {_amount(latest.value)} (FY ending {latest.period_end}) "
             f"to {_amount(self.required)} by about {target_date} ({years:.2f} years); reported growth was {_pct(hist)} per year "
             f"({start.period_end.year}–{latest.period_end.year})",
             f"观点要求{m.zh}从 {_amount_zh(latest.value)}（截至 {latest.period_end} 的财年）在约 {years:.2f} 年内（到 {target_date} 前后）"
-            f"增长到 {_amount_zh(self.required)}，即每年 {_pct(self.req_cagr)}；已披露增速为每年 {_pct(hist)}"
+            f"{'增长到' if self.req_cagr >= 0 else '变为'} {_amount_zh(self.required)}，即每年 {_pct(self.req_cagr)}；已披露增速为每年 {_pct(hist)}"
             f"（{start.period_end.year}–{latest.period_end.year}）",
         )
         return _item("E1", "metric_growth", stance, title, detail, rule, measured=measured, sources=sources, as_of=latest.filed)
@@ -325,7 +333,7 @@ class _Checks:
             return missing("no share count (reported or entered) to compute today's market value", "没有股份数（披露或填写），无法计算当前市值")
         latest = self.series[-1]
         sources = [
-            SourceRef(label=f"close {_s(self.market.last_close)} on {self.market.last_date} ({self.market.provider_id})",
+            SourceRef(label=f"close {self.market.last_close:,.2f} on {self.market.last_date} ({self.market.provider_id})",
                       url=self.market.source_url, data_mode=self.market.data_mode),
             _fact_source(self.facts, latest, f"latest annual {m.en}"),
         ]
@@ -343,9 +351,10 @@ class _Checks:
             ratio = self.claim.valuation_multiple / current
         self.current_multiple = current
         measured.update(current_multiple=_s(current), assumed_over_current=_s(ratio))
-        stance = "supporting" if ratio <= 1 else "neutral" if ratio <= MULTIPLE_NEUTRAL_RATIO else "contrary"
-        rel_en = "at or below" if ratio <= 1 else f"{ratio:.2f}x"
-        rel_zh = "不高于当前水平" if ratio <= 1 else f"是当前的 {ratio:.2f} 倍"
+        same = abs(ratio - 1) <= MULTIPLE_ROUNDING  # the default is today's multiple rounded to two decimals
+        stance = "supporting" if ratio <= 1 or same else "neutral" if ratio <= MULTIPLE_NEUTRAL_RATIO else "contrary"
+        rel_en = "the same as" if same else "at or below" if ratio <= 1 else f"{ratio:.2f}x"
+        rel_zh = "与当前水平相同" if same else "不高于当前水平" if ratio <= 1 else f"是当前的 {ratio:.2f} 倍"
         detail = Bilingual(
             f"the claim assumes {ml} {self.claim.valuation_multiple} at the target date; today's {ml} is {current:.2f} "
             f"(market value {_amount(cap)} / {m.en} {_amount(latest.value)}), so the assumption is {rel_en} today's level",
@@ -361,15 +370,23 @@ class _Checks:
         rule = Bilingual(
             f"supporting if implied annual change >= reported change {_pp(SHARES_SUPPORT_DIFF)}; "
             f"neutral if >= reported change {_pp(SHARES_NEUTRAL_DIFF)}; contrary otherwise",
-            f"隐含年变化不低于已披露变化 {_pp(SHARES_SUPPORT_DIFF)} 为支持；不低于 {_pp(SHARES_NEUTRAL_DIFF)} 为背景；否则为反对",
+            f"隐含年变化不低于已披露变化 {_pp_zh(SHARES_SUPPORT_DIFF)} 为支持；不低于 {_pp_zh(SHARES_NEUTRAL_DIFF)} 为背景；否则为反对",
         )
         if self.facts is None or not self.facts.shares_outstanding:
             return _item("E3", "share_count", "missing", title, Bilingual("no reported shares outstanding in this run", "本次没有已披露的股份数"), rule)
         series = self.facts.shares_outstanding
         latest = series[-1]
         self.latest_shares = latest
-        years = years_to_target(self.claim, latest.period_end)
-        self.implied_share_rate = annualized_rate(self.claim.target_assumed_shares, latest.value, years)
+        c = self.claim
+        if c.target_shares_derived and c.share_change_rate is not None and c.current_shares:
+            # the target count is current shares x (1 + rate) ** horizon: the assumption is that rate, over that span
+            years = c.horizon_years
+            self.implied_share_rate = c.share_change_rate
+            start_count, start_label = c.current_shares, Bilingual("the current share count", "当前股份数")
+        else:
+            years = years_to_target(c, latest.period_end)
+            self.implied_share_rate = annualized_rate(c.target_assumed_shares, latest.value, years)
+            start_count, start_label = latest.value, Bilingual("reported shares", "已披露的股份数")
         sources = [_fact_source(self.facts, latest, "shares outstanding")]
         measured = {"reported_shares": _s(latest.value), "reported_as_of": latest.period_end.isoformat(),
                     "target_assumed_shares": _s(self.claim.target_assumed_shares), "implied_annual_change": _s(self.implied_share_rate),
@@ -388,9 +405,9 @@ class _Checks:
         measured.update(reported_annual_change=_s(hist), reported_window=f"{start.period_end} to {latest.period_end}")
         stance = "supporting" if diff >= SHARES_SUPPORT_DIFF else "neutral" if diff >= SHARES_NEUTRAL_DIFF else "contrary"
         detail = Bilingual(
-            f"going from {_amount(latest.value)} reported shares to the assumed {_amount(self.claim.target_assumed_shares)} means "
+            f"going from {start_label.en} of {_amount(start_count)} to the assumed {_amount(c.target_assumed_shares)} means "
             f"{_pct(self.implied_share_rate)} per year; the reported count changed {_pct(hist)} per year ({start.period_end} to {latest.period_end})",
-            f"从已披露的 {_amount_zh(latest.value)} 股到假设的 {_amount_zh(self.claim.target_assumed_shares)} 股，即每年 {_pct(self.implied_share_rate)}；"
+            f"从{start_label.zh} {_amount_zh(start_count)} 股到假设的 {_amount_zh(c.target_assumed_shares)} 股，即每年 {_pct(self.implied_share_rate)}；"
             f"已披露股份数每年变化 {_pct(hist)}（{start.period_end} 至 {latest.period_end}）",
         )
         return _item("E3", "share_count", stance, title, detail, rule, measured=measured, sources=sources, as_of=latest.filed)
@@ -403,10 +420,10 @@ class _Checks:
         latest = self.facts.net_income[-1]
         loss = latest.value < 0
         return _item("E4", "profitability", "neutral", Bilingual("Reported profitability (context)", "已披露盈利情况（背景）"), Bilingual(
-            f"latest annual net income is {_amount(latest.value)} (FY ending {latest.period_end}), i.e. {'a net loss' if loss else 'a profit'}. "
-            "A P/S target does not require profit, but losses can lead to financing and dilution.",
+            f"latest annual net income is {_amount(latest.value)} (FY ending {latest.period_end}), i.e. {'a net loss' if loss else 'a profit'}."
+            + (" A P/S target does not require profit, but losses can lead to financing and dilution." if loss else ""),
             f"最近年度净利润为 {_amount_zh(latest.value)}（截至 {latest.period_end} 的财年），{'处于亏损' if loss else '处于盈利'}。"
-            "P/S 目标不要求盈利，但持续亏损可能带来融资和股份稀释。"),
+            + ("P/S 目标不要求盈利，但持续亏损可能带来融资和股份稀释。" if loss else "")),
             measured={"latest_net_income": _s(latest.value)}, sources=[_fact_source(self.facts, latest, "latest annual net income")],
             as_of=latest.filed)
 
@@ -451,10 +468,15 @@ class _Checks:
         if years <= 0:
             return None
         past = annualized_rate(last.close, first.close, years)
-        needed = _calc(self.calculations, "annualized_price_return")
+        short = self.claim.horizon_years < 1  # a yearly rate of a claim shorter than a year is not meaningful
+        needed = _calc(self.calculations, "required_return" if short else "annualized_price_return")
         en = f"the closing price moved {_pct(past)} per year from {first.day} to {last.day} (not dividend-adjusted)"
         zh = f"收盘价从 {first.day} 到 {last.day} 每年变化 {_pct(past)}（未计股息）"
-        if needed is not None:
+        if needed is not None and short:
+            deadline = deadline_from(self.claim.reference_price_date, self.claim.horizon_years)
+            en += f"; the claim requires {_pct(needed)} from the reference price by {deadline}"
+            zh += f"；观点要求从参考价起到 {deadline} 涨 {_pct(needed)}"
+        elif needed is not None:
             en += f"; the claim requires {_pct(needed)} per year from the reference price"
             zh += f"；观点要求从参考价起每年 {_pct(needed)}"
         return _item("E6", "price_history", "neutral", Bilingual("Past price trend (context)", "过去股价走势（背景）"), Bilingual(en, zh),
@@ -518,7 +540,7 @@ class _Checks:
         return Sensitivity(
             metric=self.method.metric_name, base_value=base, base_label=base_label,
             multiples=[_s(x.normalize()) for x in multiples], horizons=[_s(x.normalize()) for x in horizons], required_cagr=cells,
-            assumed_multiple=_s(c.valuation_multiple), assumed_horizon=_s(h),
+            assumed_multiple=_s(c.valuation_multiple), assumed_horizon=_s(h), base_offset_years=_s(offset.quantize(Decimal("0.0001"))) if base_end else None,
             reported_cagr=_s(self.hist_cagr) if self.hist_cagr is not None else None,
         )
 
@@ -549,8 +571,8 @@ def _verdict(checks: _Checks, items: list[EvidenceItem], today: date, synthetic:
             rationale.append(Bilingual(f"{item.id} is supporting: {item.detail}.", f"{item.id} 为支持：{item.detail_zh}。"))
     if checks.growth_gap is not None and checks.growth_gap > GROWTH_SEVERE_GAP:
         rationale.append(Bilingual(
-            f"The growth gap of {_pp(checks.growth_gap)} per year exceeds the {_pp(GROWTH_SEVERE_GAP)} limit of rules-v1.",
-            f"增速差距每年 {_pp(checks.growth_gap)}，超过 rules-v1 的 {_pp(GROWTH_SEVERE_GAP)} 上限。"))
+            f"The growth gap of {_pp(checks.growth_gap)} per year exceeds the {_pp(GROWTH_SEVERE_GAP)} limit in the E1 rule.",
+            f"增速差距每年 {_pp_zh(checks.growth_gap)}，超过 E1 规则里的 {_pp_zh(GROWTH_SEVERE_GAP)} 上限。"))
     missing = [i.id for i in items if i.stance == "missing" and i.id != "E1"]
     if missing:
         rationale.append(Bilingual(f"Not checked for lack of data: {', '.join(missing)}.", f"因缺数据未检查：{'、'.join(missing)}。"))
@@ -561,10 +583,10 @@ def _verdict(checks: _Checks, items: list[EvidenceItem], today: date, synthetic:
                   "Not Supported Today does not mean the target price is impossible; Supported Today is not a guarantee.",
                   f"证据截至 {today}。「{display_zh}」描述的是当日的证据状态。「目前证据不支持」不表示目标价不可能达到，「目前证据支持」也不是保证。"),
         Bilingual("Rules and thresholds are provisional (rules-v1); team validation of verdict thresholds is still open.",
-                  "规则和阈值是临时的（rules-v1），判断阈值尚待团队验证。"),
-        Bilingual("Checks use reported financial history and market prices only. Filing text, guidance and news are not read; "
-                  "AI-assisted analysis (OA.10–OA.12) is not implemented.",
-                  "检查只使用已披露的财务历史和市场价格，不读取申报正文、管理层指引和新闻；AI 辅助分析（OA.10–OA.12）尚未实现。"),
+                  "规则和阈值是临时的（规则 v1），判断阈值尚待团队验证。"),
+        Bilingual("The checks use reported financial history and market prices only. Headlines and 8-K press releases feed the catalyst "
+                  "register, not this verdict; management guidance is not read.",
+                  "这些检查只用已披露的财务历史和股价。新闻标题和 8-K 新闻稿只用于催化剂档案，不进入这个结论；也不读取管理层指引。"),
     ]
     if synthetic:
         limitations.insert(0, Bilingual("Synthetic example data was used. This verdict demonstrates the rules and says nothing about a real company.",
@@ -589,11 +611,12 @@ def _rechecks(checks: _Checks, items: list[EvidenceItem]) -> list[RecheckConditi
             path = latest.value * (1 + checks.req_cagr)
         out.append(_recheck(
             "R1",
-            Bilingual(f"Next annual {m.en} is reported below {_amount(path)}", f"下一个年度{m.zh}低于 {_amount_zh(path)}"),
+            Bilingual(f"Next annual {m.en} is reported below {_amount(path)} ({_pct(checks.req_cagr)} above {_amount(latest.value)})",
+                      f"下一个年度{m.zh}低于 {_amount_zh(path)}（比 {_amount_zh(latest.value)} 高 {_pct(checks.req_cagr)}）"),
             Bilingual(f"10-K / XBRL company facts for the fiscal year after {latest.period_end}",
                       f"{latest.period_end} 之后财年的 10-K / XBRL 财务数据"),
             ["E1", "valuation_multiple", "horizon_years"],
-            threshold=f"{_s(path.quantize(Decimal(1)))} ({_pct(checks.req_cagr)} above {_amount(latest.value)})",
+            threshold=_s(path.quantize(Decimal(1))),
         ))
     if checks.latest_shares is not None and checks.implied_share_rate is not None:
         s = checks.latest_shares
@@ -601,8 +624,8 @@ def _rechecks(checks: _Checks, items: list[EvidenceItem]) -> list[RecheckConditi
             path = s.value * (1 + checks.implied_share_rate)
         out.append(_recheck(
             "R2",
-            Bilingual(f"Shares outstanding rise above {_amount(path)} within a year of {s.period_end}, or above {_amount(c.target_assumed_shares)} at any time",
-                      f"{s.period_end} 后一年内股份数超过 {_amount_zh(path)}，或任何时候超过 {_amount_zh(c.target_assumed_shares)}"),
+            Bilingual(f"Shares outstanding a year after {s.period_end} are above {_amount(path)} (the assumed {_pct(checks.implied_share_rate)} a year)",
+                      f"{s.period_end} 一年后的股份数高于 {_amount_zh(path)}（假设每年 {_pct(checks.implied_share_rate)}）"),
             Bilingual("cover page of the next 10-Q / 10-K (dei:EntityCommonStockSharesOutstanding); S-1/S-3/424B offerings",
                       "下一份 10-Q / 10-K 封面的股份数；S-1/S-3/424B 增发文件"),
             ["E3", "target_assumed_shares"], threshold=_s(path.quantize(Decimal(1))),
@@ -621,7 +644,8 @@ def _rechecks(checks: _Checks, items: list[EvidenceItem]) -> list[RecheckConditi
     if checks.latest_periodic_filed is not None:
         expected = checks.latest_periodic_filed + timedelta(days=NEXT_REPORT_DAYS)
         out.append(_recheck(
-            "R4", Bilingual(f"Next 10-Q or 10-K is filed (expected around {expected})", f"下一份 10-Q 或 10-K 发布（预计 {expected} 前后）"),
+            "R4", Bilingual(f"Next 10-Q or 10-K is filed with the SEC (around {expected}, estimated from the filing rhythm; the earnings date is on ④ Events)",
+                            f"下一份 10-Q 或 10-K 向 SEC 申报（按过去的申报间隔估计在 {expected} 前后；财报发布日见 ④ 事件）"),
             Bilingual("SEC EDGAR filings for the ticker", "该代码在 SEC EDGAR 的申报"), ["E5"],
         ))
     for item in items:

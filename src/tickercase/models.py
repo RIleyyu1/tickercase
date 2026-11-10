@@ -422,6 +422,7 @@ class Sensitivity(BaseModel):
     assumed_multiple: str
     assumed_horizon: str
     reported_cagr: Optional[str] = None
+    base_offset_years: Optional[str] = None  # columns count years from today; growth runs this much longer, from the base period end (v0.13.2)
 
 
 class ClaimExtraction(BaseModel):
@@ -439,6 +440,9 @@ class ClaimExtraction(BaseModel):
     currency: Optional[str] = None
     condition: Optional[Literal["end", "touch"]] = None  # "冲到 / 触及 / within 3 years" -> touch; "3 年后 / by 2030" -> end
     condition_text: Optional[str] = None
+    valuation_method: Optional[Literal["price_to_sales", "price_to_earnings"]] = None  # "按 40 倍市盈率" (v0.13.2)
+    valuation_multiple: Optional[DecimalStr] = None
+    valuation_text: Optional[str] = None
     notes_en: list[str] = Field(default_factory=list)
     notes_zh: list[str] = Field(default_factory=list)
 
@@ -481,8 +485,9 @@ class PlainReport(BaseModel):
     headline: Text
     verdict_meaning: Text
     layers: list[ReportLayer] = Field(default_factory=list)
-    agreements: list[Text] = Field(default_factory=list)
+    agreements: list[Text] = Field(default_factory=list)  # groups of checks that point the same way (for or against)
     divergences: list[Text] = Field(default_factory=list)
+    headwinds: list[Text] = Field(default_factory=list)  # market signals against the claim, e.g. insiders only selling (v0.13.1)
     time_view: list[ReportRow] = Field(default_factory=list)
     scenarios: list[ScenarioRow] = Field(default_factory=list)
     scenario_note: Optional[Text] = None
@@ -556,6 +561,9 @@ class BaseRate(BaseModel):
     source_urls: list[str] = Field(default_factory=list)
     data_mode: DataMode
     note: str = "Survivors only: companies that reported in both years. Acquired or delisted companies are missing, which makes the rate optimistic."
+    band_widened: bool = False  # fewer than 30 companies in 0.5x-2x, so 0.25x-4x was used
+    dropped_mis_scaled: int = 0  # companies left out because their two revenue concepts disagree by more than 100x
+    dropped_funds: int = 0  # filers left out because they are funds or commodity trusts (an ETF's "revenue" is not a business)
 
 
 class PriceBaseRate(_Sourced):
@@ -617,6 +625,10 @@ class InsiderSummary(BaseModel):
     net_open_market_value: DecimalStr = Decimal(0)
     transactions: list[InsiderTransaction] = Field(default_factory=list)
     data_mode: DataMode
+    # provenance of the filing list the Form 4 documents were taken from (SR.1.2.1); each transaction carries its own URL
+    source_url: Optional[str] = None
+    retrieved_at: Optional[datetime] = None
+    source_captured_at: Optional[datetime] = None
 
 
 class PredictionMarket(BaseModel):

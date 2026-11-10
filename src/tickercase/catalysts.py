@@ -34,7 +34,7 @@ from typing import Any, Callable, Iterable, Optional, Sequence
 from pydantic import BaseModel, ValidationError
 
 from .models import Catalyst, CatalystEvent, CatalystProposal, CatalystRegister, CatalystSource, FilingRecord, NewsItem
-from .narrative import FALLBACK_MODELS, SCALES, USAGE_FIELDS, _matches, numbers_in, uses_effort
+from .narrative import FALLBACK_MODELS, SCALES, USAGE_FIELDS, _matches, numbers_in, uses_effort  # noqa: F401
 
 PROMPT_VERSION = "1"
 MAX_THEMES = 5
@@ -305,6 +305,34 @@ def _source_numbers(sources: Iterable[CatalystSource]) -> list[Decimal]:
     return out
 
 
+_DATES = re.compile(r"\d{4}\s*年(?:\s*\d{1,2}\s*月(?:\s*\d{1,2}\s*日)?)?|\d{1,2}\s*月(?:\s*\d{1,2}\s*[日号])?|\d{4}-\d{2}(?:-\d{2})?"
+                    r"|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?"
+                    r"|\b(?:Q[1-4]|H[12])\b|\b\d{4}\b")
+
+
+def _without_dates(text: str) -> str:
+    """Dates and periods ("11月5日", "Nov. 5, 2026", "2027-H1", "Q3") are not amounts to look up."""
+    return _DATES.sub(" ", text or "")
+
+
+def _within_written_precision(raw: str, value: Decimal, unit: str, pool: list[Decimal]) -> bool:
+    """"2.6亿" stands for anything that rounds to it (2.55亿 to 2.65亿), so "$255.4 million" in a source supports it."""
+    digits = raw.strip().rstrip(unit).strip().replace(",", "")
+    decimals = len(digits.split(".")[1]) if "." in digits else 0
+    scale = SCALES.get(unit, Decimal(1))
+    half = Decimal(5) * Decimal(10) ** -(decimals + 1) * scale
+    v = value * scale
+    return any(abs(abs(v) - abs(c)) <= half for c in pool)
+
+
+_NEXT_YEAR = re.compile(r"next year|following year|明年|下一年", re.IGNORECASE)
+
+
+def _says_year(s: CatalystSource, year: int) -> bool:
+    """The source names the year, or dates it by itself: "later this year" in a 2026 release is 2026, "next year" is 2027."""
+    return str(year) in s.text or year == s.day.year or (year == s.day.year + 1 and bool(_NEXT_YEAR.search(s.text)))
+
+
 def check(c: Catalyst, by_id: dict[str, CatalystSource]) -> list[str]:
     """What does not hold up: unknown ids, events dated unlike their sources, a timing or a number the cited sources do not contain."""
     problems = []
@@ -325,14 +353,14 @@ def check(c: Catalyst, by_id: dict[str, CatalystSource]) -> list[str]:
         m = EXPECTED_RE.match(c.expected)
         if not m:
             problems.append(f"expected '{c.expected}' is not a date or span the page can read")
-        elif not any(m.group(1) in s.text for s in all_sources):
+        elif not any(_says_year(s, int(m.group(1))) for s in all_sources):
             problems.append(f"expected {c.expected}: the year {m.group(1)} is not in the cited sources")
     pool = _source_numbers(all_sources)
     for label, text, sources in [("summary", c.summary_en, all_sources), ("summary", c.summary_zh, all_sources)] + \
             [(f"event {e.day}", t, [by_id[x] for x in e.source_ids if x in by_id] + all_sources) for e in c.events for t in (e.change_en, e.change_zh)]:
         local = _source_numbers(sources) or pool
-        for raw, value, unit in numbers_in(text):
-            if not _matches(value, unit, local, magnitudes=True):
+        for raw, value, unit in numbers_in(_without_dates(text)):
+            if not _matches(value, unit, local, magnitudes=True) and not _within_written_precision(raw, value, unit, local):
                 problems.append(f"{label}: {raw} is not in the cited sources")
     return list(dict.fromkeys(problems))
 

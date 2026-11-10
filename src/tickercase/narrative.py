@@ -260,7 +260,7 @@ def build_facts(r: CaseResult) -> list[Fact]:
                 f.add(f"option-priced extra move around {c.expected_day} ({c.name_en})", f"期权为 {c.expected_day}（{c.name_zh}）前后额外定价的波动",
                       round(mv.move, 4), "rate", "option term structure; the day is the middle of the stated timing")
     if r.verdict:
-        f.add("evidence-as-of verdict (rules-v1)", "证据结论（rules-v1）", r.verdict.display, source="TickerCase rules-v1")
+        f.add("evidence-as-of verdict (rules-v1)", "证据结论（规则 v1）", r.verdict.display, source="TickerCase rules-v1")
     return f.items
 
 

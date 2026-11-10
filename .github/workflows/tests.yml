@@ -1,0 +1,22 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Functional requirements of A2 (one test per requirement ID)
+        run: pytest tests/test_functional_requirements.py -v
+      - name: Whole offline suite
+        run: pytest -q

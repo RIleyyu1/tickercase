@@ -5,7 +5,9 @@ Each frame lists one annual value per filer for a calendar year. Revenue
 concepts are merged per company in a fixed order. A company counts when it
 reported in both the start and end year, its start value was within a size
 band around the claim's company (0.5x-2x, widened to 0.25x-4x when fewer than
-30 companies qualify), and both values are positive.
+30 companies qualify), and both values are positive. A company whose two
+revenue concepts disagree by more than 100x in either year is left out: one of
+the filings is mis-scaled (thousands tagged as units), and which one is unknown.
 
 Survivorship: companies acquired, delisted or no longer filing are missing,
 so the rate is biased upwards. The note on the result says so.
@@ -13,6 +15,7 @@ so the rate is biased upwards. The note on the result says so.
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal, localcontext
 from statistics import median
 from typing import Any, Mapping, Optional, Sequence
@@ -27,6 +30,11 @@ REVENUE_FRAME_CONCEPTS = ("RevenueFromContractWithCustomerExcludingAssessedTax",
 NET_INCOME_FRAME_CONCEPTS = ("NetIncomeLoss",)
 BANDS = ((Decimal("0.5"), Decimal("2")), (Decimal("0.25"), Decimal("4")))
 MIN_COMPANIES = 30
+# funds and commodity trusts file 10-Ks too (iShares Gold Trust, SPDR Gold Trust): their "revenue" moves with the metal, not a business
+FUND_RE = re.compile(r"\b(?:ETF|ETN|ISHARES|SPDR|PROSHARES|GRAYSCALE|INVESCO DB|DIREXION|FUND)\b"
+                     r"|\b(?:GOLD|SILVER|PLATINUM|PALLADIUM|BITCOIN|ETHER(?:EUM)?|CRYPTO|OIL|GAS|COMMODITY|CURRENCY|PRECIOUS METALS?)\b.*\bTRUST\b",
+                     re.IGNORECASE)
+MIS_SCALED = Decimal(100)  # two revenue concepts this far apart for one company and year: a scaling error in a filing
 
 
 def _frame_values(payload: Any) -> dict[int, tuple[Decimal, str]]:
@@ -51,17 +59,21 @@ class SecFramesBaseRateProvider(Provider):
     def __init__(self, client: JsonFetcher):
         self.client = client
 
-    def _merged(self, concepts: Sequence[str], year: int) -> tuple[dict[int, tuple[Decimal, str]], list[str], set]:
+    def _merged(self, concepts: Sequence[str], year: int) -> tuple[dict[int, tuple[Decimal, str]], list[str], set, set]:
+        """Values per company (earlier concept wins), source URLs, data modes, and companies whose concepts disagree by over 100x."""
         merged: dict[int, tuple[Decimal, str]] = {}
-        urls, modes = [], set()
+        urls, modes, conflicts = [], set(), set()
         for concept in concepts:
             url = FRAMES_URL.format(concept=concept, year=year)
             fetched = self.client.get_json(url)
             urls.append(url)
             modes.add(fetched.data_mode)
             for cik, value in _frame_values(fetched.payload).items():
-                merged.setdefault(cik, value)  # earlier concept wins
-        return merged, urls, modes
+                first = merged.setdefault(cik, value)[0]
+                a, b = abs(first), abs(value[0])
+                if a > 0 and b > 0 and max(a, b) / min(a, b) > MIS_SCALED:
+                    conflicts.add(cik)
+        return merged, urls, modes, conflicts
 
     def base_rate(self, *, metric: str, base_value: Decimal, required_cagr: Decimal, end_year: int, years: int,
                   exclude_cik: Optional[int] = None) -> BaseRate:
@@ -71,15 +83,23 @@ class SecFramesBaseRateProvider(Provider):
             raise ProviderError("nonpositive_base", "base rate needs a positive starting value")
         concepts = REVENUE_FRAME_CONCEPTS if metric == "annual_revenue" else NET_INCOME_FRAME_CONCEPTS
         start_year = end_year - years
-        start, urls_a, modes_a = self._merged(concepts, start_year)
-        end, urls_b, modes_b = self._merged(concepts, end_year)
+        start, urls_a, modes_a, bad_a = self._merged(concepts, start_year)
+        end, urls_b, modes_b, bad_b = self._merged(concepts, end_year)
+        mis_scaled = bad_a | bad_b
         growth: list[tuple[Decimal, str, Decimal, Decimal]] = []
         band_used = BANDS[0]
+        dropped = funds = 0
         for low_f, high_f in BANDS:
             low, high = base_value * low_f, base_value * high_f
-            growth = []
+            growth, dropped, funds = [], 0, 0
             for cik, (v0, name) in start.items():
                 if cik == exclude_cik or cik not in end or not low <= v0 <= high:
+                    continue
+                if cik in mis_scaled:
+                    dropped += 1
+                    continue
+                if FUND_RE.search(name):
+                    funds += 1
                     continue
                 v1 = end[cik][0]
                 if v0 > 0 and v1 > 0:
@@ -90,9 +110,11 @@ class SecFramesBaseRateProvider(Provider):
         modes = modes_a | modes_b
         mode = DataMode.SYNTHETIC if DataMode.SYNTHETIC in modes else DataMode.REPLAY if DataMode.REPLAY in modes else DataMode.LIVE
         low, high = base_value * band_used[0], base_value * band_used[1]
+        widened = band_used != BANDS[0]
         if not growth:
             return BaseRate(metric=metric, start_year=start_year, end_year=end_year, size_low=low, size_high=high, companies=0,
-                            achieved=0, required_cagr=required_cagr, concepts=list(concepts), source_urls=urls_a + urls_b, data_mode=mode)
+                            achieved=0, required_cagr=required_cagr, concepts=list(concepts), source_urls=urls_a + urls_b, data_mode=mode,
+                            band_widened=widened, dropped_mis_scaled=dropped, dropped_funds=funds)
         rates = sorted(g[0] for g in growth)
         achieved = [g for g in growth if g[0] >= required_cagr]
         below = sum(1 for r in rates if r < required_cagr)
@@ -107,5 +129,5 @@ class SecFramesBaseRateProvider(Provider):
             companies=len(growth), achieved=len(achieved), rate=len(achieved) / len(growth), required_cagr=required_cagr,
             percentile_of_required=below / len(rates), median_cagr=Decimal(median(rates)).quantize(Decimal("0.0001")),
             p90_cagr=p90.quantize(Decimal("0.0001")), examples=examples, concepts=list(concepts), source_urls=urls_a + urls_b,
-            data_mode=mode,
+            data_mode=mode, band_widened=widened, dropped_mis_scaled=dropped, dropped_funds=funds,
         )

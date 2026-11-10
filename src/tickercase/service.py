@@ -12,14 +12,14 @@ other data source is substituted for a failed one.
 
 from __future__ import annotations
 
-import math
 import uuid
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Callable, Optional, TypeVar
 
 from .analysis import RULES_VERSION, analyze, share_trend
-from .calculations import calculate
+from .calculations import annualized_rate, calculate, deadline_from
 from .config import SEC_MODES, Settings, load_settings
 from .http_client import FetchError, JsonFetcher, LiveHttpClient, RecordingHttpClient, ReplayHttpClient, utcnow
 from .models import (
@@ -86,68 +86,17 @@ USER_INPUT_PROVENANCE = {
 
 DEFAULT_PREFIX = "default_assumption:"
 CLAIM_TEXT_PREFIX = "claim_text:"
-SEC_PROVIDER_ID = SecFilingProvider.provider_id
-FACTS_PROVIDER_ID = SecCompanyFactsProvider.provider_id
-MARKET_PROVIDER_ID = YahooChartProvider.provider_id
-SOURCES = ("sec", "market", "options", "web")
-OPTIONS_PROVIDER_ID = YahooOptionsProvider.provider_id
-BENCHMARKS = (("SPY", "S&P 500 (SPY)"), ("QQQ", "Nasdaq-100 (QQQ)"))
+from .acquisition import (  # A2 Acquire Dated Evidence (C.2)
+    BENCHMARKS, FACTS_PROVIDER_ID, MARKET_PROVIDER_ID, OPTIONS_PROVIDER_ID, SEC_PROVIDER_ID, SOURCES,
+    acquire_dated_evidence, build_fetcher, company_name, fetch_benchmarks, fetch_price_base_rate, isolate, mode_enum, mode_of,
+    request_peer_base_rate,
+    AcquiredEvidence, ContextRecords, EvidenceSet, FilingRecords, MarketRecords, SourceGateway, SourceGuard,
+    request_context_signals, request_filings_and_reported_facts, request_market_and_option_data,
+)
 
 T = TypeVar("T")
+_mode_enum = mode_enum
 
-
-def build_fetcher(mode: str, settings: Settings, source: str = "sec") -> JsonFetcher:
-    if mode not in SEC_MODES:
-        raise ValueError(f"unknown data mode '{mode}'; expected one of {SEC_MODES}")
-    if source not in SOURCES:
-        raise ValueError(f"unknown source '{source}'; expected one of {SOURCES}")
-    if mode == "synthetic":
-        return ReplayHttpClient(settings.synthetic_dir)
-    if mode == "replay":
-        return ReplayHttpClient(settings.snapshot_dir)
-    if source == "options":
-        authed = YahooAuthedClient(timeout_seconds=max(settings.timeout_seconds, 15.0))
-        return RecordingHttpClient(authed, settings.snapshot_dir) if mode == "record" else authed
-    if source == "web":
-        live = LiveHttpClient(
-            user_agent=BROWSER_UA, require_contact_email=False, service_name="CNN",
-            timeout_seconds=settings.timeout_seconds, max_retries=settings.max_retries,
-            min_interval_seconds=settings.market_min_interval_seconds, max_retry_after_seconds=settings.max_retry_after_seconds,
-            extra_headers={"Referer": "https://edition.cnn.com/"}, cache_ttl_seconds={"https://production.dataviz.cnn.io/": 600},
-        )
-    elif source == "market":
-        live = LiveHttpClient(
-            user_agent=settings.market_user_agent,
-            require_contact_email=False,
-            service_name="Yahoo Finance",
-            timeout_seconds=settings.timeout_seconds,
-            max_retries=settings.max_retries,
-            min_interval_seconds=settings.market_min_interval_seconds,
-            max_retry_after_seconds=settings.max_retry_after_seconds,
-            cache_ttl_seconds={CHART_URL.split("{")[0]: 300, "https://gamma-api.polymarket.com/": 300},
-        )
-    else:
-        live = LiveHttpClient(
-            user_agent=settings.sec_user_agent,
-            timeout_seconds=settings.timeout_seconds,
-            max_retries=settings.max_retries,
-            min_interval_seconds=settings.min_interval_seconds,
-            max_retry_after_seconds=settings.max_retry_after_seconds,
-            cache_ttl_seconds={
-                "https://www.sec.gov/files/company_tickers.json": 24 * 3600,
-                "https://data.sec.gov/submissions/": 600,
-                "https://data.sec.gov/api/xbrl/companyfacts/": 3600,
-                "https://data.sec.gov/api/xbrl/frames/": 24 * 3600,
-                "https://www.sec.gov/Archives/": 24 * 3600,
-            },
-        )
-    if mode == "record":
-        return RecordingHttpClient(live, settings.snapshot_dir)
-    return live
-
-
-def _mode_enum(mode: str) -> Optional[DataMode]:
-    return {"live": DataMode.LIVE, "record": DataMode.LIVE, "replay": DataMode.REPLAY, "synthetic": DataMode.SYNTHETIC}.get(mode)
 
 
 class CaseService:
@@ -178,19 +127,62 @@ class CaseService:
 
     @staticmethod
     def _guard(provider_id: str, mode: str, errors: list[ProviderErrorRecord], call: Callable[[], T]) -> Optional[T]:
-        """Run one provider call; record a failure as a structured error and return None."""
-        try:
-            return call()
-        except FetchError as exc:
-            errors.append(ProviderErrorRecord(
-                provider_id=provider_id, code=exc.code, message=exc.message, url=exc.url, http_status=exc.http_status,
-                retry_after_seconds=exc.retry_after_seconds, data_mode=exc.data_mode or _mode_enum(mode),
-            ))
-        except ProviderError as exc:
-            errors.append(ProviderErrorRecord(provider_id=provider_id, code=exc.code, message=exc.message, url=exc.url, data_mode=_mode_enum(mode)))
-        except ValueError as exc:
-            errors.append(ProviderErrorRecord(provider_id=provider_id, code="config_error", message=str(exc)))
-        return None
+        """Run one provider call; record a failure as a structured error and return None (A2.5, acquisition.isolate)."""
+        return isolate(provider_id, mode, errors, call)
+
+    @staticmethod
+    def _confirmed(claim, current_fp: str, confirmation: Confirmation) -> ConfirmedClaim:
+        """The Confirmed Claim (IO.5): the validated values, their fingerprint and where each value came from."""
+        provenance = {k: v for k, v in USER_INPUT_PROVENANCE.items() if getattr(claim, k, None) is not None}
+        for name, source in claim.field_sources.items():
+            provenance[name] = source if source.startswith((DEFAULT_PREFIX, CLAIM_TEXT_PREFIX)) else f"public_data:{source}"
+        if claim.target_shares_derived:
+            provenance["target_assumed_shares"] = "derived:current_shares * (1 + share_change_rate) ** horizon_years"
+        return ConfirmedClaim(values=claim, fingerprint=current_fp, confirmed_at=confirmation.confirmed_at, value_provenance=provenance)
+
+    # ---------------------------------------------------------------- A2 on its own (contracts/api-v1.yaml, /evidence)
+
+    def acquire(self, draft: ClaimDraft, confirmation: Optional[Confirmation], *, sec_mode: str,
+                flow: Optional[str] = None) -> tuple[CaseStatus, Optional[AcquiredEvidence]]:
+        """Run A2 Acquire Dated Evidence for a confirmed claim, or one of its internal flows.
+
+        ``flow`` is None for the whole function, or "filings" (A2.1), "market" (A2.2) or "context" (A2.3).
+        An unconfirmed, stale or invalid claim sends no request: the status says why and the evidence is None.
+        """
+        validation = validate_draft(draft, today=self.today())
+        current_fp = fingerprint(draft)
+        if not validation.ok:
+            return CaseStatus.BLOCKED_INVALID_INPUT, None
+        if confirmation is None:
+            return CaseStatus.BLOCKED_UNCONFIRMED, None
+        if confirmation.fingerprint != current_fp:
+            return CaseStatus.BLOCKED_CONFIRMATION_STALE, None
+        confirmed = self._confirmed(validation.claim, current_fp, confirmation)
+
+        def source_evidence(data_mode, terms, source):
+            return self._fetcher(data_mode, source)
+
+        if flow is None:
+            acquired = acquire_dated_evidence(confirmed, source_evidence, data_mode_setting=sec_mode,
+                                              provider_access_terms=self.settings, today=self.today(), now=self.now())
+        else:
+            sources = SourceGateway(source_evidence, sec_mode, self.settings)
+            guard = SourceGuard(sec_mode)
+            filing, quotes, context = FilingRecords(), MarketRecords(), ContextRecords()
+            if flow == "filings":
+                filing = request_filings_and_reported_facts(confirmed, sources, guard, today=self.today())
+            elif flow == "market":
+                quotes = request_market_and_option_data(confirmed, sources, guard, today=self.today())
+            elif flow == "context":
+                context = request_context_signals(confirmed, sources, guard, company=company_name(filing, validation.claim.ticker),
+                                                  now=self.now())
+            else:
+                raise ValueError(f"unknown flow '{flow}'; expected filings, market or context")
+            acquired = AcquiredEvidence(evidence_query=sources.evidence_query,
+                                        evidence_set=EvidenceSet(filing=filing, market=quotes, context=context),
+                                        source_error_records=guard.source_error_records, guard=guard, sources=sources)
+        status = CaseStatus.EVALUATED_WITH_PROVIDER_ERRORS if acquired.source_error_records else CaseStatus.EVALUATED
+        return status, acquired
 
     # ---------------------------------------------------------------- evaluate
 
@@ -201,7 +193,6 @@ class CaseService:
         ``progress(step, state)`` is called with state "running", "ok" or "failed" for each data step.
         """
         mode = sec_mode
-        report_step = progress or (lambda step, state: None)
         case_id = uuid.uuid4().hex
         created = self.now()
         validation = validate_draft(draft, today=self.today())
@@ -231,86 +222,48 @@ class CaseService:
 
         claim = validation.claim
         assert claim is not None
-        provenance = {k: v for k, v in USER_INPUT_PROVENANCE.items() if getattr(claim, k, None) is not None}
-        for name, source in claim.field_sources.items():
-            provenance[name] = source if source.startswith((DEFAULT_PREFIX, CLAIM_TEXT_PREFIX)) else f"public_data:{source}"
-        if claim.target_shares_derived:
-            provenance["target_assumed_shares"] = "derived:current_shares * (1 + share_change_rate) ** horizon_years"
-        confirmed = ConfirmedClaim(values=claim, fingerprint=current_fp, confirmed_at=confirmation.confirmed_at, value_provenance=provenance)
+        confirmed = self._confirmed(claim, current_fp, confirmation)
         calculations = calculate(claim)
 
-        errors: list[ProviderErrorRecord] = []
+        # ---------------------------------------------------------------- A2 Acquire Dated Evidence (C.2)
+        acquired = acquire_dated_evidence(
+            confirmed, lambda data_mode, terms, source: self._fetcher(data_mode, source),
+            data_mode_setting=mode, provider_access_terms=self.settings, today=self.today(), now=self.now(), progress=progress)
+        guard, sources, evidence = acquired.guard, acquired.sources, acquired.evidence_set
+        errors, steps, step = guard.source_error_records, guard.steps, guard.step
         warnings = base["warnings"]
+        filing, quotes, context = evidence.filing, evidence.market, evidence.context
+        records, facts, insiders = filing.records, filing.reported_facts, filing.insiders
+        market, options, risk_free = quotes.price_history, quotes.options, quotes.risk_free_rate
+        price_rate, benchmarks, earnings = quotes.price_base_rate, quotes.benchmarks, quotes.earnings
+        prediction, sentiment, news = context.prediction_markets, context.sentiment, context.news
 
-        steps: dict[str, str] = {}
-
-        def step(name: str, provider_id: str, call):
-            report_step(name, "running")
-            before = len(errors)
-            value = self._guard(provider_id, mode, errors, call)
-            steps[name] = "ok" if value is not None and len(errors) == before else "failed"
-            report_step(name, steps[name])
-            return value
-
-        sec_fetcher = self._guard(SEC_PROVIDER_ID, mode, errors, lambda: self._fetcher(mode, "sec"))
-        filings = facts = market = None
-        filing_provider = SecFilingProvider(sec_fetcher) if sec_fetcher is not None else None
-        if sec_fetcher is not None:
-            filings = step("sec_filings", SEC_PROVIDER_ID, lambda: filing_provider.fetch_filings(
-                SecFilingQuery(ticker=claim.ticker, since=claim.filings_since)))
-            facts = step("sec_facts", FACTS_PROVIDER_ID, lambda: SecCompanyFactsProvider(sec_fetcher, filing_provider).fetch_facts(claim.ticker))
-        market = step("price_history", MARKET_PROVIDER_ID, lambda: YahooChartProvider(self._fetcher(mode, "market")).fetch_history(claim.ticker))
-
-        records = filings.records if filings else []
-        for w in filings.warnings if filings else []:
-            warn(w, f"SEC 申报：{w}")
+        for w in filing.warnings:
+            warn(w, f"SEC 申报：{note_zh(w)}")
         for n in facts.notes if facts else []:
-            warn(f"SEC XBRL: {n}", f"SEC XBRL：{n}")
+            warn(f"SEC XBRL: {n}", f"SEC XBRL：{note_zh(n)}")
 
         outcome = analyze(claim, calculations, facts=facts, market=market, filings=records, today=self.today())
         for w in outcome.warnings:
             warn(w.en, w.zh)
+        calculations = growth_from_base_end(calculations, claim, outcome.items)
+        for en, zh in acquired.notes:
+            warn(en, zh)
 
         probability = probability_reference(claim, market)
 
         # ---------------------------------------------------------------- oracle layers
-        target_date = claim.reference_price_date + timedelta(days=round(float(claim.horizon_years) * 365.25))
-        market_fetcher = self._guard(MARKET_PROVIDER_ID, mode, errors, lambda: self._fetcher(mode, "market"))
-        options = step("options", OPTIONS_PROVIDER_ID, lambda: YahooOptionsProvider(self._fetcher(mode, "options")).fetch_chain(
-            claim.ticker, target_date, claim.target_price, today=self.today()))
-        risk_free = None
-        if market_fetcher is not None:
-            tnx = step("risk_free_rate", MARKET_PROVIDER_ID, lambda: YahooChartProvider(market_fetcher).fetch_history("^TNX"))
-            risk_free = (tnx.last_close / 100).quantize(Decimal("0.0001")) if tnx is not None else None
-        spot = market.last_close if market is not None else claim.reference_price
-        months = max(1, round(float(claim.horizon_years) * 12))
-        price_rate = benchmarks = None
-        if market_fetcher is not None:
-            price_rate = step("price_base_rate", MARKET_PROVIDER_ID, lambda: self._price_base_rate(market_fetcher, claim, months, spot))
-            benchmarks = step("benchmarks", MARKET_PROVIDER_ID, lambda: self._benchmarks(market_fetcher, months))
+        market_fetcher = sources.guarded("market", MARKET_PROVIDER_ID, guard)
         base_rate = None
         e1 = next((i for i in outcome.items if i.id == "E1"), None)
         series = (facts.revenue if claim.valuation_method.metric_name == "annual_revenue" else facts.net_income) if facts else []
-        if sec_fetcher is not None and e1 is not None and "required_cagr_from_reported" in e1.measured and series:
+        if e1 is not None and "required_cagr_from_reported" in e1.measured and series:
             end_year = self.today().year - (1 if self.today().month >= 4 else 2)
             years = max(1, min(10, round(float(claim.horizon_years))))
-            base_rate = step("base_rate", SecFramesBaseRateProvider.provider_id, lambda: SecFramesBaseRateProvider(sec_fetcher).base_rate(
-                metric=claim.valuation_method.metric_name, base_value=series[-1].value,
-                required_cagr=Decimal(e1.measured["required_cagr_from_reported"]).quantize(Decimal("0.0001")), end_year=end_year, years=years,
-                exclude_cik=int(facts.cik)))
-        insiders = None
-        if sec_fetcher is not None:
-            insiders = step("insiders", InsiderProvider.provider_id, lambda: InsiderProvider(sec_fetcher, filing_provider).summary(claim.ticker, today=self.today()))
-        prediction = None
-        if market_fetcher is not None:
-            prediction = step("prediction_markets", PolymarketProvider.provider_id, lambda: PolymarketProvider(market_fetcher).search(claim.ticker, now=self.now()))
-        sentiment = step("fear_greed", FearGreedProvider.provider_id, lambda: FearGreedProvider(self._fetcher(mode, "web")).snapshot())
-        company = self._company(facts, records, claim.ticker)
-        news = earnings = None
-        if market_fetcher is not None:
-            news = step("news", NewsProvider.provider_id, lambda: NewsProvider(market_fetcher).recent(claim.ticker, company))
-        earnings = step("earnings_date", EarningsCalendarProvider.provider_id, lambda: EarningsCalendarProvider(self._fetcher(mode, "options")).next_earnings(
-            claim.ticker, today=self.today()))
+            base_rate = request_peer_base_rate(
+                sources, guard, metric=claim.valuation_method.metric_name, base_value=series[-1].value,
+                required_cagr=Decimal(e1.measured["required_cagr_from_reported"]), end_year=end_year, years=years,
+                exclude_cik=int(facts.cik))
         structure = fit = None
         if market_fetcher is not None and market is not None:
             peer_source = claim.field_sources.get("peer_tickers") or ("user input" if claim.peer_tickers else None)
@@ -330,7 +283,8 @@ class CaseService:
             closes = None
             if price_rate is not None:  # M4 is recounted at the shifted price from the same monthly closes
                 closes = self._guard(MARKET_PROVIDER_ID, mode, errors, lambda: monthly_closes(market_fetcher.get_json(monthly_url).payload, monthly_url))
-            structure.shifted = shifted_range(claim, oracle, oracle.spot * math.exp(-(structure.log_market + structure.log_peers)), market=market,
+            spot_to = oracle.spot * (1 + structure.own_part) / (1 + structure.total)
+            structure.shifted = shifted_range(claim, oracle, spot_to, market=market,
                                               options=options, base_rate=base_rate, price_rate=price_rate, closes=closes, risk_free=risk_free,
                                               today=self.today())
         if self.store is not None and oracle.spot and market is not None:
@@ -346,23 +300,14 @@ class CaseService:
             warn(f"data unavailable for this run from {', '.join(failed)}; affected checks are listed as missing, calculations use only your inputs",
                  f"本次未能从 {', '.join(failed)} 取得数据；相关检查显示为缺失，计算只使用你的输入")
 
-        def mode_of(present: bool, modes: set[str]) -> str:
-            if not present:
-                return "unavailable"
-            return ",".join(sorted(modes)) if modes else (_mode_enum(mode).value if _mode_enum(mode) else "unavailable")
+        def group_mode(record) -> str:
+            return mode_of(record is not None, {record.data_mode.value} if record is not None else set(), mode)
 
         data_modes = {
             "claim_inputs": DataMode.USER_INPUT.value,
-            "sec_filings": mode_of(filings is not None, {r.data_mode.value for r in records}),
-            "sec_facts": mode_of(facts is not None, {facts.data_mode.value} if facts else set()),
-            "market_prices": mode_of(market is not None, {market.data_mode.value} if market else set()),
-            "options": mode_of(options is not None, {options.data_mode.value} if options else set()),
-            "base_rate": mode_of(base_rate is not None, {base_rate.data_mode.value} if base_rate else set()),
-            "insiders": mode_of(insiders is not None, {insiders.data_mode.value} if insiders else set()),
-            "fear_greed": mode_of(sentiment is not None, {sentiment.data_mode.value} if sentiment else set()),
-            "market_structure": mode_of(structure is not None, {structure.data_mode.value} if structure else set()),
-            "news": mode_of(news is not None, {news.data_mode.value} if news else set()),
-            "earnings_date": mode_of(earnings is not None, {earnings.data_mode.value} if earnings else set()),
+            **evidence.data_modes,
+            "base_rate": group_mode(base_rate),
+            "market_structure": group_mode(structure),
             "analysis": f"deterministic {RULES_VERSION}",
         }
         if DataMode.SYNTHETIC.value in data_modes.values():
@@ -374,7 +319,7 @@ class CaseService:
             confirmed_claim=confirmed,
             calculations=calculations,
             evidence_records=records,
-            coverage=filings.coverage if filings else None,
+            coverage=filing.coverage,
             reported_facts=facts,
             market=market,
             evidence_items=outcome.items,
@@ -405,39 +350,8 @@ class CaseService:
         )
         return self._finish(result)
 
-    @staticmethod
-    def _price_base_rate(fetcher: JsonFetcher, claim, months: int, spot: Decimal) -> PriceBaseRate:
-        from .providers.market import yahoo_symbol
-
-        url = MONTHLY_URL.format(symbol=yahoo_symbol(claim.ticker))
-        fetched = fetcher.get_json(url)
-        closes = monthly_closes(fetched.payload, url)
-        required = claim.target_price / spot - 1
-        windows, hits, med, best = price_base_rate(closes, months, required)
-        touch_hits = price_touch_hits(closes, months, required)
-        return PriceBaseRate(
-            symbol=yahoo_symbol(claim.ticker), window_months=months, windows=windows, hits=hits, rate=hits / windows if windows else None,
-            required_return=required.quantize(Decimal("0.0001")), median_return=Decimal(str(round(med, 4))) if med is not None else None,
-            best_return=Decimal(str(round(best, 4))) if best is not None else None, history_start=closes[0][0] if closes else date.today(),
-            touch_hits=touch_hits,
-            source_url=url, retrieved_at=fetched.retrieved_at, source_captured_at=fetched.source_captured_at, data_mode=fetched.data_mode)
-
-    @staticmethod
-    def _benchmarks(fetcher: JsonFetcher, months: int) -> list[BenchmarkReturn]:
-        out = []
-        for symbol, label in BENCHMARKS:
-            url = MONTHLY_URL.format(symbol=symbol)
-            fetched = fetcher.get_json(url)
-            closes = monthly_closes(fetched.payload, url)
-            n = min(months, len(closes) - 1)
-            if n < 1:
-                continue
-            (d0, p0), (d1, p1) = closes[-1 - n], closes[-1]
-            total = Decimal(str(p1 / p0 - 1))
-            annual = Decimal(str((p1 / p0) ** (12 / n) - 1))
-            out.append(BenchmarkReturn(symbol=symbol, label=label, start=d0, end=d1, total_return=total.quantize(Decimal("0.0001")),
-                                       annual_return=annual.quantize(Decimal("0.0001")), data_mode=fetched.data_mode))
-        return out
+    _price_base_rate = staticmethod(fetch_price_base_rate)
+    _benchmarks = staticmethod(fetch_benchmarks)
 
     @staticmethod
     def _company(facts, records, ticker: str) -> str:
@@ -700,3 +614,61 @@ class CaseService:
         if self.store is not None:
             self.store.save(result)
         return result
+
+
+# ---------------------------------------------------------------- v0.13.2 helpers
+
+_NOTE_ZH = [
+    (re.compile(r"showing the (\d+) most recent of (\d+) matching filings"), "只列出最近的 {0} 份（符合条件的共 {1} 份）"),
+    (re.compile(r"(\d+) matching row\(s\) skipped because accession number, form or filing date was missing or malformed"),
+     "跳过 {0} 行：申报编号、表格类型或申报日期缺失或格式不对"),
+    (re.compile(r"revenue series combines concepts: (.+)"), "营收序列合并了多个 XBRL 概念：{0}"),
+    (re.compile(r"no annual revenue found under (.+)"), "在 {0} 下没有找到年度营收"),
+    (re.compile(r"no annual net income found under (.+)"), "在 {0} 下没有找到年度净利润"),
+    (re.compile(r"no cover-page shares outstanding \(dei:EntityCommonStockSharesOutstanding\) found"), "没有找到封面上的流通股数（dei:EntityCommonStockSharesOutstanding）"),
+    (re.compile(r"no (.+) filings found in the parsed range of the SEC response\.(?: Other form types present: (.+)\.)? "
+                r"This is a retrieval result for this window, not proof that no such filing exists\."),
+     "在 SEC 返回的范围里没有找到 {0} 申报。{1}这只是本次检索窗口的结果，不能证明这类申报不存在。"),
+]
+
+
+def note_zh(text: str) -> str:
+    """Chinese for the provider notes the page shows; anything unknown stays as written."""
+    for pattern, zh in _NOTE_ZH:
+        m = pattern.fullmatch(text.strip())
+        if m:
+            groups = list(m.groups())
+            if len(groups) == 2 and pattern.pattern.startswith("no (.+) filings"):  # the optional list of other forms
+                groups[1] = f"返回里有其他类型：{groups[1]}。" if groups[1] else ""
+            return zh.format(*groups)
+    return text
+
+
+def growth_from_base_end(calculations: list, claim, items: list) -> list:
+    """When the base value is the latest reported fiscal year, the required growth runs from that year's end, as in E1.
+
+    The calculation used to count only the claim's horizon from today, so the same base gave two growth rates
+    (for example 61.65% over 3 years here and 45.75% over 3.82 years in E1).
+    """
+    e1 = next((i for i in items if i.id == "E1"), None)
+    if e1 is None or claim.base_annual_metric is None:
+        return calculations
+    reported = next((v for k, v in e1.measured.items() if k.startswith("latest_reported_")), None)
+    years = e1.measured.get("years_from_period_end_to_target")
+    if reported is None or years is None or Decimal(reported) != claim.base_annual_metric:
+        return calculations
+    out = []
+    for c in calculations:
+        if c.name == "required_metric_cagr" and c.status == "ok":
+            required = next(Decimal(v) for k, v in c.inputs.items() if k.startswith("required_"))
+            end = e1.measured.get("latest_period_end")
+            exact = e1.measured.get("required_cagr_from_reported")
+            c = c.model_copy(update={
+                # E1's own value: recomputing it from the rounded year count gave 172.63% here and 172.62% in E1
+                "value": Decimal(exact) if exact is not None else annualized_rate(required, claim.base_annual_metric, Decimal(years)),
+                "formula": c.formula.replace("horizon_years", "years_from_base_period_end"),
+                "inputs": {**c.inputs, "years_from_base_period_end": years, "base_period_end": end},
+                "assumptions": c.assumptions + [f"the base is the reported fiscal year ending {end}, so the growth runs {years} years from then to the target date"],
+            })
+        out.append(c)
+    return out

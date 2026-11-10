@@ -94,6 +94,26 @@ def build_kline(bars: list[Candle]) -> Optional[KLine]:
                  monthly=aggregate(bars, lambda d: (d.year, d.month))[-KLINE_MONTHS:])
 
 
+def _fill_last_close(stamps: list, closes: list, adjcloses: list, meta: Mapping, offset: int) -> tuple[list, list]:
+    """Yahoo sometimes sends the latest session's bar with open/high/low but no close (seen just after 00:00 UTC);
+    the quote's own regular-market price for that same exchange day is its close."""
+    price, when = _num(meta.get("regularMarketPrice")), meta.get("regularMarketTime")
+    if not stamps or price is None or isinstance(when, bool) or not isinstance(when, int):
+        return closes, adjcloses
+    i = len(stamps) - 1
+    ts = stamps[i]
+    if isinstance(ts, bool) or not isinstance(ts, int) or i >= len(closes) or _num(closes[i]) is not None:
+        return closes, adjcloses
+    day = lambda t: (datetime.fromtimestamp(t, tz=timezone.utc) + timedelta(seconds=offset)).date()  # noqa: E731
+    if day(when) != day(ts):
+        return closes, adjcloses
+    closes, adjcloses = list(closes), list(adjcloses)
+    closes[i] = price
+    if i < len(adjcloses):
+        adjcloses[i] = price
+    return closes, adjcloses
+
+
 class YahooChartProvider(Provider):
     provider_id = "yahoo_finance_chart"
     display_name = "Yahoo Finance chart (unofficial)"
@@ -137,6 +157,7 @@ class YahooChartProvider(Provider):
         if not isinstance(adjcloses, list) or len(adjcloses) != len(stamps):
             adjcloses = closes
         offset = meta.get("gmtoffset") if isinstance(meta.get("gmtoffset"), int) else 0
+        closes, adjcloses = _fill_last_close(stamps, closes, adjcloses, meta, offset)
 
         opens, highs, lows, vols = (quote.get(k) if isinstance(quote, Mapping) else None for k in ("open", "high", "low", "volume"))
         has_ohlc = all(isinstance(x, list) and len(x) == len(stamps) for x in (opens, highs, lows))
@@ -183,7 +204,9 @@ class YahooChartProvider(Provider):
         )
 
 
-MONTHLY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=max&interval=1mo"
+# the whole history as monthly bars: with range=max Yahoo sends quarterly bars for stocks listed before about 1985 (AMD, AAPL),
+# so 24 "months" were 24 quarters; an explicit span from 1970 to a fixed far date keeps monthly bars and a stable URL for replay
+MONTHLY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?period1=0&period2=9999999999&interval=1mo"
 DAILY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1y&interval=1d"
 
 
@@ -203,6 +226,7 @@ def daily_closes(payload: Any, url: str) -> list[tuple[date, float]]:
     adj = ((ind.get("adjclose") or [{}])[0] or {}).get("adjclose") or []
     if len(adj) != len(stamps):
         adj = closes
+    _, adj = _fill_last_close(stamps, closes, adj, meta, offset)
     by_day: dict[date, float] = {}
     for ts, px in zip(stamps, adj):
         v = _num(px)
@@ -228,8 +252,17 @@ def monthly_closes(payload: Any, url: str) -> list[tuple[date, float]]:
         v = _num(px)
         if isinstance(ts, int) and not isinstance(ts, bool) and v is not None:
             d = datetime.fromtimestamp(ts, tz=timezone.utc).date()
-            by_month[(d.year, d.month)] = (d, v)  # Yahoo may return weekly bars for range=max; keep the last close of each month
-    return [by_month[k] for k in sorted(by_month)]
+            by_month[(d.year, d.month)] = (d, v)  # weekly bars are possible too; keep the last close of each month
+    months = [by_month[k] for k in sorted(by_month)]
+    # only a run of consecutive months counts: a window of n rows must be n months, never n quarters
+    start = len(months) - 1
+    while start > 0 and _month_no(months[start][0]) - _month_no(months[start - 1][0]) == 1:
+        start -= 1
+    return months[start:]
+
+
+def _month_no(d: date) -> int:
+    return d.year * 12 + d.month
 
 
 def price_base_rate(closes: list[tuple[date, float]], months: int, required_return: Decimal):

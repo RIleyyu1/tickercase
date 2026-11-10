@@ -13,10 +13,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation, localcontext
 from typing import Any, Callable, Optional
 
+from .calculations import deadline_from
+from .extract import _years as claim_years
+from .fmt import pct
 from .models import (
     ClaimDraft,
     Confirmation,
@@ -28,7 +31,6 @@ from .models import (
 )
 
 TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
-YEAR_RE = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|21\d{2})(?!\d)")
 CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 
 CORE_FIELDS: dict[str, str] = {
@@ -235,7 +237,7 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
     ref_date = _parse_date("reference_price_date", norm["reference_price_date"], issues, today)
     since = _parse_date("filings_since", norm["filings_since"], issues, today)
     if ref_date is not None and numbers["horizon_years"] is not None:
-        deadline = ref_date + timedelta(days=round(float(numbers["horizon_years"]) * 365.25))
+        deadline = deadline_from(ref_date, numbers["horizon_years"])
         if deadline <= today:
             issues.append(ValidationIssue(field="horizon_years", code="deadline_passed",
                                           message=f"the reference date {ref_date} plus the horizon gives a deadline of {deadline}, which is not after today ({today})"))
@@ -288,6 +290,10 @@ def validate_draft(draft: ClaimDraft, *, today: Optional[date] = None) -> Valida
         warnings.append(("SEC XBRL amounts are compared in USD only; with another currency the evidence checks report missing data",
                          "SEC XBRL 金额只按美元比较；其他币种下证据检查会显示缺失"))
     warnings.extend(_claim_year_warnings(norm["claim_text"], numbers.get("horizon_years"), today))
+    target, ref = numbers.get("target_price"), numbers.get("reference_price")
+    if target is not None and ref is not None and target <= ref:
+        warnings.append((f"the target {target} is not above the reference price {ref}: the claim is already met today, or it is about a fall; check the target",
+                         f"目标价 {target} 不高于参考价 {ref}：观点今天已经成立，或者其实是看跌；请检查目标价"))
 
     fp = fingerprint(draft)
     blocking_missing = any(m.blocking for m in missing)
@@ -353,8 +359,8 @@ def _target_shares(numbers, rate, mode, norm, missing, warnings) -> tuple[Option
         return None, False
     if rate is not None and not SHARE_RATE_WARN_LOW <= rate <= SHARE_RATE_WARN_HIGH:
         warnings.append((
-            f"the share count changes {rate * 100:.1f}% a year to reach {target:,.0f} shares; check that the share inputs belong to this company",
-            f"股份数每年变化 {rate * 100:.1f}%，才能到 {target:,.0f} 股；请确认股份数输入属于这家公司",
+            f"the share count changes {pct(rate)} a year to reach {target:,.0f} shares; check that the share inputs belong to this company",
+            f"股份数每年变化 {pct(rate)}，才能到 {target:,.0f} 股；请确认股份数输入属于这家公司",
         ))
     return target, derived
 
@@ -363,7 +369,7 @@ def _claim_year_warnings(text: Optional[str], horizon: Optional[Decimal], today:
     """Flag a year in the claim text that is already past or does not match the horizon."""
     if not text:
         return []
-    years = [int(y) for y in YEAR_RE.findall(text)]
+    years = [int(m.group(1)) for m in claim_years(text)]
     if not years:
         return []
     year = max(years)

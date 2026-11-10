@@ -20,23 +20,23 @@ def ex(text):
 
 
 @pytest.mark.parametrize("text,ticker,target,multiple,years", [
-    ("TSLA 在2030年股价达到1000一股", "TSLA", "1000", None, "4.25"),
+    ("TSLA 在2030年股价达到1000一股", "TSLA", "1000", None, "4.2464"),
     ("SYNT will trade at $100 in five years.", "SYNT", "100", None, "5"),
     ("特斯拉五年后翻倍", "TSLA", None, "2", "5"),
-    ("Apple to $250 by end of 2027", "AAPL", "250", None, "1.25"),
+    ("Apple to $250 by end of 2027", "AAPL", "250", None, "1.2457"),
     ("I think $NVDA will hit 300 in 3 years", "NVDA", "300", None, "3"),
-    ("英伟达明年涨到两百美元", "NVDA", "200", None, "1.25"),
+    ("英伟达明年涨到两百美元", "NVDA", "200", None, "1.2457"),
     ("苹果三年内涨50%", "AAPL", None, "1.5", "3"),
     ("NVDA 18个月后到 250", "NVDA", "250", None, "1.5"),
     ("SYNT 一年半后 120 美元", "SYNT", "120", None, "1.5"),
     ("BRK.B to $600 within 2 years", "BRK.B", "600", None, "2"),
     ("RKLB stock will reach $1.5k in 4 years", "RKLB", "1500", None, "4"),
-    # days and weeks are read with three decimals; validation then applies the one-month to ten-year range
-    ("NVDA 999天后涨到300", "NVDA", "300", None, "2.735"),
-    ("SYNT to $120 in 30 days", "SYNT", "120", None, "0.082"),
-    ("苹果两周内涨到250美元", "AAPL", "250", None, "0.038"),
+    # parts of a year keep four decimals so the deadline lands on the stated day (v0.13.2); validation then applies the one-month to ten-year range
+    ("NVDA 999天后涨到300", "NVDA", "300", None, "2.7351"),
+    ("SYNT to $120 in 30 days", "SYNT", "120", None, "0.0821"),
+    ("苹果两周内涨到250美元", "AAPL", "250", None, "0.0383"),
     ("TSLA within 6 weeks to $400", "TSLA", "400", None, "0.115"),
-    ("NVDA 一天内涨到 300", "NVDA", "300", None, "0.003"),
+    ("NVDA 一天内涨到 300", "NVDA", "300", None, "0.0027"),
 ])
 def test_extraction(text, ticker, target, multiple, years):
     r = ex(text)
@@ -119,7 +119,7 @@ def test_report_layers_and_scenarios_ps():
 def test_report_not_supported_pe_explains_the_divergence():
     r = _run(pe_draft(ticker="SYNT", base_annual_metric="40000000", current_shares="95000000"))
     rep = r.report
-    assert "<0.1%" in rep.headline.zh  # no similar company grew net income that fast
+    assert "0.0%" in rep.headline.zh  # no similar company grew net income that fast: an exact 0, not "<0.1%"
     assert any("问题不在估值" in d.zh or "期权市场" in d.zh for d in rep.divergences)
     assert any(row.tone == "bad" for row in rep.layers[0].rows)
 

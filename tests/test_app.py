@@ -157,6 +157,13 @@ def test_data_failure_shows_error_and_keeps_calculations(app_env):
     at.radio(key="sec_mode").set_value("replay")  # empty snapshot dir -> every provider fails, no network
     run(at)
     click(at, "nav_check")
+    # the example's values came from the synthetic source and go with it; the same values typed by hand stay
+    assert at.session_state["f_reference_price"] == "" and "数据源换成了 PLAY 回放" in texts(at)
+    for name, value in {"currency": "USD", "reference_price": "50", "reference_price_date": "2026-09-30", "current_shares": "95000000", "target_assumed_shares": "100000000",
+                        "valuation_multiple": "25", "base_annual_metric": "200000000"}.items():
+        at.session_state[f"f_{name}"] = value
+    at.session_state["f_share_mode"] = "absolute"
+    run(at)
     confirm_and_run(at)
     result = at.session_state["result"]
     assert result.status.value == "evaluated_with_provider_errors"
@@ -189,6 +196,7 @@ def test_prefill_fills_reference_values_with_sources(app_env):
     assert at.session_state["f_valuation_multiple"] == "118.75"  # today's P/E
     assert "已补全" in texts(at) and "默认假设" in texts(at)
     assert any("◇ 默认假设" in e.label for e in at.expander)  # the folded inputs say how many defaults they hold
+    assert "Yahoo 日线收盘价" in markdown(at) and "yahoo_finance_chart" not in markdown(at)  # sources read in Chinese
 
 
 def test_claim_only_flow_reaches_a_verdict(app_env):
@@ -272,6 +280,145 @@ def test_read_without_a_ticker_stays_on_the_claim(app_env):
     at = synthetic(run(AppTest.from_file(APP)))
     click(at, "btn_prefill")
     assert at.session_state["page"] == "claim" and "先写一句观点" in texts(at)
+
+
+def test_a_sentence_without_a_stock_says_why_and_drops_the_old_stocks_data(app_env):
+    # the old stock's price, shares and multiple used to stay, and ARM accepted them for another ticker
+    at = synthetic(run(AppTest.from_file(APP)))
+    read(at, "SYNT will trade at $100 in five years.")
+    assert at.session_state["f_reference_price"] == "50"
+    read(at, "比特币明年10万")
+    assert at.session_state["page"] == "claim"  # nothing to check: READ stays on ① and says why
+    page = texts(at)
+    assert "没有识别到美国上市的股票" in page and "比特币" in page and "上一只股票的价格" in page
+    assert {at.session_state[f"f_{n}"] for n in ("ticker", "reference_price", "current_shares", "valuation_multiple", "base_annual_metric")} == {""}
+    click(at, "nav_check")
+    at.text_input(key="f_ticker").set_value("ZZZZ")  # no data for it in the synthetic set
+    run(at)
+    click(at, "btn_confirm")
+    assert at.session_state["confirmation"] is None and button(at, "btn_run").disabled
+
+
+def test_a_new_ticker_clears_the_old_stocks_inputs_and_fills_again(app_env):
+    at = run(AppTest.from_file(APP))
+    click(at, "btn_example_ps")  # SYNT
+    at.text_input(key="f_valuation_multiple").set_value("20")  # the user's own multiple for SYNT
+    run(at)
+    at.text_input(key="f_ticker").set_value("SYNA")
+    run(at)
+    assert at.session_state["f_valuation_multiple"] == "" and at.session_state["f_reference_price"] == ""
+    assert "代码换了（SYNT → SYNA）" in texts(at)
+    at.text_input(key="f_ticker").set_value("SYNT")  # back: filled again from public data, the multiple as a fresh default
+    run(at)
+    assert at.session_state["f_reference_price"] == "50" and at.session_state["f_valuation_multiple"] == "23.75"
+
+
+def test_a_valuation_in_the_sentence_is_used_and_kept(app_env):
+    # "按 40 倍市盈率" used to be ignored silently: the report said P/E 40 in its title and computed P/S 95
+    at = synthetic(run(AppTest.from_file(APP)))
+    read(at, "SYNT 2 年内涨到 100，按 40 倍市盈率")
+    assert at.session_state["f_valuation_method"] == "price_to_earnings" and at.session_state["f_valuation_multiple"] == "40"
+    assert at.session_state["f_base_annual_metric"] == "40000000"  # P/E -> net income from public data
+    assert "估值 市盈率 P/E 40 倍" in texts(at)
+    click(at, "btn_refill")  # filling again from public data keeps what the claim said
+    assert at.session_state["f_valuation_multiple"] == "40"
+
+
+def test_a_new_report_starts_the_scenario_from_its_own_values(app_env):
+    # the sliders and date of the previous report used to carry over, and a date past the new deadline raised an error
+    import datetime as dt
+
+    at = run(AppTest.from_file(APP))
+    click(at, "btn_example_ps")
+    confirm_and_run(at)
+    click(at, "nav_events")
+    default_vol = at.slider(key="sc_vol_current").value
+    at.slider(key="sc_vol_current").set_value(150)
+    run(at)
+    at.session_state["sc_date_current"] = dt.date(2031, 1, 1)  # beyond the next claim's deadline
+    click(at, "btn_new")
+    synthetic(at)
+    read(at, "SYNT 一年后收在 60 以上")
+    confirm_and_run(at)
+    click(at, "nav_events")
+    assert at.slider(key="sc_vol_current").value == default_vol and at.session_state["sc_date_current"] < dt.date(2028, 1, 1)
+
+
+def test_a_sentence_about_another_stock_replaces_a_typed_ticker(app_env):
+    at = synthetic(run(AppTest.from_file(APP)))
+    read(at, "SYNT will trade at $100 in five years.")
+    at.text_input(key="f_ticker").set_value("SYNA")  # typed by hand on ② Check
+    run(at)
+    read(at, "SYNT 3年内冲到100")
+    assert (at.session_state["f_ticker"], at.session_state["f_target_price"], at.session_state["f_horizon_years"]) == ("SYNT", "100", "3")
+    assert "句子讲的是 SYNT，不是之前的 SYNA" in texts(at)
+
+
+def test_read_messages_are_whole_sentences(app_env):
+    at = synthetic(run(AppTest.from_file(APP)))
+    read(at, "SYNT 还能翻倍吗")
+    zh_text = at.session_state["extract_msg"][1][0]
+    assert "目标为参考价的 2 倍" in zh_text and "没有从原文" not in zh_text and "  " not in zh_text
+    assert zh_text.endswith("。") and "年数。 目标价" in zh_text  # each part a sentence of its own
+
+
+def test_the_claims_multiple_comes_back_with_its_method(app_env):
+    at = synthetic(run(AppTest.from_file(APP)))
+    read(at, "SYNT 2 年内涨到 100，按 40 倍市盈率")
+    at.selectbox(key="f_valuation_method").set_value("price_to_sales")
+    run(at)
+    assert at.session_state["f_valuation_multiple"] == "23.75"  # today's P/S
+    at.selectbox(key="f_valuation_method").set_value("price_to_earnings")
+    run(at)
+    assert at.session_state["f_valuation_multiple"] == "40"
+
+
+def test_a_field_the_run_needs_is_not_called_optional(app_env):
+    at = run(AppTest.from_file(APP))
+    click(at, "btn_example_ps")
+    at.selectbox(key="f_share_mode").set_value("trend")
+    run(at)
+    at.text_input(key="f_current_shares").set_value("")
+    run(at)
+    missing = next(w.value for w in at.warning if "还缺" in w.value)
+    assert "股份数" in missing and "可选" not in missing
+
+
+def test_each_scroll_script_is_new(app_env):
+    at = run(AppTest.from_file(APP))
+    click(at, "btn_example_ps")
+    first = [str(e.proto) for e in at.get("html") if "scrollTo" in str(e.proto)]
+    click(at, "nav_claim")
+    second = [str(e.proto) for e in at.get("html") if "scrollTo" in str(e.proto)]
+    assert first and second and first != second  # the same markup twice in a row would not run again in the browser
+
+
+def test_the_invalid_message_goes_once_the_inputs_change(app_env):
+    at = run(AppTest.from_file(APP))
+    click(at, "btn_example_pe")
+    at.text_input(key="f_reference_price").set_value("NaN")
+    run(at)
+    click(at, "btn_confirm")
+    assert "输入无效或缺少核心字段" in texts(at)
+    at.text_input(key="f_reference_price").set_value("50")
+    run(at)
+    assert "输入无效或缺少核心字段" not in texts(at)
+
+
+def _scrolls_to_top(at) -> bool:
+    return any("scrollTo" in str(getattr(e, "proto", e)) for e in at.get("html"))
+
+
+def test_a_new_page_opens_at_its_top(app_env):
+    at = run(AppTest.from_file(APP))
+    assert _scrolls_to_top(at)
+    run(at)
+    assert not _scrolls_to_top(at)  # the same page again keeps its scroll position
+    click(at, "btn_example_ps")
+    assert _scrolls_to_top(at)  # ① Claim -> ② Check
+    confirm_and_run(at)
+    click(at, "nav_next")
+    assert at.session_state["rpage"] == "methods" and _scrolls_to_top(at)
 
 
 def test_english_switch_and_history_view(app_env):
@@ -506,3 +653,88 @@ def test_stored_narrative_is_shown_with_todays_verdicts(app_env):
     at.session_state["result"].narratives["zh"] = old
     run(at)
     assert "1/1 句通过核对 · 0 句含无出处数字" in markdown(at) and "已按当前核对规则重新核对（写成时为 0/1）" in markdown(at)
+
+
+def test_the_run_key_opens_the_run_page_without_running_again(app_env):
+    # pressing ③ Run on a finished report used to fetch and compute the same case a second time
+    at = run(AppTest.from_file(APP))
+    click(at, "btn_example_ps")
+    confirm_and_run(at)
+    cases = len(list((app_env / "cases").glob("*.json")))
+    click(at, "nav_run")
+    assert at.session_state["page"] == "run" and len(list((app_env / "cases").glob("*.json"))) == cases
+    assert {"btn_run_open", "btn_run_again", "btn_run_back"} <= keys(at)
+    click(at, "btn_run_open")
+    assert at.session_state["page"] == "result"
+    click(at, "nav_run")
+    click(at, "btn_run_again")  # running again is a button of its own
+    assert len(list((app_env / "cases").glob("*.json"))) == cases + 1
+
+
+def test_a_new_stock_starts_from_the_default_valuation_method(app_env):
+    # "按 40 倍市盈率" for one stock left P/E selected for the next stocks, which then had no multiple or a loss as the base
+    at = synthetic(run(AppTest.from_file(APP)))
+    read(at, "SYNT 2 年内涨到 100，按 40 倍市盈率")
+    assert at.session_state["f_valuation_method"] == "price_to_earnings"
+    read(at, "SYNA 3年内冲到100")
+    assert at.session_state["f_valuation_method"] == "price_to_sales" and at.session_state["f_valuation_multiple"] != "40"
+    read(at, "SYNT 2 年内涨到 100，按 40 倍市盈率")
+    read(at, "SYNT 3年内冲到100")  # same stock, the sentence no longer names a valuation
+    assert at.session_state["f_valuation_method"] == "price_to_sales" and at.session_state["claim_valuation"] is None
+
+
+def test_a_typed_value_that_is_not_a_number_gives_way_to_the_sentence(app_env):
+    at = synthetic(run(AppTest.from_file(APP)))
+    read(at, "SYNT 还能翻倍吗")
+    at.text_input(key="f_horizon_years").set_value("一年")  # not a number
+    run(at)
+    read(at, "SYNT 一年内能翻倍吗")
+    assert at.session_state["f_horizon_years"] == "1" and "保留了你手动填写的" not in texts(at)
+
+
+def test_another_data_source_releases_the_confirmation(app_env):
+    # DEMO -> LIVE kept "confirmed", and RUN then took the synthetic price and revenue for real ones
+    at = run(AppTest.from_file(APP))
+    click(at, "btn_example_ps")
+    click(at, "btn_confirm")
+    assert at.session_state["confirmation"] is not None
+    click(at, "nav_claim")
+    at.radio(key="sec_mode").set_value("replay")
+    run(at)
+    assert at.session_state["confirmation"] is None and at.session_state["f_reference_price"] == ""
+    assert "数据源换成了 PLAY 回放" in at.session_state["prefill_msg"][1][0]
+
+
+def test_a_date_in_the_sentence_counts_from_the_reference_date(app_env):
+    # "明年" ended on 12-30: the years were counted from today, the deadline from the last close a day earlier
+    from datetime import date
+
+    from tickercase.calculations import deadline_from
+
+    at = synthetic(run(AppTest.from_file(APP)))
+    read(at, "SYNT 明年涨到 100")
+    ref = date.fromisoformat(at.session_state["f_reference_price_date"])
+    assert deadline_from(ref, Decimal(at.session_state["f_horizon_years"])) == date(ref.year + 1, 12, 31)
+
+
+def test_a_report_page_in_hist_opens_at_the_report(app_env):
+    at = run(AppTest.from_file(APP))
+    click(at, "btn_example_ps")
+    confirm_and_run(at)
+    case = at.session_state["result"].case_id
+    at2 = AppTest.from_file(APP)  # a fresh session opening the case's link: the HIST view
+    at2.query_params["case"] = case
+    at2.query_params["p"] = "methods"
+    run(at2)
+    assert at2.session_state["view"] == "history"
+    click(at2, "nav_fund")
+    scripts = " ".join(str(e.proto.body) for e in at2.get("html"))
+    assert "tc-report-top" in scripts  # scrolls to a plain marker above the report (the sticky bar itself reads as top 0)
+
+
+def test_market_page_says_when_there_is_no_earlier_run(app_env):
+    at = run(AppTest.from_file(APP))
+    click(at, "btn_example_ps")
+    confirm_and_run(at)
+    click(at, "nav_market")
+    assert "没有可比较的上一次运行" in " ".join(str(e.proto.body) for e in at.get("html")) + markdown(at)

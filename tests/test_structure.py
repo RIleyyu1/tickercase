@@ -163,7 +163,7 @@ def test_synthetic_case_has_the_split_the_scenario_and_no_change_on_first_run(tm
     assert {x.symbol for x in st.regime} == {"SPY", "QQQ", "IWM", "^VIX", "^VIX3M"}
     assert st.market_part + st.peer_part + st.own_part == pytest.approx(st.total, abs=1e-12)
     sh = st.shifted
-    assert sh.spot_to == pytest.approx(50.0 * math.exp(-(st.log_market + st.log_peers)))
+    assert sh.spot_to == pytest.approx(50.0 * (1 + st.own_part) / (1 + st.total))  # only the own part shown on ③ stays
     assert sh.low <= sh.high and set(sh.methods) <= {"M1", "M2", "M3", "M4"}
     assert r.change is None  # nothing earlier in the store
 

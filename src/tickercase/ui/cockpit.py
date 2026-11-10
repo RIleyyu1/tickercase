@@ -16,9 +16,12 @@ from __future__ import annotations
 
 import html
 import math
-from datetime import date, timedelta
+import re
+from datetime import date
 from typing import Iterable, Optional
 
+from ..calculations import deadline_from
+from ..fmt import about, prob, prob_ends, prob_num, prob_range
 from ..models import VERDICT_DISPLAY_ZH, CaseResult, Narrative
 from ..oracle import MIN_INDEPENDENT_WINDOWS, independent_windows
 
@@ -50,7 +53,7 @@ def amount(value, zh: bool) -> str:
     v = float(value)
     for size, unit in (((1e12, " 万亿"), (1e8, " 亿"), (1e4, " 万")) if zh else ((1e12, "T"), (1e9, "B"), (1e6, "M"))):
         if abs(v) >= size:
-            return f"{v / size:,.2f}".rstrip("0").rstrip(".") + unit
+            return f"{v / size:,.{0 if unit == ' 万' else 2}f}" + unit  # as the report writes it: '4.30 万亿', not '4.3 万亿' beside it
     return f"{v:,.0f}"
 
 
@@ -60,11 +63,15 @@ def tr(text, zh: bool) -> str:
     return (text.zh or text.en) if zh else (text.en or text.zh)
 
 
+# probabilities are written by one module for every page (fmt.py); the old names stay for the callers here
+pct_small, num_small, range_text, range_str = prob, prob_num, prob_ends, prob_range
+
+
 def deadline_of(result: CaseResult) -> date:
     if result.oracle is not None:
         return result.oracle.target_date
     v = result.confirmed_claim.values
-    return v.reference_price_date + timedelta(days=round(float(v.horizon_years) * 365.25))
+    return deadline_from(v.reference_price_date, v.horizon_years)
 
 
 # ------------------------------------------------------------------ small parts
@@ -147,9 +154,8 @@ def other_side(result: CaseResult, zh: bool) -> tuple[str, str]:
     if not vals:
         return "", ""
     lo, hi = min(p for _, p in vals), max(p for _, p in vals)
-    rng = pct(lo, 0) if round(lo * 100) == round(hi * 100) else f"{lo * 100:.0f}–{hi * 100:.0f}%"
     names = {"M1": L(zh, "期权", "options"), "M2": L(zh, "模型", "model")}
-    return rng, " · ".join(f"{names[i]} {pct(p)}" for i, p in vals)
+    return range_str(lo, hi), " · ".join(f"{names[i]} {pct_small(p, 1)}" for i, p in vals)
 
 
 def other_label(result: CaseResult, zh: bool) -> str:
@@ -172,7 +178,7 @@ def status_bar(result: CaseResult, zh: bool, jumps: Iterable[tuple[str, str]] = 
     o = result.oracle
     touch = is_touch(result)
     if o is not None and o.low is not None:
-        rng = (f'<span class="tc-rd tc-ph tc-row"><span class="tc-vt" style="font-size:34px;line-height:30px">{pct(o.low, 0)}–{pct(o.high, 0)}</span>'
+        rng = (f'<span class="tc-rd tc-ph tc-row"><span class="tc-vt" style="font-size:34px;line-height:30px">{range_str(o.low, o.high)}</span>'
                f'<span class="tc-inv">{esc(tr(o.tier_label, zh))}</span></span>')
     else:
         rng = f'<span class="tc-rd tc-ph tc-row"><span style="font-size:12px">{esc(L(zh, "数据不足，无法计算概率", "Not enough data to compute a probability"))}</span></span>'
@@ -182,10 +188,10 @@ def status_bar(result: CaseResult, zh: bool, jumps: Iterable[tuple[str, str]] = 
     side = ""
     if o is not None:
         r, _ = other_side(result, zh)
-        side = chip(f"{other_label(result, zh)} ≈ {r}") if r else ""
+        side = chip(f"{other_label(result, zh)} {about(r)}") if r else ""
     ch = result.change
     if ch is not None and ch.previous_low is not None:
-        last = f"{pct(ch.previous_low, 0)}–{pct(ch.previous_high, 0)}"
+        last = range_str(ch.previous_low, ch.previous_high)
         side += chip(L(zh, f"上次 {ch.previous_market_date}：{last}", f"last run {ch.previous_market_date}: {last}"))
     n = len(warnings_of(result, zh))
     warn = f'<span class="tc-warnlink">{lamp("red" if n else "off")}{dymo(f"WARN {n}", small=True)}</span>'
@@ -197,20 +203,24 @@ def status_bar(result: CaseResult, zh: bool, jumps: Iterable[tuple[str, str]] = 
 # ------------------------------------------------------------------ result units
 
 
-def readout(label: str, value: str, *, amber: bool = False, pixel: bool = False) -> str:
+def readout(label: str, value: str, *, amber: bool = False, pixel: bool = False, sub: str = "") -> str:
     cls = ("" if pixel else "tc-vt") + (" tc-am" if amber else "")
     size = "24px" if pixel else "36px"
+    extra = f'<span class="tc-dim" style="font-size:12px;line-height:14px">{esc(sub)}</span>' if sub else ""
     return (f'<div class="tc-rd tc-ph"><span class="tc-dim" style="font-size:12px;line-height:14px">{esc(label)}</span>'
-            f'<span class="{cls}" style="font-size:{size};line-height:34px">{esc(value)}</span></div>')
+            f'<span class="{cls}" style="font-size:{size};line-height:34px;white-space:nowrap">{esc(value)}</span>{extra}</div>')
 
 
 def claim_unit(result: CaseResult, zh: bool, label: str) -> str:
     v = result.confirmed_claim.values
     calc = {c.name: c for c in result.calculations if c.status == "ok"}
     req, ann = calc.get("required_return"), calc.get("annualized_price_return")
-    req_text = (f"{float(req.value) * 100:+.1f}%" if req else "—") + (f" · {float(ann.value) * 100:.1f}%/{L(zh, '年', 'yr')}" if ann else "")
+    req_text = f"{float(req.value) * 100:+.1f}%" if req else "—"
+    per_year = L(zh, f"每年 {float(ann.value) * 100:.1f}%", f"{float(ann.value) * 100:.1f}% a year") if ann and v.horizon_years >= 1 else ""
     sources = [name for step, name in (("sec_facts", "SEC"), ("price_history", "YAHOO"), ("prediction_markets", "POLYMARKET"), ("fear_greed", "CNN"))
                if result.data_steps.get(step) == "ok"]
+    if any("synthetic" in x.split(",") for x in result.data_modes.values()):  # a DEMO run names no real source
+        sources = [L(zh, "合成示例数据，不是真实的 SEC 或行情数据", "synthetic example data, not real SEC or market data")]
     modes = sorted({m for k, x in result.data_modes.items() if k in ("sec_filings", "sec_facts", "market_prices") for m in x.split(",") if m != "unavailable"})
     case = f"CASE {result.case_id[:8].upper()} · {'/'.join(modes).upper() or '—'}"
     return (unit_head(label, dymo(case), "u-clm")
@@ -219,7 +229,7 @@ def claim_unit(result: CaseResult, zh: bool, label: str) -> str:
             + readout(L(zh, "COND · 判定条件", "COND · condition"), cond_text(result, zh), pixel=True)
             + readout(L(zh, "T-DATE · 目标日", "T-DATE · deadline"), deadline_of(result).isoformat(), amber=True)
             + readout(L(zh, f"LAST · {v.reference_price_date} 收盘 {v.currency}", f"LAST · close {v.reference_price_date} {v.currency}"), f"{float(v.reference_price):,.2f}")
-            + readout(L(zh, "REQ · 需要的涨幅", "REQ · required move"), req_text, amber=True)
+            + readout(L(zh, "REQ · 需要的涨幅", "REQ · required move"), req_text, amber=True, sub=per_year)
             + "</div>"
             + f'<div class="tc-note">{esc(L(zh, "数据", "Data"))} · {result.created_at:%Y-%m-%d %H:%M} UTC'
             + (f' · {esc(" · ".join(sources))}' if sources else "") + "</div>")
@@ -273,15 +283,15 @@ def prb_screen(result: CaseResult, zh: bool, anim: bool) -> str:
     o = result.oracle
     touch = o.condition == "touch"
     target = format(o.target_price, "f")
-    head = L(zh, f"P({o.target_date} 前{'触及' if touch else '收在'} {target}{'' if touch else ' 以上'})",
-             f"P({'touch' if touch else 'close above'} {target} by {o.target_date})")
+    head = (L(zh, f"P({o.target_date} 前触及 {target})", f"P(touch {target} by {o.target_date})") if touch
+            else L(zh, f"P({o.target_date} 收在 {target} 以上)", f"P(close above {target} on {o.target_date})"))
     used, ref = split_methods(result)
     used_ids = {m.id for m, _ in used}
     lines = []
     if used:
-        lines.append(("", L(zh, "计入区间　", "In range　") + " · ".join(f"{m.id} {p * 100:.1f}" for m, p in used)))
+        lines.append(("", L(zh, "计入区间　", "In range　") + " · ".join(f"{m.id} {num_small(p)}" for m, p in used)))
     if ref:
-        lines.append(("tc-dim", L(zh, "仅作参考　", "Context only　") + " · ".join(f"{m.id} {p * 100:.1f}" for m, p in ref)))
+        lines.append(("tc-dim", L(zh, "仅作参考　", "Context only　") + " · ".join(f"{m.id} {num_small(p)}" for m, p in ref)))
     _, side_detail = other_side(result, zh)
     if side_detail:
         lines.append(("tc-am", f"{other_label(result, zh)}{L(zh, '：', ': ')}{side_detail}"))
@@ -290,28 +300,39 @@ def prb_screen(result: CaseResult, zh: bool, anim: bool) -> str:
         lines.append(("tc-dim", shift))
     lines_html = "".join(f'<div class="{c} tc-line">{esc(t)}</div>' for c, t in lines)
     if o.low is not None:
-        big = (f'<span class="tc-vt tc-huge">{pct(o.low, 0)}–{pct(o.high, 0)}</span>'
+        big = (f'<span class="tc-vt tc-huge">{range_str(o.low, o.high)}</span>'
                f'<div class="tc-col"><span class="tc-inv tc-tier">{esc(tr(o.tier_label, zh))}</span>{lines_html}</div>')
     else:
         big = f'<span class="tc-nodata">{esc(L(zh, "数据不足，无法计算概率", "Not enough data to compute a probability"))}</span><div class="tc-col">{lines_html}</div>'
     lo, hi = (sqrt_x(o.low), sqrt_x(o.high)) if o.low is not None else (None, None)
     cells = "".join(f'<span class="tc-cell {_zone(i * 2 + 1)}{" lit" if lo is not None and lo - 1 <= i * 2 + 1 <= hi + 1 else ""}"></span>' for i in range(50))
-    top, bottom, last_top = [], [], -99.0
+    groups: list[list] = []  # methods closer than 5% of the ruler share one label
     for m, p in sorted(used + ref, key=lambda x: x[1]):
-        x, inside = sqrt_x(p), m.id in used_ids
+        if groups and sqrt_x(p) - sqrt_x(groups[-1][-1][1]) < 5:
+            groups[-1].append((m, p))
+        else:
+            groups.append([(m, p)])
+    top, bottom, last_top = [], [], -99.0
+    for g in groups:
+        x = sum(sqrt_x(p) for _, p in g) / len(g)
+        inside = any(m.id in used_ids for m, _ in g)
         cls = "tc-am" if inside else "tc-dim"
-        if x - last_top > 6:
-            top.append(f'<span class="{cls} tc-mark" style="left:{x:.1f}%">{"▼" if inside else "▽"}{esc(m.id)}</span>')
+        ids = "·".join(m.id for m, _ in g)
+        edge = " tc-edge-l" if x < 6 else " tc-edge-r" if x > 94 else ""
+        if x - last_top > 9:
+            top.append(f'<span class="{cls} tc-mark{edge}" style="left:{x:.1f}%">{"▼" if inside else "▽"}{esc(ids)}</span>')
             last_top = x
         else:
-            bottom.append(f'<span class="{cls} tc-mark" style="left:{x:.1f}%">{"▲" if inside else "△"}{esc(m.id)}</span>')
+            bottom.append(f'<span class="{cls} tc-mark{edge}" style="left:{x:.1f}%">{"▲" if inside else "△"}{esc(ids)}</span>')
     ticks = "".join(f'<span class="tc-dim tc-tick" style="left:{sqrt_x(p):.1f}%{";transform:translateX(-100%)" if p == 1 else ""}">{lbl}</span>'
                     for p, lbl in ((0.01, "1%"), (0.05, "5%"), (0.2, "20%"), (0.5, "50%"), (1.0, "100%")))
     zones = L(zh, ("彩票级 &lt;5%", "不太可能 5–20%", "有可能 20–50%", "较可能 &gt;50%"), ("Lottery &lt;5%", "Unlikely 5–20%", "Possible 20–50%", "Likely &gt;50%"))
     zone_html = "".join(f'<span{" class=tc-am" if i == 3 else ""}>{z}</span>' for i, z in enumerate(zones))
-    n_ok = len([m for m in o.methods if m.status == "ok"])
+    # the count says which methods make the range, as the ⓘ note does ("2 种方法相差不到 3 倍"), not every reading shown
+    count = (L(zh, f"{len(used)} 种方法计入区间 · {len(ref)} 种仅参考", f"{len(used)} methods in the range · {len(ref)} for context") if ref
+             else L(zh, f"{len(used)} 种方法交叉核对", f"{len(used)} methods cross-checked"))
     return (f'<div class="tc-bezel"><div class="tc-crt{" tc-boot" if anim else ""}"><span class="tc-noise"></span><div class="tc-crt-in tc-ph" style="gap:12px">'
-            f'<span class="tc-dim tc-small">PRB&gt; {esc(head)} · {esc(L(zh, f"{n_ok} 种方法交叉核对", f"{n_ok} methods cross-checked"))}</span>'
+            f'<span class="tc-dim tc-small">PRB&gt; {esc(head)} · {esc(count)}</span>'
             f'<div class="tc-bigrow">{big}</div>'
             f'<div class="tc-marks">{"".join(top)}</div><div class="tc-cells" aria-hidden="true">{cells}</div><div class="tc-marks">{"".join(bottom)}{ticks}</div>'
             f'<div class="tc-zones tc-dim">{zone_html}</div>'
@@ -332,8 +353,8 @@ def method_strips(result: CaseResult, zh: bool, anim: bool, *, solo: bool = Fals
         tag = L(zh, "计入", "in range") if m.id in used_ids else (L(zh, "参考", "context") if m.status == "ok" else L(zh, "缺数据", "no data"))
         lit = min(24, int(sqrt_x(p) // 4)) if ok else -1
         mcells = "".join(f'<span class="tc-mcell {_zone(i * 4 + 2)}{" lit" if i == lit else ""}"></span>' for i in range(25))
-        a = pct(m.touch_probability) if m.status == "ok" else "—"
-        b = pct(m.probability) if m.status == "ok" else "—"
+        a = pct_small(m.touch_probability, 1) if m.status == "ok" else "—"
+        b = pct_small(m.probability, 1) if m.status == "ok" else "—"
         strips.append(
             f'<div class="tc-strip{"" if m.status == "ok" else " tc-off"}"><span class="tc-stub" aria-hidden="true"></span>'
             f'<div class="tc-row" style="gap:10px">{mini_cassette(spin=anim and ok)}'
@@ -346,7 +367,10 @@ def method_strips(result: CaseResult, zh: bool, anim: bool, *, solo: bool = Fals
 
 
 def signed(x: Optional[float], digits: int = 1) -> str:
-    return "—" if x is None else f"{x * 100:+.{digits}f}%"
+    if x is None:
+        return "—"
+    v = round(x * 100, digits)
+    return f"{0:.{digits}f}%" if v == 0 else f"{v:+.{digits}f}%"  # no "-0.0%"
 
 
 def shifted_line(result: CaseResult, zh: bool) -> str:
@@ -355,10 +379,11 @@ def shifted_line(result: CaseResult, zh: bool) -> str:
     sh = st.shifted if st is not None else None
     if sh is None or sh.low is None:
         return ""
-    rng = pct(sh.low, 0) if round(sh.low * 100) == round(sh.high * 100) else f"{sh.low * 100:.0f}–{sh.high * 100:.0f}%"
-    mk, pp = signed(st.market_part), signed(st.peer_part)
-    return L(zh, f"情景（不是预测）· 若近 {st.window_days} 日的大盘（{mk}）与同类（{pp}）两部分回到原位（价 ≈ {sh.spot_to:,.2f}）：{rng}",
-             f"Scenario, not a forecast · if the market ({mk}) and peer ({pp}) parts of the last {st.window_days} days returned (price ≈ {sh.spot_to:,.2f}): {rng}")
+    rng = range_str(sh.low, sh.high)
+    mk, pp, own = signed(st.market_part), signed(st.peer_part), signed(st.own_part)
+    return L(zh, f"情景（不是预测）· 若近 {st.window_days} 日的大盘（{mk}）与同类（{pp}）两部分回到原位、只留个股部分（{own}），价 ≈ {sh.spot_to:,.2f}：{rng}",
+             f"Scenario, not a forecast · if the market ({mk}) and peer ({pp}) parts of the last {st.window_days} days returned and only the own part "
+             f"({own}) stayed, price ≈ {sh.spot_to:,.2f}: {rng}")
 
 
 ITEM_NAMES = {"1.01": ("重大协议", "material agreement"), "1.02": ("终止协议", "agreement ended"), "2.01": ("完成收购或出售", "acquisition or sale completed"),
@@ -397,7 +422,7 @@ def _tape(st, zh: bool) -> str:
         if d.flagged and i > 0:
             files += [L(zh, f"前一交易日：{filing_text(f, zh)}", f"day before: {filing_text(f, zh)}") for f in st.days[i - 1].filings]
         files += [f"▸ {h}" for h in d.headlines]
-        rows.append(f'<div class="tc-trow{" tc-am" if d.flagged else ""}"><span>{"◆" if d.flagged else "·"} {d.day:%m-%d}</span>'
+        rows.append(f'<div class="tc-trow{" tc-am" if d.flagged else ""}"><span>{"◆" if d.flagged else "·"} <span class="tc-vt tc-tday">{d.day:%m-%d}</span></span>'
                     f'<span class="tc-vt">{esc(signed(d.stock))}</span><span class="tc-vt">{esc(signed(math.expm1(d.market + d.peers)))}</span>'
                     f'<span class="tc-vt">{esc(signed(math.expm1(d.own)))}</span>{dbar(d.own, scale)}<span class="tc-tfile">{esc(" · ".join(files))}</span></div>')
     return f'<div class="tc-tape2">{"".join(rows)}</div>'
@@ -406,7 +431,7 @@ def _tape(st, zh: bool) -> str:
 def _side(st, zh: bool) -> str:
     peers = []
     for x in st.peers:
-        rho = f"ρ {x.correlation:.2f}" if x.correlation is not None else ""
+        rho = "" if x.correlation is None else f"ρ {x.correlation:.3f}" if abs(x.correlation - 0.3) < 0.005 else f"ρ {x.correlation:.2f}"
         ret = signed(x.window_return) if x.window_return is not None else ""
         tag = L(zh, "采用", "used") if x.used else L(zh, "未采用", "left out")
         peers.append(f'<div class="tc-prow3{"" if x.used else " tc-off"}"><b>{esc(x.symbol)}</b><span>{esc(rho)}</span><span>{esc(ret)}</span>'
@@ -414,6 +439,9 @@ def _side(st, zh: bool) -> str:
     if not peers:
         peers.append(f'<span class="tc-src">{esc(L(zh, "没有同类篮子：在 STEP 2 核对页的「高级参数 · 同类篮子」里填写。", "No peer basket: enter one under “More inputs · Peer basket” in STEP 2."))}</span>')
     src = (st.peer_source or "").removeprefix("default_assumption:")
+    if zh:
+        src = re.sub(r"^Yahoo Finance similar stocks for (\S+)$", lambda m: f"Yahoo Finance 的相似股票（{m.group(1)}）", src)
+        src = {"user input": "你填写的", "test": "测试"}.get(src, src)
     rule = L(zh, "与本股日相关系数 ≥ 0.3 才采用", "used when the daily correlation is at least 0.3")
     peers.append(f'<span class="tc-src">{esc(L(zh, f"来源：{src}；", f"source: {src}; ") + rule if src else rule)}</span>')
     regime = []
@@ -434,7 +462,11 @@ def _side(st, zh: bool) -> str:
 def mkt_unit(result: CaseResult, zh: bool, label: str, anim: bool, *, notes: bool = True) -> str:
     st, ch = result.structure, result.change
     head = unit_head(label, chip(L(zh, "统计拆分，不是原因 · 贝塔取自前 120 个交易日", "a statistical split, not a cause · betas from the 120 trading days before")), "u-mkt")
-    delta = delta_block(result, zh, notes=notes) if ch is not None else ""
+    # the unit's title promises a Δ: without an earlier run to compare, say why instead of leaving the heading over nothing
+    delta = delta_block(result, zh, notes=notes) if ch is not None else para(L(
+        zh, "Δ 变化归因：没有可比较的上一次运行。同一个观点需要在更早的数据日运行过（同一数据日重新运行不算），这里才会拆分概率为什么变了。",
+        "Δ change: there is no earlier run to compare. The same claim has to have been run on an earlier data day (a re-run on the same data "
+        "day does not count) for the change in probability to be split here."), "tc-mknote")
     if st is None:
         why = (L(zh, "市场结构这一步本次失败，见 SIG 的警示。", "The market-structure step failed in this run; see the warnings under SIG.")
                if result.data_steps.get("market_structure") == "failed" else L(zh, "这份报告没有市场结构数据（v0.11 之前生成）。", "This report has no market-structure data (made before v0.11)."))
@@ -447,7 +479,7 @@ def mkt_unit(result: CaseResult, zh: bool, label: str, anim: bool, *, notes: boo
                    f'<span class="tc-dim tc-small">{esc(b)}</span></div>' for k, x, b in parts)
     n_flag = sum(1 for d in st.days if d.flagged)
     flag_note = L(zh, f"◆ 个股部分超过估计窗日残差的 2 倍（2 × {st.residual_sd * 100:.1f}%）：{n_flag} 天",
-                  f"◆ own part beyond twice the daily residual (2 × {st.residual_sd * 100:.1f}%): {n_flag} days")
+                  f"◆ own part beyond twice the daily residual (2 × {st.residual_sd * 100:.1f}%): {n_flag} day{'' if n_flag == 1 else 's'}")
     window = L(zh, f"近 {st.window_days} 个交易日", f"last {st.window_days} trading days")
     screen = (f'<div class="tc-bezel"><div class="tc-crt{" tc-boot" if anim else ""}"><span class="tc-noise"></span><div class="tc-crt-in tc-ph" style="gap:12px">'
               f'<span class="tc-dim tc-small">MKT&gt; {esc(st.symbol)} · {esc(window)} {st.window_start} → {st.window_end}</span>'
@@ -456,6 +488,19 @@ def mkt_unit(result: CaseResult, zh: bool, label: str, anim: bool, *, notes: boo
               f'<div class="tc-splits">{rows}</div><span class="tc-dim tc-small">{esc(flag_note)}</span>{_tape(st, zh)}</div></div></div>')
     note_html = "".join(para(tr(n, zh), "tc-mknote") for n in st.notes) if notes else ""
     return head + f'<div class="tc-mkt"><div class="tc-mkt-screen">{screen}</div><div class="tc-mkt-side">{_side(st, zh)}</div></div>' + note_html + delta
+
+
+def rounded_to_total(values: list[float], total: float, step: float = 0.1) -> list[float]:
+    """Round each value to one decimal so that the rounded values add up to the rounded total (largest remainders first)."""
+    units = [v / step for v in values]
+    floors = [math.floor(u) for u in units]
+    need = round(total / step) - sum(floors)
+    order = sorted(range(len(units)), key=lambda i: units[i] - floors[i], reverse=True)
+    out = floors[:]
+    for k in range(abs(need)):
+        i = order[k % len(order)] if need > 0 else order[::-1][k % len(order)]
+        out[i] += 1 if need > 0 else -1
+    return [x * step for x in out]
 
 
 DELTA_HOW = ("每一行是它对概率变化的贡献（个百分点），按 Shapley 方法分摊，与计算顺序无关，各行相加等于总变化。股价部分用同一组贝塔拆成大盘、同类和个股。",
@@ -468,7 +513,7 @@ def delta_block(result: CaseResult, zh: bool, *, notes: bool = True) -> str:
     ch = result.change
 
     def rng(lo, hi) -> str:
-        return "—" if lo is None else f"{lo * 100:.0f}–{hi * 100:.0f}%"
+        return "—" if lo is None else range_str(lo, hi)
 
     case = ch.previous_case_id[:8].upper()
     title = L(zh, f"Δ · 与上次同一观点相比（{ch.previous_market_date} 的行情 · CASE {case}）", f"Δ · since the last run of this claim (prices of {ch.previous_market_date} · CASE {case})")
@@ -478,9 +523,11 @@ def delta_block(result: CaseResult, zh: bool, *, notes: bool = True) -> str:
     strips = []
     for mc in ch.methods:
         scale = max([abs(p.delta) for p in mc.parts] + [1e-9])
-        rows = "".join(f'<div class="tc-split"><span>{esc(L(zh, *PART_NAMES[p.key]))}</span><span class="tc-vt tc-sv">{p.delta * 100:+.1f}</span>{dbar(p.delta, scale)}'
-                       f'<span class="tc-dim tc-small">{esc(tr(p.detail, zh))}</span></div>' for p in mc.parts)
-        moved = f"({(mc.after - mc.before) * 100:+.1f} {L(zh, '个百分点', 'pp')})"
+        total = round(mc.after * 100, 1) - round(mc.before * 100, 1)  # the change between the two numbers shown
+        shown = rounded_to_total([p.delta * 100 for p in mc.parts], total)
+        rows = "".join(f'<div class="tc-split"><span>{esc(L(zh, *PART_NAMES[p.key]))}</span><span class="tc-vt tc-sv">{v:+.1f}</span>{dbar(p.delta, scale)}'
+                       f'<span class="tc-dim tc-small">{esc(tr(p.detail, zh))}</span></div>' for p, v in zip(mc.parts, shown))
+        moved = f"({total:+.1f} {L(zh, '个百分点', 'pp')})"
         strips.append(f'<div class="tc-rd tc-ph tc-dstrip"><span class="tc-dim tc-small">{esc(mc.method)} {esc(names.get(mc.method, ""))}</span>'
                       f'<span class="tc-line">{mc.before * 100:.1f}% → {mc.after * 100:.1f}% <span class="tc-am">{esc(moved)}</span></span>'
                       f'<div class="tc-splits">{rows}</div></div>')
@@ -506,12 +553,40 @@ def reaction_text(r, zh: bool) -> str:
 
 
 def _source_links(sources, zh: bool, limit: int = 3) -> str:
-    out = []
+    out, seen, unique = [], set(), []
+    for s in sources:  # several sentences of one 8-K are one link
+        k = s.url or f"{s.publisher or s.id} {s.day}"
+        if k not in seen:
+            seen.add(k)
+            unique.append(s)
+    sources = unique
     for s in sources[:limit]:
         label = f"{s.publisher or s.id} {s.day:%m-%d}"
         out.append(f'<a class="tc-srclink" href="{esc(s.url)}" target="_blank" rel="noopener">{esc(label)}</a>' if s.url else f"<span>{esc(label)}</span>")
     more = len(sources) - limit
     return " · ".join(out) + (f" · +{more}" if more > 0 else "")
+
+
+_PROBLEM_ZH = [
+    (re.compile(r"cites unknown sources: (.+)"), "引用了不存在的来源：{0}"),
+    (re.compile(r"no source cited"), "没有引用来源"),
+    (re.compile(r"event (\S+): no source cited"), "事件 {0}：没有引用来源"),
+    (re.compile(r"event (\S+): none of its sources is dated \S+ \(they are (.+)\)"), "事件 {0}：引用的来源都不是这一天的（来源日期：{1}）"),
+    (re.compile(r"expected '(.+)' is not a date or span the page can read"), "预计时间「{0}」无法识别"),
+    (re.compile(r"expected (\S+): the year (\d{4}) is not in the cited sources"), "预计 {0}：引用的来源里没有 {1} 年"),
+    (re.compile(r"summary: (.+) is not in the cited sources"), "摘要里的 {0} 在引用的来源中找不到"),
+    (re.compile(r"event (\S+): (.+) is not in the cited sources"), "事件 {0} 里的 {1} 在引用的来源中找不到"),
+]
+
+
+def problem_text(x: str, zh: bool) -> str:
+    """A catalyst check finding in the page language (they are stored in English)."""
+    if zh:
+        for pattern, text in _PROBLEM_ZH:
+            m = pattern.fullmatch(x)
+            if m:
+                return text.format(*m.groups())
+    return x
 
 
 def catalyst_card(c, zh: bool, *, proposed: bool = False) -> str:
@@ -529,7 +604,7 @@ def catalyst_card(c, zh: bool, *, proposed: bool = False) -> str:
         f'<div class="tc-catev"><span class="tc-catday">{e.day}</span><div class="tc-col" style="gap:2px;min-width:0">'
         f'<span>{esc(e.change_zh if zh and e.change_zh else e.change_en)}</span>'
         f'<span class="tc-catsub">{esc(reaction_text(e.reaction, zh))} · {_source_links(e.sources, zh)}</span></div></div>' for e in c.events)
-    problems = "".join(f'<div class="tc-catwarn">⚠ {esc(x)}</div>' for x in c.problems)
+    problems = "".join(f'<div class="tc-catwarn">⚠ {esc(problem_text(x, zh))}</div>' for x in c.problems)
     ok = "" if c.problems else f'<div class="tc-catok">{esc(L(zh, "核对通过：引用、日期和数字都能在来源里找到", "checks pass: citations, dates and numbers are in the sources"))}</div>'
     return (f'<div class="tc-cat{" tc-catprop" if proposed else ""}">{head}{meta}<p class="tc-catsum">{esc(summary)}</p>'
             f'<div class="tc-catevs">{events}</div>{problems if proposed or c.problems else ""}{ok if proposed else ""}</div>')
@@ -554,8 +629,10 @@ def upcoming_rows(result: CaseResult, zh: bool) -> list[tuple[str, dict]]:
         mv = event_move(term, ev_day, today) if term else None
         if mv is None:
             priced = L(zh, "无期权期限结构", "no option term structure")
+        elif mv.status == "ok" and mv.move < 0.005:
+            priced = L(zh, "期权几乎没有为这个日期额外定价（不到 ±0.5%）", "options add almost nothing around this date (under ±0.5%)")
         elif mv.status == "ok":
-            priced = L(zh, f"期权为前后额外定价 ±{mv.move * 100:.0f}%", f"options price an extra ±{mv.move * 100:.0f}% around it")
+            priced = L(zh, f"期权为这个日期前后额外定价约 ±{mv.move * 100:.0f}% 的波动", f"options price an extra ±{mv.move * 100:.0f}% around it")
             if mv.gap_days and mv.gap_days > 120:
                 priced += L(zh, f"（前后到期日相隔 {mv.gap_days} 天，期间其他消息也算在里面）", f" (the expiries around it are {mv.gap_days} days apart, so other news is mixed in)")
         elif mv.status == "not_priced":
@@ -584,7 +661,7 @@ def kline_notes(result: CaseResult, zh: bool) -> tuple[str, str]:
     if o is None:
         return "", ""
     t = format(o.target_price, "f")
-    main = f"{pct(o.low, 0)}–{pct(o.high, 0)} {tr(o.tier_label, zh)}" if o.low is not None else L(zh, "数据不足", "not enough data")
+    main = f"{range_str(o.low, o.high)} {tr(o.tier_label, zh)}" if o.low is not None else L(zh, "数据不足", "not enough data")
     side, _ = other_side(result, zh)
     touch_label, end_label = L(zh, f"期间触及 {t}", f"touch {t}"), L(zh, f"到期收在 {t} 以上", f"close above {t}")
     if o.condition == "touch":
@@ -606,7 +683,8 @@ def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
     first = pm.markets[0] if pm and pm.markets else None
     rows = [
         ("CH-01 OPT", "options", L(zh, "期权链", "Option chain"), pct(op.target_iv, 0) if op and op.target_iv is not None else "—",
-         L(zh, f"行权价 {tgt} 的隐含波动", f"implied vol at {tgt}"),
+         (L(zh, f"最高行权价 {op.max_strike} 的隐含波动（没有 {tgt}）", f"implied vol at the highest strike {op.max_strike} (no {tgt})")
+          if op and op.target_iv_extrapolated else L(zh, f"行权价 {tgt} 的隐含波动", f"implied vol at {tgt}")),
          f"YAHOO · {op.expiry} · {L(zh, '看涨未平仓', 'call OI')} {op.total_call_oi:,}" if op else "YAHOO", "M1"),
         ("CH-02 PRC", "price_history", L(zh, "价格历史", "Price history"), f"{float(mk.last_close):,.2f}" if mk else "—",
          (L(zh, f"{mk.last_date} 收盘 · 年化波动 {float(mk.annualized_volatility) * 100:.0f}%", f"close {mk.last_date} · vol {float(mk.annualized_volatility) * 100:.0f}%/yr")
@@ -621,7 +699,9 @@ def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
          (L(zh, f"达到年增速 {float(br.required_cagr) * 100:.1f}%", f"reached {float(br.required_cagr) * 100:.1f}% a year") if br and br.companies else ""),
          f"SEC FRAMES · {br.start_year}–{br.end_year}" if br else "SEC FRAMES", "M3"),
         ("CH-06 INS", "insiders", L(zh, "内部人交易", "Insider trades"), (L(zh, f"卖 {ins.sales} · 买 {ins.purchases}", f"sell {ins.sales} · buy {ins.purchases}") if ins else "—"),
-         (L(zh, f"12 个月公开市场 · 卖出约 {amount(ins.sale_value, zh)} 美元", f"12-month open market · sold about ${amount(ins.sale_value, zh)}") if ins else ""),
+         (L(zh, f"12 个月公开市场 · 卖出约 {amount(ins.sale_value, zh)} 美元", f"12-month open market · sold about ${amount(ins.sale_value, zh)}")
+          + (L(zh, f" · 读取 {ins.filings_read}/{ins.filings_listed} 份", f" · {ins.filings_read} of {ins.filings_listed} filings read")
+             if ins.filings_read < ins.filings_listed else "") if ins else ""),
          "SEC FORM 4", "SIG"),
         ("CH-07 PMKT", "prediction_markets", L(zh, "预测市场", "Prediction market"),
          pct(first.probability_yes, 0) if first and first.probability_yes is not None else "—", first.question if first else "", "POLYMARKET", "SIG"),
@@ -638,9 +718,12 @@ def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
          "YAHOO · GOOGLE NEWS · YAHOO CALENDAR", "CAT · MKT"),
     ]
     cards = []
+    demo = any("synthetic" in v.split(",") for v in result.data_modes.values())  # a DEMO run read no real source
     for i, (ch, step, name, value, sub, src, to) in enumerate(rows):
         state = result.data_steps.get(step)
-        kind, word = ("green", "OK") if state == "ok" else ("red", "FAIL") if state == "failed" else ("off", "—")
+        kind, word = ("green", "DEMO" if demo else "OK") if state == "ok" else ("red", "FAIL") if state == "failed" else ("off", "—")
+        if demo:
+            src = L(zh, f"合成示例 · 不是真实的 {src}", f"SYNTHETIC · not real {src}")
         cards.append(f'<div class="tc-feedm"><div class="tc-row tc-between">{dymo(ch, small=True)}'
                      f'<span class="tc-row" style="gap:6px">{lamp(kind, "tc-pop" if anim else "", f"animation-delay:{0.2 + i / 12:.2f}s" if anim else "")}'
                      f'<b class="tc-tiny">{word}</b></span></div>'
@@ -652,21 +735,53 @@ def feeds_unit(result: CaseResult, zh: bool, label: str, anim: bool) -> str:
             + f'<div class="tc-feeds">{"".join(cards)}</div>')
 
 
+# sentences that reports stored before v0.13.1 carry in the wrong list, or as fillers
+_HEADWIND_STARTS = ("Insiders made no open-market purchases", "Market mood is fearful")
+_FILLERS = ("No two checks point clearly the same way", "No notable disagreement between the checks")
+
+
+def sorted_signals(rep) -> tuple[list, list, list, list]:
+    """(checks pointing the same way, signals against the claim, disagreements, notes) as (lamp, mark, Text) rows.
+
+    "++" only for checks that support the claim; "−−" for checks that agree against it; "▼" for market signals
+    against it (insiders only selling, a fearful market); "!!" for disagreements between checks.
+    """
+    agree, against, split = [], [], []
+    for x in rep.agreements:
+        if x.en.startswith(_HEADWIND_STARTS):
+            against.append(("amber", "▼", x))
+        elif x.en.startswith(_FILLERS):
+            continue
+        elif "against the claim" in x.en:
+            agree.append(("amber", "−−", x))
+        else:
+            agree.append(("green", "++", x))
+    against += [("amber", "▼", x) for x in getattr(rep, "headwinds", [])]
+    kept = [x for x in rep.divergences if not x.en.startswith(_FILLERS)]
+    notes = [("off", "·", x) for x in kept if x.en.startswith("Touching ")]  # a property of the formulas, not a disagreement
+    split = [("amber", "!!", x) for x in kept if not x.en.startswith("Touching ")]
+    return agree, against, split, notes
+
+
 def sig_unit(result: CaseResult, zh: bool, label: str, notes: Iterable[str] = (), *, signals: bool = True, warnings: bool = True) -> str:
-    """Agreeing (++) and diverging (!!) signals, then system warnings (data failures, coverage gaps) and notes."""
+    """Checks that agree (++ for, −− against), market signals against the claim (▼), disagreements (!!), then system warnings and notes."""
     rows = []
     rep = result.report
     if rep is not None and signals:
-        rows += [("green", "++", tr(x, zh)) for x in rep.agreements]
-        rows += [("amber", "!!", tr(x, zh)) for x in rep.divergences]
+        agree, against, split, notes_ = sorted_signals(rep)
+        rows += [(k, m, tr(x, zh)) for k, m, x in agree + against + split + notes_]
+        if not split:
+            rows.append(("off", "—", L(zh, "各项检查之间没有明显矛盾。", "No notable disagreement between the checks.")))
     if warnings:
         warns = warnings_of(result, zh)
         rows += [("red", "WARN", w) for w in warns]
         if not warns:
-            rows.append(("off", "WARN 0", L(zh, "没有系统警示：数据源全部成功，申报覆盖完整。", "No system warnings: every data source answered and filing coverage is complete.")))
+            rows.append(("off", "WARN 0", L(zh, "没有数据源报错。某个来源没有这家公司的数据时写在提示里（见下方或 ⑦ 原始数据）。",
+                                            "No data source reported an error. A source without data for this company is listed in the notes (below or under ⑦ raw data).")))
         rows += [("off", "NOTE", n) for n in notes]
     body = "".join(f'<div class="tc-sigrow">{lamp(k)}<span><b>{esc(t)}</b>　{esc(x)}</span></div>' for k, t, x in rows)
-    return unit_head(label, "", "u-sig") + body
+    legend = chip(L(zh, "++ 检查同向支持 · −− 检查同向不利 · ▼ 不利信号 · !! 分歧 · · 说明 · — 无", "++ checks agree for · −− checks agree against · ▼ against · !! disagree · · note · — none")) if signals else ""
+    return unit_head(label, legend, "u-sig") + body
 
 
 def fnd_unit(result: CaseResult, zh: bool, label: str, more: str = "") -> str:
@@ -678,7 +793,7 @@ def fnd_unit(result: CaseResult, zh: bool, label: str, more: str = "") -> str:
     name = (v.display_zh or VERDICT_DISPLAY_ZH[v.label]) if zh else v.display
     meaning = tr(result.report.verdict_meaning, zh) if result.report is not None else ""
     return (head + f'<div class="tc-row" style="gap:12px;margin-bottom:6px">{lamp(tone)}<span class="tc-engr tc-serif tc-fndname">{esc(name)}</span></div>'
-            f'<div class="tc-engr tc-tiny">{esc(v.rules_version.upper())} · {esc(L(zh, "截至", "as of"))} {v.as_of}</div>'
+            f'<div class="tc-engr tc-tiny">{esc(L(zh, "规则 v1（临时）", v.rules_version.upper()))} · {esc(L(zh, "截至", "as of"))} {v.as_of}</div>'
             f'<p class="tc-engr tc-serif tc-fndtext">{esc(meaning or L(zh, "证据视图，不是预测。", "An evidence view, not a forecast."))}</p>'
             + (f'<a class="tc-jump" href="#u-rpt">{esc(more)}</a>' if more else ""))
 
@@ -734,7 +849,7 @@ def keyswitch(armed: bool, zh: bool) -> str:
 def tape(c: CaseResult, zh: bool) -> str:
     v = c.confirmed_claim.values if c.confirmed_claim else None
     o = c.oracle
-    rng = f"{o.low * 100:.1f}–{o.high * 100:.1f}%" if o is not None and o.low is not None else "—"
+    rng = range_str(o.low, o.high, 1) if o is not None and o.low is not None else "—"
     tier = tr(o.tier_label, zh) if o is not None and o.low is not None else ""
     cond = (L(zh, "期间触及", "touch") if o.condition == "touch" else L(zh, "到期收在", "close")) if o is not None else ""
     meta = " · ".join(x for x in (f"{c.created_at:%m-%d}", c.case_id[:8].upper(), cond) if x)
@@ -996,6 +1111,16 @@ header[data-testid="stHeader"],[data-testid="stSidebar"],[data-testid="stSidebar
 [class*="st-key-g-"] [data-testid="stCaptionContainer"],[class*="st-key-g-"] [data-testid="stCaptionContainer"] p{color:#4A4436!important;opacity:1}
 [class*="st-key-u-c-"] [data-testid="stCaptionContainer"],[class*="st-key-u-c-"] [data-testid="stCaptionContainer"] p,
 [class*="st-key-u-o-"] [data-testid="stCaptionContainer"],[class*="st-key-u-o-"] [data-testid="stCaptionContainer"] p{color:#DCD3BA!important;opacity:1}
+[class*="st-key-u-b-"] [data-testid="stExpanderDetails"] [data-testid="stCaptionContainer"],
+[class*="st-key-u-b-"] [data-testid="stExpanderDetails"] [data-testid="stCaptionContainer"] p,
+[class*="st-key-u-r-"] [data-testid="stExpanderDetails"] [data-testid="stCaptionContainer"],
+[class*="st-key-u-r-"] [data-testid="stExpanderDetails"] [data-testid="stCaptionContainer"] p{color:#DCD3BA!important;opacity:1}
+[class*="st-key-u-b-"] [data-testid="stExpanderDetails"] [data-testid="stMarkdownContainer"],
+[class*="st-key-u-b-"] [data-testid="stExpanderDetails"] label{color:#E3DAC0}
+[data-testid="stExpanderDetails"] [class*="st-key-g-"] [data-testid="stCaptionContainer"],
+[data-testid="stExpanderDetails"] [class*="st-key-g-"] [data-testid="stCaptionContainer"] p{color:#4A4436!important}
+[data-testid="stExpanderDetails"] [class*="st-key-g-"] [data-testid="stMarkdownContainer"],
+[data-testid="stExpanderDetails"] [class*="st-key-g-"] label{color:var(--ink)}
 [class*="st-key-g-"]{border:2px solid var(--ink);background:#C4B998;box-shadow:inset 0 3px 0 #D6CDB2,inset 0 -5px 0 #A4997C;padding:14px 14px 16px!important;gap:10px}
 [class*="st-key-g-"] [data-testid="stMarkdownContainer"],[class*="st-key-g-"] label{color:var(--ink)}
 /* side-by-side units stretch to one height */
@@ -1060,7 +1185,7 @@ label[data-testid="stWidgetLabel"] p{font-family:'Noto Serif SC',serif!important
   box-shadow:inset 0 3px 0 #ECE4CF,inset 0 -7px 0 #A99D7E,4px 4px 0 #0C0B09;display:flex;align-items:center}
 [data-testid="stTab"] p{color:var(--ink)!important;font-weight:700!important;font-size:13px!important}
 [data-testid="stTab"][aria-selected="true"]{background:#C49A4A!important;box-shadow:inset 0 3px 0 #DDB86C,inset 0 -7px 0 #9A7634,4px 4px 0 #0C0B09;transform:translate(1px,2px)}
-[data-testid="stTabPanel"][role="tabpanel"]{position:relative;margin-top:10px;padding:18px 22px 24px!important;background:#0F120F;border:3px solid var(--ink);border-radius:18px;box-shadow:inset 0 0 0 4px #050605;overflow:hidden}
+[data-testid="stTabPanel"][role="tabpanel"]{position:relative;margin-top:10px;padding:18px 22px 24px!important;background:#0F120F;border:3px solid var(--ink);border-radius:18px;box-shadow:inset 0 0 0 4px #050605;overflow:clip}
 [data-testid="stTabPanel"][role="tabpanel"]::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0,rgba(0,0,0,.22) 1px,transparent 1px,transparent 3px)}
 [data-testid="stTabPanel"][role="tabpanel"]::before{content:"";position:absolute;inset:-40px;pointer-events:none;z-index:6;background:#0A0D0A url(__SNOW__);background-size:200px 200px;animation:tc-snow .5s steps(1,end) both}
 [data-testid="stTabPanel"] [data-testid="stMarkdownContainer"],[data-testid="stTabPanel"] li,[data-testid="stTabPanel"] label,[data-testid="stTabPanel"] [data-testid="stCaptionContainer"]{color:var(--scr-text)!important}
@@ -1069,8 +1194,10 @@ label[data-testid="stWidgetLabel"] p{font-family:'Noto Serif SC',serif!important
 [data-testid="stTabPanel"] a{color:var(--am)!important}
 [data-testid="stTabPanel"] [data-testid="stExpander"] details{background:transparent;border:2px dashed var(--scr-line)!important}
 [data-testid="stTabPanel"] [data-testid="stExpander"] summary,[data-testid="stTabPanel"] [data-testid="stExpander"] summary p{color:var(--ph)!important}
-/* ---------- a channel screen as a page section (scr- containers): the look of the old report tabs ---------- */
-[class*="st-key-scr-"]{position:relative;padding:18px 22px 24px!important;background:#0F120F;border:3px solid var(--ink);border-radius:18px;box-shadow:inset 0 0 0 4px #050605;overflow:hidden;gap:12px}
+/* ---------- a channel screen as a page section (scr- containers): the look of the old report tabs ----------
+   overflow:clip, not hidden: the snow reaches 40px outside, so a hidden overflow could be scrolled by focus
+   (a fold clicked inside scrolled the panel 40px and cut its first title) */
+[class*="st-key-scr-"]{position:relative;padding:18px 22px 24px!important;background:#0F120F;border:3px solid var(--ink);border-radius:18px;box-shadow:inset 0 0 0 4px #050605;overflow:clip;gap:12px}
 [class*="st-key-scr-"]::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0,rgba(0,0,0,.22) 1px,transparent 1px,transparent 3px)}
 [class*="st-key-scr-"]::before{content:"";position:absolute;inset:-40px;pointer-events:none;z-index:6;background:#0A0D0A url(__SNOW__);background-size:200px 200px;animation:tc-snow .5s steps(1,end) both}
 [class*="st-key-scr-"] [data-testid="stMarkdownContainer"],[class*="st-key-scr-"] li,[class*="st-key-scr-"] label,[class*="st-key-scr-"] [data-testid="stCaptionContainer"],
@@ -1109,14 +1236,14 @@ table.tc-table th.on,table.tc-table td.on{background:rgba(var(--ph-rgb),.08)}
 .tc-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:8px 0 10px}
 .tc-kpi{background:#0A0D0A;border:2px solid var(--scr-line);padding:8px 12px}
 .tc-kpi .k{font-family:'FusionPixel',monospace;font-size:12px;line-height:16px;color:var(--dim)}
-.tc-kpi .v{font-family:'VT323',monospace;font-size:34px;line-height:34px;color:var(--ph);text-shadow:0 0 5px rgba(var(--ph-rgb),.45)}
+.tc-kpi .v{font-family:'VT323',monospace;font-size:34px;line-height:34px;word-break:keep-all;color:var(--ph);text-shadow:0 0 5px rgba(var(--ph-rgb),.45)}
 .tc-kpi.main .v{color:var(--am);text-shadow:0 0 5px rgba(var(--am-rgb),.45)}
-.tc-gauge{position:relative;height:52px;margin:22px 4px 6px}
+.tc-gauge{position:relative;height:64px;margin:22px 4px 6px}
 .tc-gauge .rail{position:absolute;top:14px;left:0;right:0;height:8px;background:var(--seg);border:1px solid #050605}
 .tc-gauge .fill{position:absolute;top:14px;height:8px;background:var(--ph);opacity:.45}
 .tc-gauge .mk{position:absolute;top:18px;width:12px;height:12px;transform:translate(-50%,-50%);border:2px solid #050605}
 .tc-gauge .mk b{position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-family:'FusionPixel',monospace;font-weight:400;font-size:12px;color:var(--scr-text);white-space:nowrap}
-.tc-gauge .mk.below b{top:14px}
+.tc-gauge .mk.below b{top:14px}.tc-gauge .mk.below2 b{top:32px}
 .tc-verdict{border-left:6px solid currentColor}.tc-verdict .lbl{font-family:'Noto Serif SC',serif;font-size:24px;font-weight:900}
 /* ---------- HTML parts ---------- */
 .tc-dymo{display:inline-block;background:#1B1917;color:#F1EBDC;font-weight:600;font-size:12px;letter-spacing:.16em;text-transform:uppercase;padding:4px 10px 5px;border-radius:2px;
@@ -1183,6 +1310,8 @@ h1.tc-claim-dark{color:#F1EBDC!important;text-shadow:0 2px 0 var(--ink);font-siz
 .tc-cell.lit,.tc-mcell.lit{background:var(--ph);box-shadow:0 0 6px rgba(var(--ph-rgb),.55)}
 .tc-marks{position:relative;height:26px}
 .tc-mark{position:absolute;top:0;transform:translateX(-50%);font-size:22px;line-height:26px;white-space:nowrap}
+.tc-mark.tc-edge-l{transform:translateX(-4px)}.tc-mark.tc-edge-r{transform:translateX(calc(4px - 100%))}
+.tc-gauge .mk.tc-edge-l b{left:0;transform:none}.tc-gauge .mk.tc-edge-r b{left:auto;right:0;transform:none}
 .tc-tick{position:absolute;top:4px;transform:translateX(-50%);font-size:12px;line-height:16px;white-space:nowrap}
 .tc-zones{display:grid;grid-template-columns:22.4fr 22.3fr 26fr 29.3fr;font-size:12px;line-height:16px;border-top:2px dashed var(--scr-line);padding-top:6px;gap:4px}
 .tc-prb{display:flex;flex-direction:column;gap:26px}
@@ -1211,6 +1340,7 @@ h1.tc-claim-dark{color:#F1EBDC!important;text-shadow:0 2px 0 var(--ink);font-siz
 .tc-tape2{display:flex;flex-direction:column;border-top:2px dashed var(--scr-line);padding-top:6px}
 .tc-trow{display:grid;grid-template-columns:6em 5em 6em 5em minmax(60px,1fr) minmax(0,2fr);gap:8px;align-items:center;font-size:14px;line-height:22px;border-bottom:1px dashed var(--scr-faint)}
 .tc-trow .tc-vt{font-size:20px;text-align:right}
+.tc-trow .tc-tday{font-size:19px;text-align:left}
 .tc-thead{line-height:18px}
 .tc-thead>span{font-size:12px}
 .tc-thead .tc-num{text-align:right}

@@ -27,11 +27,14 @@ one dated event; scenario() gives the probability under the user's own event sce
 from __future__ import annotations
 
 import math
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 from statistics import NormalDist
 from typing import Optional
 
+from .calculations import deadline_from
+from .fmt import pct, prob, prob_range
 from .models import (
     BaseRate,
     EventMove,
@@ -89,11 +92,16 @@ def p_touch(spot: float, level: float, vol: float, years: float, rate: float) ->
 
 
 def _pct(p: Optional[float]) -> str:
-    if p is None:
-        return "—"
-    if p < 0.001:
-        return "<0.1%"
-    return f"{p * 100:.1f}%"
+    return prob(p, 1)
+
+
+def band_note(base_rate: BaseRate) -> Text:
+    """Which size band the similar companies came from."""
+    if base_rate.band_widened:
+        return T("Fewer than 30 companies were within 0.5x–2x of this company's size, so the band was widened to 0.25x–4x; "
+                 "the companies compared are less alike.",
+                 "规模在本公司 0.5–2 倍之间的公司不到 30 家，所以范围放宽到 0.25–4 倍；参与比较的公司没有那么相近。")
+    return T("Similar size means 0.5x–2x of this company's base-year value.", "规模相近指基期数值在本公司的 0.5–2 倍之间。")
 
 
 def build_oracle(
@@ -108,7 +116,7 @@ def build_oracle(
 ) -> OracleSummary:
     touch = claim.price_condition == "touch"
     target = float(claim.target_price)
-    target_date = claim.reference_price_date + timedelta(days=round(float(claim.horizon_years) * 365.25))
+    target_date = deadline_from(claim.reference_price_date, claim.horizon_years)
     years = max((target_date - today).days / 365.25, 1 / 365.25)
     spot = float(market.last_close) if market else (float(options.underlying_price) if options and options.underlying_price else None)
     r = float(risk_free) if risk_free is not None else 0.0
@@ -118,7 +126,7 @@ def build_oracle(
 
     # ---------------------------------------------------------------- M1 options
     m1_name = T("Option market (implied)", "期权市场（隐含）")
-    m1_measures = T("what traders with money at stake price in, via implied volatility", "真金白银交易的期权，通过隐含波动率反映的定价")
+    m1_measures = T("the odds implied by option prices (risk-neutral: they include the price of risk)", "期权价格隐含的概率（风险中性：包含了风险的价格）")
     if options is not None and options.target_iv and spot:
         vol = options.target_iv
         lim = [T("Risk-neutral probability: it prices risk, not a forecast of real-world odds.", "风险中性概率：反映的是风险定价，不是对真实概率的预测。"),
@@ -132,10 +140,12 @@ def build_oracle(
         p = p_end_above(spot, target, vol, years, r)
         methods.append(ProbabilityMethod(
             id="M1", name=m1_name, status="ok", probability=p, touch_probability=p_touch(spot, target, vol, years, r), measures=m1_measures,
-            detail=T(f"expiry {options.expiry}, implied volatility {vol * 100:.0f}% at strike ~{target:g}; open interest at or above the target: "
-                     f"{options.oi_at_or_above_target:,} of {options.total_call_oi:,} calls; {r_note.en}",
-                     f"到期日 {options.expiry}，行权价约 {target:g} 处的隐含波动率 {vol * 100:.0f}%；目标价及以上的未平仓合约 "
-                     f"{options.oi_at_or_above_target:,} 张（共 {options.total_call_oi:,} 张看涨）；{r_note.zh}"),
+            detail=T(f"expiry {options.expiry}, implied volatility {vol * 100:.0f}% "
+                     + (f"at the highest listed strike {options.max_strike} (none is listed at {target:g})" if options.target_iv_extrapolated else f"at strike ~{target:g}")
+                     + f"; open interest at or above the target: {options.oi_at_or_above_target:,} of {options.total_call_oi:,} calls; {r_note.en}",
+                     f"到期日 {options.expiry}，"
+                     + (f"最高行权价 {options.max_strike} 处（没有 {target:g} 行权价）" if options.target_iv_extrapolated else f"行权价约 {target:g} 处")
+                     + f"的隐含波动率 {vol * 100:.0f}%；目标价及以上的未平仓合约 {options.oi_at_or_above_target:,} 张（共 {options.total_call_oi:,} 张看涨）；{r_note.zh}"),
             inputs={"spot": f"{spot:g}", "target": f"{target:g}", "years": f"{years:.2f}", "implied_volatility": f"{vol:.4f}", "rate": f"{r:.4f}"},
             limitations=lim))
     else:
@@ -144,15 +154,15 @@ def build_oracle(
 
     # ---------------------------------------------------------------- M2 historical-volatility model
     m2_name = T("Statistical model (historical volatility)", "统计模型（历史波动率）")
-    m2_measures = T("how often a stock this volatile ends above the target, if it moves like it has in the past",
-                    "如果股价按过去的波动方式运动，到期时高于目标价的可能性")
+    m2_measures = T("the same formula as M1 with past volatility instead of option prices: touching or ending above the target",
+                    "与 M1 同一个公式，波动率换成过去的实际波动：期间触及或到期站上目标价的可能性")
     if market is not None and market.annualized_volatility and spot:
         vol = float(market.annualized_volatility)
         methods.append(ProbabilityMethod(
             id="M2", name=m2_name, status="ok", probability=p_end_above(spot, target, vol, years, r),
             touch_probability=p_touch(spot, target, vol, years, r), measures=m2_measures,
             detail=T(f"historical volatility {vol * 100:.0f}% a year ({market.volatility_window}); {r_note.en}",
-                     f"历史年化波动率 {vol * 100:.0f}%（{market.volatility_window}）；{r_note.zh}"),
+                     f"历史年化波动率 {vol * 100:.0f}%（{window_zh(market.volatility_window)}）；{r_note.zh}"),
             inputs={"spot": f"{spot:g}", "target": f"{target:g}", "years": f"{years:.2f}", "historical_volatility": f"{vol:.4f}", "rate": f"{r:.4f}"},
             limitations=[T("Constant volatility and no jumps; past volatility is not a forecast.", "假设波动率不变、没有跳空；过去的波动率不是预测。")]))
     else:
@@ -170,14 +180,23 @@ def build_oracle(
             id="M3", name=m3_name, status="ok", probability=base_rate.rate, measures=m3_measures,
             detail=T(f"{base_rate.achieved} of {base_rate.companies} companies with {metric.en} between {base_rate.size_low:,.0f} and "
                      f"{base_rate.size_high:,.0f} USD in {base_rate.start_year} grew at least {float(base_rate.required_cagr) * 100:.1f}% a year "
-                     f"to {base_rate.end_year}; the median grew {float(base_rate.median_cagr or 0) * 100:.1f}% a year",
+                     f"to {base_rate.end_year}; the median grew {pct(base_rate.median_cagr or Decimal(0))} a year",
                      f"{base_rate.start_year} 年{metric.zh}在 {base_rate.size_low / Decimal('1e8'):,.1f} 亿至 {base_rate.size_high / Decimal('1e8'):,.1f} 亿美元之间的 "
                      f"{base_rate.companies} 家公司中，有 {base_rate.achieved} 家到 {base_rate.end_year} 年保持了每年至少 "
-                     f"{float(base_rate.required_cagr) * 100:.1f}% 的增长；中位数为每年 {float(base_rate.median_cagr or 0) * 100:.1f}%"),
+                     f"{pct(base_rate.required_cagr)} 的增长；中位数为每年 {pct(base_rate.median_cagr or Decimal(0))}"),
             inputs={"companies": str(base_rate.companies), "achieved": str(base_rate.achieved), "required_cagr": format(base_rate.required_cagr, "f")},
             limitations=[T("Probability of the business condition, not of the price; the valuation assumption still has to hold.",
                            "这是业绩条件的概率，不是股价的概率；估值假设仍需成立。"),
                          T(base_rate.note, "只统计两年都还在申报的公司，被收购或退市的公司不在其中，所以比例偏乐观。")]
+            + [band_note(base_rate)]
+            + ([T(f"{base_rate.dropped_mis_scaled} compan{'y was' if base_rate.dropped_mis_scaled == 1 else 'ies were'} left out: "
+                  "its two SEC revenue figures for one year differ by more than 100x (a filing tagged thousands as units).",
+                  f"剔除了 {base_rate.dropped_mis_scaled} 家公司：{'它' if base_rate.dropped_mis_scaled == 1 else '它们'}同一年在 SEC 的两个营收数字相差 100 倍以上（申报时把千元当成了元），无法判断哪个对。")]
+               if base_rate.dropped_mis_scaled else [])
+            + ([T(f"{base_rate.dropped_funds} fund{'' if base_rate.dropped_funds == 1 else 's'} or commodity trust{'' if base_rate.dropped_funds == 1 else 's'} "
+                  "left out (such as gold trusts): their revenue follows what they hold, not a business.",
+                  f"剔除了 {base_rate.dropped_funds} 个基金或商品信托（例如黄金信托）：它们的营收跟着持有的资产走，不是经营业务。")]
+               if base_rate.dropped_funds else [])
             + ([T("The claim is about touching the price at some point; a spike does not need the business to grow into it, so this is context only.",
                   "观点问的是期间触及；冲高不需要业绩先兑现，所以这一项只作参考，不计入区间。")] if touch else [])))
     else:
@@ -193,18 +212,34 @@ def build_oracle(
         enough = indep >= MIN_INDEPENDENT_WINDOWS
         lim = [T("Past returns of one stock, and a stock is usually asked about because it already rose (selection bias).",
                  "只是一只股票的过去表现；而且人们往往是因为它已经涨过才问它（选择偏差）。")]
-        if not enough:
+        if price_rate.touch_hits is None:
+            lim.append(T(f"A {price_rate.window_months}-month window has only one month-end inside it, so touching cannot be told apart from closing; "
+                         "for a touch claim this method is not used.",
+                         f"{price_rate.window_months} 个月的窗口里只有一个月末，期间触及无法和到期收盘区分；触及型观点不使用这个方法。"))
+        elif touch:
+            lim.append(T("Touching is counted on month-end closes only; a high inside a month is missed, so touches are undercounted.",
+                         "期间触及只按月末收盘价计算，月中的高点会漏掉，所以触及次数偏少。"))
+        if not enough and price_rate.windows <= max(indep, 1):
+            lim.append(T(f"The history is short: only {price_rate.windows} window{'' if price_rate.windows == 1 else 's'} of {price_rate.window_months} months, "
+                         "so this is shown as context and not used in the range.",
+                         f"历史太短：只有 {price_rate.windows} 个 {price_rate.window_months} 个月的时间段，所以只作参考，不计入区间。"))
+        elif not enough:
             lim.append(T(f"The windows overlap: the history holds only about {indep} non-overlapping {price_rate.window_months}-month periods, "
                          f"so this is shown as context and not used in the range.",
                          f"这些时间段大量重叠：历史里只有约 {indep} 段互不重叠的 {price_rate.window_months} 个月，所以只作参考，不计入区间。"))
         methods.append(ProbabilityMethod(
             id="M4", name=m4_name, status="ok", probability=price_rate.rate, measures=m4_measures,
             touch_probability=(price_rate.touch_hits / price_rate.windows) if price_rate.touch_hits is not None else None,
-            detail=T(f"{price_rate.hits} of {price_rate.windows} monthly-start windows of {price_rate.window_months} months since {price_rate.history_start} "
-                     f"rose at least {float(price_rate.required_return) * 100:.0f}%; best {float(price_rate.best_return or 0) * 100:.0f}%",
-                     f"自 {price_rate.history_start} 以来，{price_rate.windows} 个 {price_rate.window_months} 个月的时间段中有 {price_rate.hits} 个涨幅达到 "
-                     f"{float(price_rate.required_return) * 100:.0f}%；最好的一段涨了 {float(price_rate.best_return or 0) * 100:.0f}%"),
-            inputs={"windows": str(price_rate.windows), "hits": str(price_rate.hits)}, limitations=lim))
+            detail=T(f"{price_rate.windows} monthly-start windows of {price_rate.window_months} months since {price_rate.history_start}: "
+                     f"{price_rate.hits} ended at least {float(price_rate.required_return) * 100:.0f}% higher"
+                     + (f", {price_rate.touch_hits} reached that level at some month-end within the window" if price_rate.touch_hits is not None else "")
+                     + f"; best {float(price_rate.best_return or 0) * 100:.0f}%",
+                     f"自 {price_rate.history_start} 以来的 {price_rate.windows} 个 {price_rate.window_months} 个月时间段中，{price_rate.hits} 个到期时涨幅达到 "
+                     f"{float(price_rate.required_return) * 100:.0f}%"
+                     + (f"，{price_rate.touch_hits} 个在期间某个月末达到过" if price_rate.touch_hits is not None else "")
+                     + f"；最好的一段涨了 {float(price_rate.best_return or 0) * 100:.0f}%"),
+            inputs={"windows": str(price_rate.windows), "hits": str(price_rate.hits)}
+            | ({"touch_hits": str(price_rate.touch_hits)} if price_rate.touch_hits is not None else {}), limitations=lim))
     else:
         methods.append(ProbabilityMethod(id="M4", name=m4_name, status="not_computable", measures=m4_measures,
                                          detail=T("not enough price history for a window this long", "价格历史不够长")))
@@ -227,12 +262,12 @@ def build_oracle(
             agreement = T(f"Only one method could be computed ({hi_m.name.en}); treat the result with care.",
                           f"只有一种方法算出了结果（{hi_m.name.zh}），请谨慎看待。")
         elif high < 0.10:
-            agreement = T(f"All {len(usable)} methods put it below 10% ({_pct(low)} to {_pct(high)}); the lowest is {lo_m.name.en}, "
+            agreement = T(f"All {len(usable)} methods put it below 10% ({prob_range(low, high, 1)}); the lowest is {lo_m.name.en}, "
                           f"which measures {lo_m.measures.en}.",
-                          f"{len(usable)} 种方法都低于 10%（{_pct(low)} 到 {_pct(high)}）；最低的是{lo_m.name.zh}，它衡量的是{lo_m.measures.zh}。")
+                          f"{len(usable)} 种方法都低于 10%（{prob_range(low, high, 1)}）；最低的是{lo_m.name.zh}，它衡量的是{lo_m.measures.zh}。")
         elif low > 0 and high / low <= 3:
-            agreement = T(f"The {len(usable)} methods agree within a factor of 3: {_pct(low)} to {_pct(high)}.",
-                          f"{len(usable)} 种方法相差不到 3 倍：{_pct(low)} 到 {_pct(high)}。")
+            agreement = T(f"The {len(usable)} methods agree within a factor of 3: {prob_range(low, high, 1)}.",
+                          f"{len(usable)} 种方法相差不到 3 倍：{prob_range(low, high, 1)}。")
         else:
             agreement = T(f"The methods disagree: {hi_m.name.en} gives {_pct(high)}, {lo_m.name.en} gives {_pct(low)}. "
                           f"They measure different things: {hi_m.measures.en}; versus {lo_m.measures.en}.",
@@ -277,6 +312,12 @@ def _years(d: date, today: date) -> float:
     return max((d - today).days, 0) / 365.25
 
 
+def window_zh(text: str) -> str:
+    """'daily log returns of adjusted close, 2021-10-28 to 2026-10-28 (1253 returns)' in Chinese; anything else as written."""
+    m = re.fullmatch(r"daily log returns of adjusted close,? (\S+) to (\S+) \((\d+) returns\)", (text or "").strip())
+    return f"{m.group(1)} 至 {m.group(2)} 复权收盘价的日对数收益，共 {m.group(3)} 个" if m else text
+
+
 def event_move(term: list[TermPoint], event_date: date, today: date) -> EventMove:
     """Extra one-standard-deviation move the options price around ``event_date``.
 
@@ -284,7 +325,7 @@ def event_move(term: list[TermPoint], event_date: date, today: date) -> EventMov
     before the event and the first one after it, minus what an ordinary stretch of that length
     costs (the forward volatility of a neighbouring interval), is attributed to the event.
     """
-    pts = sorted((p for p in term if p.expiry > today and p.atm_iv), key=lambda p: p.expiry)
+    pts = sorted((p for p in term if p.expiry > today + timedelta(days=2) and p.atm_iv), key=lambda p: p.expiry)  # 0-2 day expiries are mostly noise
     after = next((i for i, p in enumerate(pts) if p.expiry >= event_date), None)
     if event_date <= today or after is None or len(pts) < 2:
         why = T("The event date must fall between today and the last listed option expiry, and at least two expiries are needed.",
