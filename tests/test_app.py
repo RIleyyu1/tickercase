@@ -31,6 +31,12 @@ def run(at):
     return at
 
 
+def qp(at, name):
+    """One query parameter of the page; AppTest gave a one-item list up to Streamlit 1.64 and gives the string after."""
+    value = at.query_params[name]
+    return value[0] if isinstance(value, list) else value
+
+
 def button(at, key):
     return next(b for b in at.button if b.key == key)
 
@@ -115,10 +121,10 @@ def test_steps_move_with_keys_and_back_next(app_env):
     assert at.session_state["page"] == "claim"
     click(at, "btn_example_ps")
     confirm_and_run(at)
-    assert at.query_params["p"] == ["answer"] and at.query_params["case"] == [at.session_state["result"].case_id]
+    assert qp(at, "p") == "answer" and qp(at, "case") == at.session_state["result"].case_id
     for page in REPORT_PAGES[1:]:  # next ▶ walks the seven pages in order
         click(at, "nav_next")
-        assert at.session_state["rpage"] == page and at.query_params["p"] == [page]
+        assert at.session_state["rpage"] == page and qp(at, "p") == page
     assert "nav_next" not in keys(at)
     click(at, "nav_market")  # any page by its key
     assert at.session_state["rpage"] == "market" and "大盘" in markdown(at)
@@ -459,7 +465,7 @@ def test_setup_page_holds_the_settings_and_the_guide(app_env):
     page = markdown(at)
     assert "CH-10 NEWS" in page and "M4" in page  # the ten sources and the four methods
     assert at.radio(key="sec_mode") and "sec_email_input" in {x.key for x in at.text_input}
-    assert at.query_params["v"] == ["sys"]
+    assert qp(at, "v") == "sys"
 
 
 def test_pe_example_not_supported(app_env):
