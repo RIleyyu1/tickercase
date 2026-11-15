@@ -42,6 +42,14 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## Measured behavior (v0.15.0)
+
+The product can now time itself at the boundaries of the model's sequence diagram (SYSEN 5151 Lab Manual, Chapter 10.4):
+
+- **Timeline recorder.** `src/tickercase/timing.py` records an entry and an exit time each time a run enters and leaves a participant: the subsystems C.1 to C.6, the components of C.2 (A2.1 to A2.4), every request to an outside service (named by host) and every request spacing wait of the fetcher. It is off unless `TICKERCASE_TIMING_DIR` names a folder; with it on, each call of the service writes one JSON file of spans. Pages and numbers are unchanged.
+- **Measurement runs.** `python scripts/measure_runs.py --runs 30` plays the user on the real page in a headless Chrome (type the claim, READ, CONFIRM, RUN) and keeps the times of the user's side. `TICKERCASE_TIMING_COLD=1` gives every browser session its own service, so each run starts with no response held in memory. `python scripts/timing_report.py <folder>` joins the two sides into `stages.csv` and `summary.json`.
+- **What 30 live runs showed** (NVDA, 2026-11-15, [docs/measured-behavior.md](docs/measured-behavior.md)): 28.3 s on average from RUN to the report, 21.1 s of it in A2. 60 % of a case is the wait the fetcher inserts between requests (0.2 s for SEC EDGAR, 0.5 s for Yahoo Finance), 38 % is spent inside the outside services, 2 % is TickerCase's own work. The acquisition is over the 20 s budget of CR.2.0.1 in every run; the three clients still ask one after another.
+
 ## Model to code (v0.14.0)
 
 The code now names the systems model it was built from (Innoslate project 650). The function worked through in full is A2 Acquire Dated Evidence, performed by C.2 Evidence Acquisition Subsystem:

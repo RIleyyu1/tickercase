@@ -38,6 +38,7 @@ from typing import Callable, Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
+from . import timing
 from .calculations import deadline_from
 from .config import SEC_MODES, Settings
 from .http_client import FetchError, JsonFetcher, LiveHttpClient, RecordingHttpClient, ReplayHttpClient, utcnow
@@ -236,7 +237,8 @@ class SourceGuard:
         """A named request: reported to the page as running, then ok or failed."""
         self._progress(name, "running")
         before = len(self.source_error_records)
-        value = self.call(provider_id, call)
+        with timing.span("C.2.5", f"guarded step {name}", provider=provider_id):
+            value = self.call(provider_id, call)
         self.steps[name] = "ok" if value is not None and len(self.source_error_records) == before else "failed"
         self._progress(name, self.steps[name])
         return value
@@ -491,10 +493,14 @@ def acquire_dated_evidence(
     sources = SourceGateway(source_evidence, data_mode_setting, provider_access_terms)
     guard = SourceGuard(data_mode_setting, progress)                                                       # A2.5
     notes: list[tuple[str, str]] = []
-    filing_records = request_filings_and_reported_facts(confirmed_claim, sources, guard, today=today)      # A2.1
-    market_records = request_market_and_option_data(confirmed_claim, sources, guard, today=today, notes=notes)  # A2.2
-    context_records = request_context_signals(confirmed_claim, sources, guard,                             # A2.3
-                                              company=company_name(filing_records, confirmed_claim.values.ticker), now=now)
-    evidence_set = stamp_provenance(filing_records, market_records, context_records, data_mode_setting=data_mode_setting)  # A2.4
+    with timing.span("C.2.1", "A2.1 Request Filings and Reported Facts"):
+        filing_records = request_filings_and_reported_facts(confirmed_claim, sources, guard, today=today)      # A2.1
+    with timing.span("C.2.2", "A2.2 Request Market and Option Data"):
+        market_records = request_market_and_option_data(confirmed_claim, sources, guard, today=today, notes=notes)  # A2.2
+    with timing.span("C.2.3", "A2.3 Request Context Signals"):
+        context_records = request_context_signals(confirmed_claim, sources, guard,                             # A2.3
+                                                  company=company_name(filing_records, confirmed_claim.values.ticker), now=now)
+    with timing.span("C.2.4", "A2.4 Stamp Provenance"):
+        evidence_set = stamp_provenance(filing_records, market_records, context_records, data_mode_setting=data_mode_setting)  # A2.4
     return AcquiredEvidence(evidence_query=sources.evidence_query, evidence_set=evidence_set,
                             source_error_records=guard.source_error_records, guard=guard, sources=sources, notes=notes)

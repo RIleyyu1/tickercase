@@ -590,14 +590,32 @@ def notes_of(result: CaseResult) -> list[str]:
 # ------------------------------------------------------------------ state
 
 
-@st.cache_resource
-def get_service() -> CaseService:
+def _build_service() -> CaseService:
     settings = load_settings()
     fixed = os.environ.get("TICKERCASE_TODAY", "").strip()  # a fixed evaluation day, so a replayed or synthetic case gives the same pages on any day
     if fixed:
         moment = datetime.combine(date.fromisoformat(fixed), time(12, 0), tzinfo=timezone.utc)
         return CaseService(settings, store=CaseStore(settings.case_dir), now=lambda: moment)
     return CaseService(settings, store=CaseStore(settings.case_dir))
+
+
+_shared_service = st.cache_resource(_build_service)
+
+
+def get_service() -> CaseService:
+    """The service of the page. It is shared by every session, so a response fetched for one case can serve the next.
+
+    With TICKERCASE_TIMING_COLD=1 (measurement runs, Lab Manual 10.4) each browser session gets its own service, so every
+    run starts with nothing held in memory.
+    """
+    if os.environ.get("TICKERCASE_TIMING_COLD", "").strip() not in ("", "0"):
+        if "_cold_service" not in st.session_state:
+            st.session_state["_cold_service"] = _build_service()
+        return st.session_state["_cold_service"]
+    return _shared_service()
+
+
+get_service.clear = _shared_service.clear
 
 
 def _init_state() -> None:

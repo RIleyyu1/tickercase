@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Callable, Optional, TypeVar
 
+from . import timing
 from .analysis import RULES_VERSION, analyze, share_trend
 from .calculations import annualized_rate, calculate, deadline_from
 from .config import SEC_MODES, Settings, load_settings
@@ -192,11 +193,20 @@ class CaseService:
 
         ``progress(step, state)`` is called with state "running", "ok" or "failed" for each data step.
         """
+        with timing.capture("evaluate", mode=sec_mode, ticker=(draft.ticker or "").upper()):
+            result = self._evaluate(draft, confirmation, sec_mode=sec_mode, progress=progress)
+            timing.note("status", result.status.value)
+            timing.note("source_errors", len(result.provider_errors))
+            return result
+
+    def _evaluate(self, draft: ClaimDraft, confirmation: Optional[Confirmation], *, sec_mode: str,
+                  progress: Optional[Callable[[str, str], None]] = None) -> CaseResult:
         mode = sec_mode
         case_id = uuid.uuid4().hex
         created = self.now()
-        validation = validate_draft(draft, today=self.today())
-        current_fp = fingerprint(draft)
+        with timing.span("C.1", "A1 validate the claim and check its confirmation"):
+            validation = validate_draft(draft, today=self.today())
+            current_fp = fingerprint(draft)
         base = dict(
             case_id=case_id,
             created_at=created,
@@ -222,13 +232,16 @@ class CaseService:
 
         claim = validation.claim
         assert claim is not None
-        confirmed = self._confirmed(claim, current_fp, confirmation)
-        calculations = calculate(claim)
+        with timing.span("C.1", "A1 issue the confirmed claim"):
+            confirmed = self._confirmed(claim, current_fp, confirmation)
+        with timing.span("C.3", "A3 Compute Required Numbers"):
+            calculations = calculate(claim)
 
         # ---------------------------------------------------------------- A2 Acquire Dated Evidence (C.2)
-        acquired = acquire_dated_evidence(
-            confirmed, lambda data_mode, terms, source: self._fetcher(data_mode, source),
-            data_mode_setting=mode, provider_access_terms=self.settings, today=self.today(), now=self.now(), progress=progress)
+        with timing.span("C.2", "A2 Acquire Dated Evidence"):
+            acquired = acquire_dated_evidence(
+                confirmed, lambda data_mode, terms, source: self._fetcher(data_mode, source),
+                data_mode_setting=mode, provider_access_terms=self.settings, today=self.today(), now=self.now(), progress=progress)
         guard, sources, evidence = acquired.guard, acquired.sources, acquired.evidence_set
         errors, steps, step = guard.source_error_records, guard.steps, guard.step
         warnings = base["warnings"]
@@ -243,13 +256,17 @@ class CaseService:
         for n in facts.notes if facts else []:
             warn(f"SEC XBRL: {n}", f"SEC XBRL：{note_zh(n)}")
 
-        outcome = analyze(claim, calculations, facts=facts, market=market, filings=records, today=self.today())
+        with timing.span("C.5", "A5 Assess Evidence and State Verdict"):
+            outcome = analyze(claim, calculations, facts=facts, market=market, filings=records, today=self.today())
         for w in outcome.warnings:
             warn(w.en, w.zh)
-        calculations = growth_from_base_end(calculations, claim, outcome.items)
+        with timing.span("C.3", "A3 restate growth from the reported base"):
+            calculations = growth_from_base_end(calculations, claim, outcome.items)
         for en, zh in acquired.notes:
             warn(en, zh)
 
+        estimate = timing.span("C.4", "A4 Estimate Probability Range")
+        estimate.__enter__()
         probability = probability_reference(claim, market)
 
         # ---------------------------------------------------------------- oracle layers
@@ -291,6 +308,9 @@ class CaseService:
             previous = find_previous(self.store.list_cases(), claim, oracle, market_date=market.last_date, exclude=case_id)
             if previous is not None:
                 change = probability_change(previous, oracle=oracle, fit=fit, today=self.today())
+        estimate.__exit__(None, None, None)
+        present = timing.span("C.6", "A6 Present and Explain Investment Case")
+        present.__enter__()
         report = build_report(claim, calculations, facts=facts, market=market, items=outcome.items, verdict=outcome.verdict,
                               rechecks=outcome.rechecks, probability=probability, today=self.today(), oracle=oracle, options=options,
                               base_rate=base_rate, price_rate=price_rate, benchmarks=benchmarks, insiders=insiders,
@@ -348,7 +368,9 @@ class CaseService:
             analysis_status="deterministic_rules",
             **base,
         )
-        return self._finish(result)
+        result = self._finish(result)
+        present.__exit__(None, None, None)
+        return result
 
     _price_base_rate = staticmethod(fetch_price_base_rate)
     _benchmarks = staticmethod(fetch_benchmarks)
@@ -517,6 +539,11 @@ class CaseService:
 
     def extract(self, text: str, *, mode: str) -> ClaimExtraction:
         """Read ticker, target and horizon from the claim sentence; tickers are checked against SEC's list when it is reachable."""
+        with timing.capture("extract", mode=mode):
+            with timing.span("C.1", "A1 read the claim sentence"):
+                return self._extract(text, mode=mode)
+
+    def _extract(self, text: str, *, mode: str) -> ClaimExtraction:
         is_known = None
         errors: list[ProviderErrorRecord] = []
         fetcher = self._guard(SEC_PROVIDER_ID, mode, errors, lambda: self._fetcher(mode, "sec"))
@@ -531,6 +558,11 @@ class CaseService:
 
     def reference_snapshot(self, ticker: str, *, mode: str) -> ReferenceSnapshot:
         """Public reference values the page can offer before confirmation. Nothing here is confirmed."""
+        with timing.capture("reference", mode=mode, ticker=(ticker or "").strip().upper()):
+            with timing.span("C.1", "A1 fetch the reference values"):
+                return self._reference_snapshot(ticker, mode=mode)
+
+    def _reference_snapshot(self, ticker: str, *, mode: str) -> ReferenceSnapshot:
         symbol = (ticker or "").strip().upper()
         if not TICKER_RE.match(symbol):
             raise ValueError(f"ticker '{ticker}' has an unexpected format")

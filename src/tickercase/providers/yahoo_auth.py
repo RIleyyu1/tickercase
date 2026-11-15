@@ -20,6 +20,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
+from .. import timing
 from ..http_client import FetchError, FetchedJson, utcnow
 from ..models import DataMode
 
@@ -49,13 +50,15 @@ class YahooAuthedClient:
         with self._lock:
             wait = self.min_interval_seconds - (time.monotonic() - self._last)
             if wait > 0:
-                time.sleep(wait)
+                with timing.span("C.2.4", "request spacing wait", service="Yahoo Finance"):
+                    time.sleep(wait)
             self._last = time.monotonic()
         self.request_log.append(url)
         req = Request(url, headers={"User-Agent": self.user_agent, "Accept": "*/*", "Accept-Encoding": "gzip"})
         try:
-            with self._opener.open(req, timeout=self.timeout_seconds) as resp:
-                return resp.status, resp.read(), {k.lower(): v for k, v in resp.headers.items()}
+            with timing.span(timing.external_participant(url), "request", url=url.split("crumb=")[0]):
+                with self._opener.open(req, timeout=self.timeout_seconds) as resp:
+                    return resp.status, resp.read(), {k.lower(): v for k, v in resp.headers.items()}
         except HTTPError as exc:
             return exc.code, exc.read() if hasattr(exc, "read") else b"", {}
         except (TimeoutError, socket.timeout) as exc:
@@ -89,6 +92,7 @@ class YahooAuthedClient:
     def get_json(self, url: str) -> FetchedJson:
         cached = self._cache.get(url)
         if cached and time.monotonic() - cached[0] < self.cache_ttl_seconds:
+            timing.count("cache_hits")
             return cached[1]
         for attempt in range(2):
             status, raw, headers = self._open(self._with_crumb(url, self._get_crumb()))
