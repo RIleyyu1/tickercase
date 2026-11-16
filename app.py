@@ -57,9 +57,18 @@ S = {
     "s_edit_done": ("收起", "Hide"),
     "s_more": ("更多假设（专家）", "More assumptions (expert)"),
     "s_back": ("◀ 换一句话", "◀ Another sentence"),
-    "s_cannot": ("还缺一些内容，补上才能开始。可以点“改一下”直接填。", "Something is still missing. Press “Change it” to fill it in."),
-    "s_defaults": ("带下划线的四处可以改。其余的假设我们先用默认值，结果页会列出来。",
-                   "The four underlined parts can be changed. Other assumptions use default values, which the answer page lists."),
+    "s_missing": ("还缺{what}，请在下面填上。", "Still needed: {what}. Please fill it in below."),
+    "s_m_target": ("目标价（涨到多少）", "the price it should reach"),
+    "s_m_horizon": ("期限（几年）", "the time (in years)"),
+    "s_no_data": ("这只股票的财务数据暂时取不到，简单模式算不了。可以换一只股票，或点“更多假设（专家）”手动填写。",
+                  "The financial figures of this stock could not be fetched, so the simple view cannot work it out. Try another stock, or press “More assumptions (expert)” to fill them in."),
+    "s_defaults": ("公司、价格、期限和“怎样才算”都可以改：点“改一下”。其余的假设先用默认值，答案页会列出来。",
+                   "The company, the price, the date and what counts can be changed: press “Change it”. Other assumptions use default values, which the answer page lists."),
+    "s_need_text": ("先写一句话，或点一个例句。", "Write a sentence first, or press one of the examples."),
+    "s_no_company": ("没认出是哪家公司。这里只能查美国上市的股票，请写公司名或股票代码，例如“英伟达三年内会涨到 300 美元”。茅台、港股、比特币暂时查不了。",
+                     "We could not tell which company you mean. Only stocks listed in the US can be checked; name the company or its symbol, for example “NVDA will hit $300 in 3 years”."),
+    "s_down": ("这句话说的是下跌（“{w}”）。这里目前只能检查“涨到”或“不低于”某个价格的说法，例如“特斯拉明年年底到 500 美元”。",
+               "This sentence is about a fall (“{w}”). For now only claims that a price is reached or held can be checked, for example “Tesla will reach $500 by the end of next year”."),
     "s_reasons": ("主要理由", "Main reasons"),
     "s_detail": ("看详细依据（7 页报告）→", "See the detailed report (7 pages) →"),
     "s_again": ("换一句话", "Another sentence"),
@@ -661,6 +670,7 @@ def _init_state() -> None:
     # the simple view is the default; TICKERCASE_UI=expert opens the console with its three input steps and seven report pages
     st.session_state.setdefault("ui", "expert" if os.environ.get("TICKERCASE_UI", "").strip().lower() == "expert" else "simple")
     st.session_state.setdefault("s_edit", False)
+    st.session_state.setdefault("s_msg", None)
     st.session_state.setdefault("view", "new")
     st.session_state.setdefault("tube", "grn")
     st.session_state.setdefault("booted", False)  # the start-up screen shows once per session
@@ -2761,9 +2771,22 @@ def _ui_changed() -> None:
 
 
 def _simple_read() -> None:
+    """Read the sentence as a new claim. What the page says about it is one plain message (s_msg), never the console's log."""
+    text = st.session_state["f_claim_text"]
+    _clear_form()  # a new sentence is a new claim: nothing of the stock before is carried over or mentioned
+    st.session_state["f_claim_text"] = text
     st.session_state["s_edit"] = False
+    st.session_state["s_msg"] = None
+    if not text.strip():
+        st.session_state["s_msg"] = S["s_need_text"]
+        return
     _extract_and_fill()
-    if st.session_state["f_ticker"].strip():
+    ex = st.session_state.get("extraction")
+    if ex is not None and ex.direction == "down":
+        st.session_state["s_msg"] = (S["s_down"][0].format(w=ex.direction_text), S["s_down"][1].format(w=ex.direction_text))
+    elif not st.session_state["f_ticker"].strip():
+        st.session_state["s_msg"] = S["s_no_company"]
+    else:
         st.session_state["page"] = "check"
 
 
@@ -2835,8 +2858,8 @@ def view_simple_start() -> None:
                 st.button(t("s_try") + text, key=f"btn_s_ex{n}", on_click=_simple_example, args=(text,))
             st.space("stretch")
             st.button(t("s_read"), key="btn_s_read", type="primary", on_click=_simple_read)
-        show_msg("extract_msg", only=("warning", "error"))
-        show_msg("prefill_msg", only=("warning", "error"))
+        if st.session_state.get("s_msg"):
+            st.warning(st.session_state["s_msg"][0 if zh() else 1])
         if st.session_state["sec_mode"] == "synthetic":
             st.caption(t("s_synthetic"))
         if sec_gate() and st.session_state["sec_mode"] in ("live", "record"):
@@ -2859,19 +2882,21 @@ def view_simple_confirm() -> None:
         if claim:
             st.caption(t("s_you_wrote") + claim)
         html_block(sm.confirm_sentence(zh(), _simple_restated(draft)))
-        show_msg("extract_msg", only=("warning", "error"))
-        show_msg("prefill_msg", only=("warning", "error"))
-        if blocking:
-            st.warning(t("s_cannot"))
+        # one plain message: what the reader has to add, or that this stock cannot be worked out here
+        needs = [t(k) for k, name in (("s_m_target", "target_price"), ("s_m_horizon", "horizon_years")) if not st.session_state[f"f_{name}"].strip()]
+        other = blocking and not needs
+        if needs:
+            st.warning(t("s_missing", what=("、" if zh() else " and ").join(needs)))
+        elif other:
+            st.warning(t("s_no_data"))
         with st.container(horizontal=True, vertical_alignment="center", gap="small"):
             st.button(t("s_yes"), key="btn_s_yes", type="primary", on_click=_simple_go, disabled=blocking)
-            st.button(t("s_edit_done") if st.session_state["s_edit"] else t("s_edit"), key="btn_s_edit", on_click=_simple_toggle_edit)
+            if not needs:  # with something missing the form is already open
+                st.button(t("s_edit_done") if st.session_state["s_edit"] else t("s_edit"), key="btn_s_edit", on_click=_simple_toggle_edit)
             st.space("stretch")
             st.button(t("s_more"), key="btn_s_more", on_click=_to_expert, args=("check",))
-        if st.session_state["s_edit"] or blocking:
+        if st.session_state["s_edit"] or needs:
             render_key_inputs()
-            if blocking:
-                render_checks(validation)
         if st.session_state["confirm_feedback"] and st.session_state["confirm_feedback"] == fingerprint(draft):
             st.error(t("invalid_confirm"))
         st.caption(t("s_defaults"))

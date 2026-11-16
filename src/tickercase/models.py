@@ -440,6 +440,8 @@ class ClaimExtraction(BaseModel):
     currency: Optional[str] = None
     condition: Optional[Literal["end", "touch"]] = None  # "冲到 / 触及 / within 3 years" -> touch; "3 年后 / by 2030" -> end
     condition_text: Optional[str] = None
+    direction: Optional[Literal["down"]] = None  # "跌到 200", "falls to 200": a claim about a fall, which TickerCase does not check
+    direction_text: Optional[str] = None
     valuation_method: Optional[Literal["price_to_sales", "price_to_earnings"]] = None  # "按 40 倍市盈率" (v0.13.2)
     valuation_multiple: Optional[DecimalStr] = None
     valuation_text: Optional[str] = None
@@ -680,7 +682,8 @@ class OracleSummary(BaseModel):
     target_date: date
     low: Optional[float] = None
     high: Optional[float] = None
-    tier: Literal["lottery", "low", "possible", "likely", "unknown"]
+    # since v0.16.1 the five words of tiers.py; cases stored before keep "lottery", "low" and "possible"
+    tier: Literal["almost_no", "unlikely", "uncertain", "likely", "very_likely", "unknown", "lottery", "low", "possible"]
     tier_label: "Text"
     methods: list[ProbabilityMethod] = Field(default_factory=list)
     ladder: list[LadderRow] = Field(default_factory=list)

@@ -161,3 +161,112 @@ def test_the_same_page_in_chinese(simple_env):
     at.run(timeout=30)
     click(at, "btn_s_read")
     assert "对吗" in page_text(at)
+
+
+# ------------------------------------------------------------------ one story in both views (round 6 of the persona review)
+
+
+def cases_of(tmp_path):
+    """Several synthetic cases: both conditions, a hard target, an easy one and one already reached."""
+    settings = make_settings(tmp_path)
+    svc = CaseService(settings, fetcher_factory=offline_factory(settings), store=CaseStore(tmp_path / "cases"),
+                      now=lambda: FIXED_NOW, today=lambda: FIXED_TODAY)
+    out = []
+    for overrides in ({}, {"price_condition": "touch"}, {"target_price": "900"}, {"target_price": "900", "price_condition": "touch"},
+                      {"target_price": "1"}, {"target_price": "1", "price_condition": "touch"}):
+        draft = ps_draft(**overrides)
+        out.append(svc.evaluate(draft, confirm(draft, today=FIXED_TODAY, now=lambda: FIXED_NOW), sec_mode="synthetic"))
+    return [c for c in out if c.oracle is not None and c.oracle.low is not None]
+
+
+def test_the_simple_view_and_the_console_use_the_same_word_range_and_method_count(tmp_path):
+    from tickercase.ui import cockpit as ck
+
+    cases = cases_of(tmp_path)
+    assert len(cases) >= 4
+    for c in cases:
+        head = plain.headline(c)
+        assert head.word[0] == ck.tier_text(c.oracle, False) == c.oracle.tier_label.en
+        assert head.word[1] == ck.tier_text(c.oracle, True) == c.oracle.tier_label.zh
+        used = [m for m in c.oracle.methods if m.status == "ok" and ck.counted(c, m)
+                and (m.touch_probability if c.oracle.condition == "touch" else m.probability) is not None]
+        assert len(plain.counted_methods(c)) == len(used)
+        why = plain.why_a_range(c)
+        assert str(len(used)) in why[0] or len(used) < 2
+        other = plain.other_condition(c)
+        if other is not None:  # the same pair of market methods as the console's status bar
+            assert ck.other_side(c, False)[0] in other[0]
+
+
+def test_no_sentence_asks_for_a_negative_rise_or_growth(tmp_path):
+    for c in cases_of(tmp_path):
+        for r in plain.reasons(c):
+            for text in r.text + (r.note or ("", "")):
+                assert "rise -" not in text and "grow about -" not in text and "上涨 -" not in text and "增长约 -" not in text
+                assert "None" not in text and "nan" not in text
+
+
+def test_the_reasons_from_methods_keep_the_limits_the_console_states(case):
+    for r in plain.reasons(case):
+        if r.page == "methods" or "companies of similar size" in r.text[0]:
+            assert r.note and r.note[0] and r.note[1], r.text[0]
+
+
+@pytest.mark.parametrize("sentence, target, multiple, direction", [
+    ("微软五年后一千", "1000", None, None), ("NVDA 三年后一千二", "1200", None, None),
+    ("Coca-Cola will rise another 5% within three years", None, "1.05", None),
+    ("听说特斯拉明年要跌到 200 美元", "200", None, "down"), ("Tesla will fall to $200 next year", "200", None, "down"),
+    ("英伟达三年内会涨到 300 美元", "300", None, None),
+])
+def test_the_reader_understands_spoken_numbers_percent_gains_and_falls(sentence, target, multiple, direction):
+    from tickercase.extract import extract_claim
+
+    e = extract_claim(sentence, today=FIXED_TODAY)
+    assert (str(e.target_price) if e.target_price is not None else None) == target
+    assert (str(e.target_multiple) if e.target_multiple is not None else None) == multiple
+    assert e.direction == direction
+
+
+def read(at, sentence):
+    at.text_area(key="f_claim_text").set_value(sentence)
+    at.run(timeout=30)
+    return click(at, "btn_s_read")
+
+
+def test_an_unknown_company_gets_one_plain_message_not_silence(simple_env):
+    at = read(start("zh"), "茅台明年到两千")
+    assert at.session_state["page"] == "claim"
+    said = " ".join(str(w.value) for w in at.warning)
+    assert "没认出是哪家公司" in said and "核对页" not in said and "代码换了" not in said
+
+
+def test_a_claim_about_a_fall_is_named_as_one_and_does_not_go_on(simple_env):
+    at = read(start("zh"), "听说 SYNT 明年要跌到 20 美元")
+    assert at.session_state["page"] == "claim"
+    assert "下跌" in " ".join(str(w.value) for w in at.warning)
+
+
+def test_a_sentence_without_a_price_asks_for_it_in_one_line(simple_env):
+    at = read(start("en"), "SYNT will do great by 2031")
+    assert at.session_state["page"] == "check"
+    said = page_text(at)
+    assert "(no price yet)" in said and " at USD" not in said
+    warnings = [str(w.value) for w in at.warning]
+    assert len(warnings) == 1 and "the price it should reach" in warnings[0]
+    assert next(b for b in at.button if b.key == "btn_s_yes").disabled
+    assert "btn_s_edit" not in keys(at)          # the form is already open
+
+
+def test_a_second_sentence_says_nothing_about_the_first(simple_env):
+    at = read(start("en"), "SYNT reaches $100 by 2031")
+    click(at, "btn_s_back")
+    at = read(at, "it will go up a lot")
+    said = " ".join(str(w.value) for w in at.warning) + page_text(at)
+    assert "SYNT" not in said.replace("f_claim_text", "") or "ticker changed" not in said
+    assert "ticker changed" not in said and "Check" not in " ".join(str(w.value) for w in at.warning)
+
+
+def test_a_rise_of_more_than_double_is_not_capped_at_100_percent():
+    r = plain.Restated(ticker="MSFT", company="MICROSOFT CORP", target="1200", currency="USD", deadline="2031-11-13", touch=False,
+                       reference="523.88", needed=1200 / 523.88 - 1)
+    assert "129%" in sm.confirm_sentence(False, r) and "129%" in sm.confirm_sentence(True, r)

@@ -80,7 +80,14 @@ def parse_number(text: str, suffix: str = "") -> Optional[Decimal]:
     try:
         value = Decimal(text.replace(",", ""))
     except InvalidOperation:
-        value = cn_to_number(text)
+        # spoken short form: "一千二" is 1200 and "两万五" is 25000 (the last digit counts in the next unit down)
+        short = re.fullmatch(r"(.*[百千万])([一二两三四五六七八九])", text)
+        if short:
+            head, tail = cn_to_number(short.group(1)), cn_to_number(short.group(2))
+            unit = {"百": 10, "千": 100, "万": 1000}[short.group(1)[-1]]
+            value = head + tail * unit if head is not None and tail is not None else None
+        else:
+            value = cn_to_number(text)
         if value is None:
             return None
     s = (suffix or "").strip().lower()
@@ -159,6 +166,8 @@ TARGET_PATTERNS = [
     (re.compile(rf"(?:reach(?:es|ing)?|hit(?:s|ting)?|to|at|above|target(?: price)?(?: of)?|be worth|trade at|worth)\s+\$?\s*({NUM})\s*([kK])?(?![\d])", re.I), 3),
     # 1000一股 / 1000 每股 / 1000 per share
     (re.compile(rf"({NUM}|{CN_NUM})\s*([kK千万])?\s*(?:一股|每股|/股|per share|a share)", re.I), 4),
+    # a bare Chinese number with a unit of size: "五年后一千", "明年两千五" (not a time, a multiple or a share)
+    (re.compile(r"(?<![零〇一二两三四五六七八九十百千万])([一二两三四五六七八九十]+[百千万][零〇一二两三四五六七八九十百千万]*)()(?!\s*(?:年|个?月|天|日|周|倍|成|番|亿|家|只|股))"), 2),
     # a bare number, last resort: "明年10万", "AAPL 300" (not a time, a percentage, a multiple or part of a date)
     (re.compile(rf"(?<![A-Za-z0-9./$])({NUM})\s*([kK千万])?(?!\s*(?:年|个?月|天|日|号|周|%|倍|[xX](?![A-Za-z])|/|\d|\.\d|years?|yrs?|months?|weeks?|days?))", re.I), 1),
 ]
@@ -189,11 +198,18 @@ MULTIPLE_PATTERNS = [
     (re.compile(r"(?:涨|升)?\s*(\d+(?:\.\d+)?|[一二两三四五六七八九十]+)\s*倍(?!数)"), lambda m: parse_number(m.group(1))),
     (re.compile(r"(\d+(?:\.\d+)?)\s*[xX](?![A-Za-z])"), lambda m: parse_number(m.group(1))),
     (re.compile(r"ten[- ]?bagger|十倍股", re.I), lambda m: Decimal(10)),
-    (re.compile(r"(?:涨|上涨|rise|gain|up)\s*(\d+(?:\.\d+)?)\s*%", re.I), lambda m: 1 + parse_number(m.group(1)) / 100),
+    # "涨 50%", "再涨 5%", "up 50%", "rise another 5%", "gains a further 20%", "increase by 10%"
+    (re.compile(r"(?:再涨|涨|上涨|升|ris(?:e|es|ing)|gain(?:s|ing)?|go(?:es|ing)? up|up|increas(?:e|es|ing)|climb(?:s|ing)?|jump(?:s|ing)?)\s*"
+                r"(?:(?:another|by|an? additional|a further)\s+)*(\d+(?:\.\d+)?)\s*%", re.I), lambda m: 1 + parse_number(m.group(1)) / 100),
     (re.compile(r"(?:涨|上涨|升)\s*一半"), lambda m: Decimal("1.5")),  # "涨一半" = up 50%
     (re.compile(r"(?:涨|上涨|升)\s*(\d|[一二两三四五六七八九])\s*成"), lambda m: 1 + parse_number(m.group(1)) / 10),  # "涨三成" = up 30%
 ]
 
+
+# a claim that the price falls: TickerCase checks "reaches" and "stays at or above", so this is said, not guessed around
+FALL_WORDS = re.compile(r"跌到|跌至|跌破|跌回|跌穿|跌去|下跌到|下跌至|腰斩|砍半|归零|暴跌到|"
+                        r"\b(?:(?:fall|falls|fell|falling|drop|drops|dropped|dropping|decline|declines|sink|sinks|plunge|plunges|crash|crashes|slide|slides)"
+                        r"\s+(?:back\s+)?(?:to|below|under)|go(?:es)?\s+down\s+to|halve[sd]?|go(?:es)? to zero)\b", re.I)
 
 # reaching the price at any moment ("spike to", "touch") versus being there on the date
 TOUCH_WORDS = re.compile(r"冲到|冲上|冲高|冲至|冲击|触及|触碰|摸到|摸高|碰到|脉冲|一度|曾经|盘中|"
@@ -317,6 +333,12 @@ def extract_claim(text: str, *, today: date, is_known_ticker: Optional[Callable[
                             "crypto and shares listed outside the US are not covered); you can also enter the ticker on ② Check")
         out.notes_zh.append("句子里没有识别到美国上市的股票（能读代码如 NVDA，或公司名如特斯拉；比特币、A 股、港股不在范围内）；"
                             "也可以在 ② 核对页手动填写代码")
+    fall = FALL_WORDS.search(text)
+    if fall:
+        out.direction, out.direction_text = "down", fall.group(0)
+        out.notes_en.append(f"“{fall.group(0)}” says the price falls; TickerCase only checks claims that a price is reached or held from below, "
+                            "so the reading below is not what the sentence means")
+        out.notes_zh.append(f"「{fall.group(0)}」说的是下跌；TickerCase 目前只能检查“涨到”或“不低于”某个价格的说法，下面的读法和这句话的意思不同")
     val = find_valuation(text)
     target_text = text
     if val is not None:

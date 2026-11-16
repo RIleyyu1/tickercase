@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ..plain import Headline, Reason, Restated, pct
+from ..plain import Headline, Reason, Restated, rate
 from .cockpit import L, esc
 
 CSS = """<style>
@@ -41,6 +41,7 @@ CSS = """<style>
 .tcs-why{list-style:none;margin:0;padding:0;font-family:'Noto Serif SC',Georgia,serif;font-size:17px;line-height:1.65;color:var(--ink)}
 .tcs-why li{padding:10px 0;border-bottom:1px dashed #8D8163;display:flex;gap:12px}
 .tcs-why .s{flex:0 0 auto;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;white-space:nowrap;padding-top:3px}
+.tcs-cav{display:block;font-size:14px;line-height:1.55;color:#5C5340;margin-top:3px}
 .tcs-why .p{color:#1F6B3A}.tcs-why .m{color:#A2401F}.tcs-why .n{color:#6B5F44}
 .tcs-warn{font-family:'Noto Serif SC',Georgia,serif;font-size:15px;line-height:1.6;background:rgba(255,246,214,.6);border:2px solid #A2401F;color:#7A2D14;padding:8px 12px}
 .tcs-assume{font-family:'Noto Serif SC',Georgia,serif;font-size:16px;line-height:1.7;color:var(--ink);margin:0;padding-left:1.2em}
@@ -78,8 +79,8 @@ def crt(inner: str) -> str:
 def confirm_sentence(zh: bool, r: Restated) -> str:
     """The claim as it was read, in one sentence; the four things that can be changed are underlined."""
     who = f"{r.company}（{r.ticker}）" if (r.company and zh) else f"{r.company} ({r.ticker})" if r.company else r.ticker
-    price = f"{r.target} {r.currency}"
-    day = r.deadline or L(zh, "（没读到期限）", "(no deadline found)")
+    price = f"{r.target} {r.currency}" if r.target else L(zh, "____（还没有目标价）", "____ (no price yet)")
+    day = r.deadline or L(zh, "____（还没有期限）", "____ (no date yet)")
     em = lambda x: f"<em>{esc(x)}</em>"  # noqa: E731
     if zh:
         if r.touch:
@@ -94,8 +95,8 @@ def confirm_sentence(zh: bool, r: Restated) -> str:
     line = ""
     if r.reference and r.needed is not None:
         if r.needed > 0:
-            line = L(zh, f"现在的价格是 {r.reference} {r.currency}，也就是说还要涨 {pct(r.needed)}。",
-                     f"The price today is {r.reference} {r.currency}, so it needs to rise {pct(r.needed)}.")
+            line = L(zh, f"现在的价格是 {r.reference} {r.currency}，也就是说还要涨 {rate(r.needed)}。",
+                     f"The price today is {r.reference} {r.currency}, so it needs to rise {rate(r.needed)}.")
         else:
             line = L(zh, f"现在的价格是 {r.reference} {r.currency}，已经不低于这个目标价。",
                      f"The price today is {r.reference} {r.currency}, already at or above this target.")
@@ -154,7 +155,9 @@ def reasons(zh: bool, items: list[Reason]) -> str:
     if not items:
         return f'<p class="tcs-lead">{esc(L(zh, "这次没有足够的数据列出理由。", "There was not enough data to list reasons this time."))}</p>'
     word = {"+": (L(zh, "＋ 支持", "+ For"), "p"), "-": (L(zh, "－ 反对", "− Against"), "m"), "0": (L(zh, "· 中性", "· Neutral"), "n")}
-    rows = "".join(f'<li><span class="s {word[r.sign][1]}">{esc(word[r.sign][0])}</span><span>{esc(r.text[1 if zh else 0])}</span></li>' for r in items)
+    i = 1 if zh else 0
+    rows = "".join(f'<li><span class="s {word[r.sign][1]}">{esc(word[r.sign][0])}</span><span>{esc(r.text[i])}'
+                   + (f'<small class="tcs-cav">{esc(r.note[i])}</small>' if r.note else "") + "</span></li>" for r in items)
     return f'<ul class="tcs-why">{rows}</ul>'
 
 

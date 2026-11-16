@@ -42,6 +42,17 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## One story in both views (v0.16.1)
+
+Five reviewers (retail investor, professional, economist, and two readers new to stocks, one Chinese and one English) used v0.16.0. What they found, fixed by class:
+
+- **One set of words.** `src/tickercase/tiers.py` holds the five words for a range; the console, the report text and the simple view all use it. The older four tiers ("lottery-ticket odds" and the rest) are gone, and a stored case reads by today's rule.
+- **The simple view counts what the console counts.** The number of methods in "why a range" and the "on the last day" range now follow the console's rule (a method shown only for context is not counted).
+- **Limits are kept.** Each reason from a method carries the limit the console states: overlapping periods, option prices include a charge for risk, only surviving companies are counted.
+- **Plain messages.** An unknown company, a sentence about a fall, or a missing price or date each get one plain line; the console's log lines no longer show in the simple view, and a new sentence carries nothing over from the one before.
+- **The reader.** "一千二", "rise another 5%" are read; "跌到 200" / "falls to 200" is recognised as a fall and not turned into "at or above 200".
+- **Numbers.** A price already above the target is said as that, not as "needs to rise -16%"; 99.6% is no longer written ">99.9%"; a needed rise above 100% is not capped.
+
 ## Simple view (v0.16.0)
 
 The page now opens on a view for a reader who does not follow stocks. The console with its three input steps and seven report pages is still there, one key away.

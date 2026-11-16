@@ -19,8 +19,10 @@ def prob(p: Optional[float], digits: int = 1) -> str:
         return f"{100:.{digits}f}%"
     if p < 0.001:
         return "<0.1%"
-    if p > 0.999 or round(p * 100, digits) >= 100:
+    if p > 0.999:
         return ">99.9%"
+    if round(p * 100, digits) >= 100:  # 99.6% in whole percents would read 100%: keep one decimal instead of overstating it
+        return f"{p * 100:.1f}%"
     return f"{p * 100:.{max(digits, 1) if p < 0.01 else digits}f}%"
 
 

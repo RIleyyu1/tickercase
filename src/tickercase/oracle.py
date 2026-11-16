@@ -35,6 +35,7 @@ from typing import Optional
 
 from .calculations import deadline_from
 from .fmt import pct, prob, prob_range
+from .tiers import TIERS as TIER_WORDS, tier as range_tier
 from .models import (
     BaseRate,
     EventMove,
@@ -255,7 +256,6 @@ def build_oracle(
         values = sorted(value(m) for m in usable)
         low, high = values[0], values[-1]
         mid = values[len(values) // 2] if len(values) % 2 else (values[len(values) // 2 - 1] + values[len(values) // 2]) / 2
-        tier = next(t for t in TIERS if mid < t[0])
         lo_m = min(usable, key=value)
         hi_m = max(usable, key=value)
         if len(usable) == 1:
@@ -273,7 +273,8 @@ def build_oracle(
                           f"They measure different things: {hi_m.measures.en}; versus {lo_m.measures.en}.",
                           f"各方法差别较大：{hi_m.name.zh}给出 {_pct(high)}，{lo_m.name.zh}给出 {_pct(low)}。"
                           f"它们衡量的东西不同：前者是{hi_m.measures.zh}；后者是{lo_m.measures.zh}。")
-        tier_key, tier_label = tier[1], T(tier[2], tier[3])
+        tier_key = range_tier(low, high)
+        tier_label = T(*TIER_WORDS[tier_key])
     else:
         low = high = None
         tier_key, tier_label = "unknown", T("Not enough data", "数据不足")

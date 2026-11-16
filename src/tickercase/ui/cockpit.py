@@ -24,6 +24,7 @@ from ..calculations import deadline_from
 from ..fmt import about, prob, prob_ends, prob_num, prob_range
 from ..models import VERDICT_DISPLAY_ZH, CaseResult, Narrative
 from ..oracle import MIN_INDEPENDENT_WINDOWS, independent_windows
+from ..tiers import BANDS, EDGES, TIERS, tier as range_tier
 
 PIX = "app/static/fonts/fusion-pixel-12px-monospaced-zh_hans.otf.woff2"
 VT = "app/static/fonts/VT323-Regular.woff2"
@@ -140,6 +141,12 @@ def cond_text(result: CaseResult, zh: bool) -> str:
     return L(zh, "期间任意时点触及", "Touch at any time") if is_touch(result) else L(zh, "到期时站在上面", "At or above on the date")
 
 
+def tier_text(o, zh: bool) -> str:
+    """The word for the range of a case, by today's rule, so a case stored under the older words reads like a new one."""
+    en, zh_word = TIERS[range_tier(o.low, o.high)]
+    return zh_word if zh else en
+
+
 def other_side(result: CaseResult, zh: bool) -> tuple[str, str]:
     """The condition the claim does not use, from the market-based methods: ('29–31%', 'options 30.1% · model 29.4%')."""
     o = result.oracle
@@ -179,7 +186,7 @@ def status_bar(result: CaseResult, zh: bool, jumps: Iterable[tuple[str, str]] = 
     touch = is_touch(result)
     if o is not None and o.low is not None:
         rng = (f'<span class="tc-rd tc-ph tc-row"><span class="tc-vt" style="font-size:34px;line-height:30px">{range_str(o.low, o.high)}</span>'
-               f'<span class="tc-inv">{esc(tr(o.tier_label, zh))}</span></span>')
+               f'<span class="tc-inv">{esc(tier_text(o, zh))}</span></span>')
     else:
         rng = f'<span class="tc-rd tc-ph tc-row"><span style="font-size:12px">{esc(L(zh, "数据不足，无法计算概率", "Not enough data to compute a probability"))}</span></span>'
     d, target = deadline_of(result).isoformat(), format(v.target_price, "f")
@@ -301,7 +308,7 @@ def prb_screen(result: CaseResult, zh: bool, anim: bool) -> str:
     lines_html = "".join(f'<div class="{c} tc-line">{esc(t)}</div>' for c, t in lines)
     if o.low is not None:
         big = (f'<span class="tc-vt tc-huge">{range_str(o.low, o.high)}</span>'
-               f'<div class="tc-col"><span class="tc-inv tc-tier">{esc(tr(o.tier_label, zh))}</span>{lines_html}</div>')
+               f'<div class="tc-col"><span class="tc-inv tc-tier">{esc(tier_text(o, zh))}</span>{lines_html}</div>')
     else:
         big = f'<span class="tc-nodata">{esc(L(zh, "数据不足，无法计算概率", "Not enough data to compute a probability"))}</span><div class="tc-col">{lines_html}</div>'
     lo, hi = (sqrt_x(o.low), sqrt_x(o.high)) if o.low is not None else (None, None)
@@ -325,9 +332,10 @@ def prb_screen(result: CaseResult, zh: bool, anim: bool) -> str:
         else:
             bottom.append(f'<span class="{cls} tc-mark{edge}" style="left:{x:.1f}%">{"▲" if inside else "△"}{esc(ids)}</span>')
     ticks = "".join(f'<span class="tc-dim tc-tick" style="left:{sqrt_x(p):.1f}%{";transform:translateX(-100%)" if p == 1 else ""}">{lbl}</span>'
-                    for p, lbl in ((0.01, "1%"), (0.05, "5%"), (0.2, "20%"), (0.5, "50%"), (1.0, "100%")))
-    zones = L(zh, ("彩票级 &lt;5%", "不太可能 5–20%", "有可能 20–50%", "较可能 &gt;50%"), ("Lottery &lt;5%", "Unlikely 5–20%", "Possible 20–50%", "Likely &gt;50%"))
-    zone_html = "".join(f'<span{" class=tc-am" if i == 3 else ""}>{z}</span>' for i, z in enumerate(zones))
+                    for p, lbl in ((0.01, "1%"),) + tuple((e, f"{round(e * 100)}%") for e in EDGES) + ((1.0, "100%"),))
+    zones = [b[2] if zh else b[1] for b in BANDS]
+    here = range_tier(o.low, o.high)
+    zone_html = "".join(f'<span{" class=tc-am" if BANDS[i][0] == here else ""}>{esc(z)}</span>' for i, z in enumerate(zones))
     # the count says which methods make the range, as the ⓘ note does ("2 种方法相差不到 3 倍"), not every reading shown
     count = (L(zh, f"{len(used)} 种方法计入区间 · {len(ref)} 种仅参考", f"{len(used)} methods in the range · {len(ref)} for context") if ref
              else L(zh, f"{len(used)} 种方法交叉核对", f"{len(used)} methods cross-checked"))
@@ -661,7 +669,7 @@ def kline_notes(result: CaseResult, zh: bool) -> tuple[str, str]:
     if o is None:
         return "", ""
     t = format(o.target_price, "f")
-    main = f"{range_str(o.low, o.high)} {tr(o.tier_label, zh)}" if o.low is not None else L(zh, "数据不足", "not enough data")
+    main = f"{range_str(o.low, o.high)} {tier_text(o, zh)}" if o.low is not None else L(zh, "数据不足", "not enough data")
     side, _ = other_side(result, zh)
     touch_label, end_label = L(zh, f"期间触及 {t}", f"touch {t}"), L(zh, f"到期收在 {t} 以上", f"close above {t}")
     if o.condition == "touch":
@@ -850,7 +858,7 @@ def tape(c: CaseResult, zh: bool) -> str:
     v = c.confirmed_claim.values if c.confirmed_claim else None
     o = c.oracle
     rng = range_str(o.low, o.high, 1) if o is not None and o.low is not None else "—"
-    tier = tr(o.tier_label, zh) if o is not None and o.low is not None else ""
+    tier = tier_text(o, zh) if o is not None and o.low is not None else ""
     cond = (L(zh, "期间触及", "touch") if o.condition == "touch" else L(zh, "到期收在", "close")) if o is not None else ""
     meta = " · ".join(x for x in (f"{c.created_at:%m-%d}", c.case_id[:8].upper(), cond) if x)
     return (f'<div class="tc-tape">{mini_cassette()}'
