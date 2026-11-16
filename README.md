@@ -42,6 +42,16 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## Simple view (v0.16.0)
+
+The page now opens on a view for a reader who does not follow stocks. The console with its three input steps and seven report pages is still there, one key away.
+
+- **One sentence, one confirmation, one answer.** The start page says what the site does and takes one sentence. The next page says the claim back in one line ("NVIDIA (NVDA) trades at 300 USD or higher on at least one day before 2029-11-13") and asks only whether that is right; the four underlined parts can be changed. The answer page gives one of five words (very unlikely, unlikely, possible but uncertain, likely, very likely) with the percentage range, a 0 to 100 % bar, up to four reasons marked for or against, the assumptions made for the reader, and a line that this is not advice.
+- **Written by rules.** `src/tickercase/plain.py` builds every sentence from numbers the case already holds (the range, the method estimates, the two base rates, the growth check); no model writes them. `src/tickercase/ui/simple.py` holds the markup.
+- **The wait in plain words.** The fourteen data steps show as five lines ("Reading the company's filings", ...).
+- **Switching.** The Simple / Expert key is on every page; "See the detailed report (7 pages)" opens the console on the same case. `TICKERCASE_UI=expert` makes the console the default. Chinese and English as before.
+- Screens: [docs/design/](docs/design/).
+
 ## Measured behavior (v0.15.0)
 
 The product can now time itself at the boundaries of the model's sequence diagram (SYSEN 5151 Lab Manual, Chapter 10.4):

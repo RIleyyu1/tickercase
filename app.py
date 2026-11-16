@@ -32,13 +32,44 @@ from tickercase.oracle import event_move, p_end_above, p_touch, scenario
 from tickercase.providers.options import iv_at
 from tickercase.service import CLAIM_TEXT_PREFIX, DEFAULT_PREFIX, CaseService
 from tickercase.storage import CaseStore
+from tickercase import plain
+from tickercase.calculations import deadline_from
 from tickercase.ui import cockpit as ck
+from tickercase.ui import simple as sm
 from tickercase.ui.kline import kline_html
 from tickercase.validation import ConfirmationError, confirm, confirmation_state, fingerprint, validate_draft
 
 # ------------------------------------------------------------------ text (zh, en)
 
 S = {
+    # ---- simple view (v0.16.0)
+    "ui": ("界面", "View"),
+    "ui_simple": ("简单", "Simple"),
+    "ui_expert": ("专家", "Expert"),
+    "s_placeholder": ("例如：英伟达三年内会涨到 300 美元", "For example: NVDA will hit $300 in 3 years"),
+    "s_claim_label": ("一句关于股票价格的话", "One sentence about a stock price"),
+    "s_read": ("看看可能性 →", "See how likely →"),
+    "s_try": ("试试：", "Try: "),
+    "s_confirm_h": ("我们这样理解你的话，对吗？", "Did we read it right?"),
+    "s_you_wrote": ("你写的是：", "You wrote: "),
+    "s_yes": ("对，开始分析", "Yes, start"),
+    "s_edit": ("改一下", "Change it"),
+    "s_edit_done": ("收起", "Hide"),
+    "s_more": ("更多假设（专家）", "More assumptions (expert)"),
+    "s_back": ("◀ 换一句话", "◀ Another sentence"),
+    "s_cannot": ("还缺一些内容，补上才能开始。可以点“改一下”直接填。", "Something is still missing. Press “Change it” to fill it in."),
+    "s_defaults": ("带下划线的四处可以改。其余的假设我们先用默认值，结果页会列出来。",
+                   "The four underlined parts can be changed. Other assumptions use default values, which the answer page lists."),
+    "s_reasons": ("主要理由", "Main reasons"),
+    "s_detail": ("看详细依据（7 页报告）→", "See the detailed report (7 pages) →"),
+    "s_again": ("换一句话", "Another sentence"),
+    "s_assume": ("我们替你做了 {n} 个假设", "We made {n} assumptions for you"),
+    "s_not_advice": ("这是根据公开数据算出的可能性，不是买卖建议。数据截至 {d}。", "This is a likelihood worked out from public data, not advice to buy or sell. Data as of {d}."),
+    "s_sources_missing": ("有 {n} 个数据来源这次没有取到，结果可能不完整。详细报告里有说明。", "{n} data source(s) could not be reached this time, so the result may be incomplete. The detailed report says which."),
+    "s_synthetic": ("现在用的是示例数据，不是真实的市场数据。", "This run uses example data, not real market data."),
+    "s_failed": ("这次没有算出来：", "This run did not finish: "),
+    "s_retry": ("再试一次", "Try again"),
+    "s_stale": ("内容改过了，请重新确认。", "Something was changed; please confirm again."),
     # start-up screen
     "boot_enter": ("ENTER ▸ 进入控制台", "ENTER ▸ open the console"),
     "boot_replay": ("⟲ 重播开机", "⟲ Replay start-up"),
@@ -627,6 +658,9 @@ def _init_state() -> None:
     st.session_state.setdefault("example_values", {})
     st.session_state.setdefault("sec_mode", "live")
     st.session_state.setdefault("lang", "zh")
+    # the simple view is the default; TICKERCASE_UI=expert opens the console with its three input steps and seven report pages
+    st.session_state.setdefault("ui", "expert" if os.environ.get("TICKERCASE_UI", "").strip().lower() == "expert" else "simple")
+    st.session_state.setdefault("s_edit", False)
     st.session_state.setdefault("view", "new")
     st.session_state.setdefault("tube", "grn")
     st.session_state.setdefault("booted", False)  # the start-up screen shows once per session
@@ -653,7 +687,7 @@ def _keep_widget_state() -> None:
     Writing the value back keeps it: the inputs while a report page is shown, the bridge switches (view, phosphor,
     language) when the language changes their labels, and the scenario controls.
     """
-    keys = [f"f_{n}" for n in TEXT_FIELDS] + ["f_valuation_method", "f_share_mode", "f_price_condition", "sec_mode", "ai_auto", "view", "tube", "lang"]
+    keys = [f"f_{n}" for n in TEXT_FIELDS] + ["f_valuation_method", "f_share_mode", "f_price_condition", "sec_mode", "ai_auto", "view", "tube", "lang", "ui"]
     keys += [k for k in list(st.session_state.keys()) if isinstance(k, str) and k.startswith(SCENARIO_KEYS)]
     for key in keys:
         if key in st.session_state:
@@ -1232,6 +1266,8 @@ def bridge_unit(*, result_page: bool, warn: int) -> None:
         with right, st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small"):
             if result_page:
                 st.button(t("back_new"), key="btn_new", on_click=_new_claim, help=t("back_new_help"))
+            st.radio(t("ui"), options=["simple", "expert"], key="ui", horizontal=True, label_visibility="collapsed", on_change=_ui_changed,
+                     format_func=labels({"simple": S["ui_simple"], "expert": S["ui_expert"]}))
             st.radio(t("view"), options=["new", "history", "sys"], key="view", horizontal=True, label_visibility="collapsed",
                      format_func=labels({"new": S["view_new"], "history": S["view_history"], "sys": S["view_sys"]}))
             st.radio(t("tube"), options=["grn", "amb"], format_func=lambda x: "GRN" if x == "grn" else "AMB", key="tube", horizontal=True,
@@ -1320,9 +1356,10 @@ def _restore_from_url() -> None:
         except (ValueError, OSError):
             case = None
     if case is not None:
-        st.session_state.update(view="history", open_case=case.case_id, rpage=page if page in REPORT_PAGES else "answer", booted=True)
+        st.session_state.update(view="history", open_case=case.case_id, rpage=page if page in REPORT_PAGES else "answer", booted=True, ui="expert")
     elif view in ("history", "sys"):
         st.session_state["view"] = view
+        st.session_state["ui"] = "expert"  # these pages belong to the console
 
 
 # ------------------------------------------------------------------ input steps
@@ -1515,8 +1552,9 @@ def _forget_case_widgets(key_suffix: str) -> None:
             del st.session_state[key]
 
 
-def run_case(draft: ClaimDraft, confirmation: Confirmation, board) -> None:
+def run_case(draft: ClaimDraft, confirmation: Confirmation, board, painter=None) -> None:
     """Fetch and evaluate, showing each data step on the pipeline screen, then open ① Answer."""
+    paint = painter or ck.pipeline
     st.session_state["result"] = None
     st.session_state["run_error"] = None
     st.html(ck.page_css([], flowing=True))
@@ -1526,9 +1564,9 @@ def run_case(draft: ClaimDraft, confirmation: Confirmation, board) -> None:
 
     def on_step(step: str, step_state: str) -> None:
         live_steps[step] = step_state
-        board.markdown(ck.pipeline(live_steps, zh(), steps_shown), unsafe_allow_html=True)
+        board.markdown(paint(live_steps, zh(), steps_shown), unsafe_allow_html=True)
 
-    board.markdown(ck.pipeline(live_steps, zh(), steps_shown), unsafe_allow_html=True)
+    board.markdown(paint(live_steps, zh(), steps_shown), unsafe_allow_html=True)
     try:
         result = get_service().evaluate(draft, confirmation, sec_mode=st.session_state["sec_mode"], progress=on_step)
         st.session_state["result"] = result
@@ -2705,6 +2743,218 @@ def view_history() -> None:
     st.html(ck.page_css(nodes))
 
 
+# ------------------------------------------------------------------ simple view (v0.16.0)
+# One sentence in, one sentence to confirm, one page of answer. The words come from plain.py, the markup from ui/simple.py;
+# the form, the confirmation and the run are the same ones the console uses.
+
+SIMPLE_EXAMPLES = (("英伟达三年内会涨到 300 美元", "NVDA will hit $300 in 3 years"),
+                   ("特斯拉明年年底到 500 美元", "Tesla will reach $500 by the end of next year"),
+                   ("苹果两年内翻倍", "Apple doubles within 2 years"))
+
+
+def _ui_changed() -> None:
+    st.session_state["booted"] = True  # the start-up screen is for a session that opens on the console
+    if st.session_state["ui"] == "simple":
+        st.session_state["view"] = "new"
+        if st.session_state["page"] == "run" and not st.session_state["run_pending"]:
+            st.session_state["page"] = "check"
+
+
+def _simple_read() -> None:
+    st.session_state["s_edit"] = False
+    _extract_and_fill()
+    if st.session_state["f_ticker"].strip():
+        st.session_state["page"] = "check"
+
+
+def _simple_example(text: str) -> None:
+    _clear_form()
+    st.session_state["f_claim_text"] = text
+    _simple_read()
+
+
+def _simple_toggle_edit() -> None:
+    st.session_state["s_edit"] = not st.session_state["s_edit"]
+
+
+def _simple_go() -> None:
+    """'Yes, start': the confirmation and the run in one key."""
+    draft = current_draft()
+    try:
+        st.session_state["confirmation"] = confirm(draft, now=get_service().now, today=get_service().today())
+        st.session_state["confirm_feedback"] = None
+    except ConfirmationError:
+        st.session_state["confirmation"] = None
+        st.session_state["confirm_feedback"] = fingerprint(draft)
+        st.session_state["s_edit"] = True
+        return
+    _start_run()
+
+
+def _to_expert(page: str, rpage: Optional[str] = None) -> None:
+    st.session_state["ui"] = "expert"
+    st.session_state["booted"] = True
+    st.session_state["page"] = page
+    if rpage:
+        st.session_state["rpage"] = rpage
+
+
+def simple_bridge() -> None:
+    with st.container(key="u-c-bridge"):
+        left, right = st.columns([3, 2], vertical_alignment="center")
+        left.markdown(sm.bridge(zh()), unsafe_allow_html=True)
+        with right, st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small"):
+            st.radio(t("ui"), options=["simple", "expert"], key="ui", horizontal=True, label_visibility="collapsed", on_change=_ui_changed,
+                     format_func=labels({"simple": S["ui_simple"], "expert": S["ui_expert"]}))
+            st.radio(t("language"), options=["zh", "en"], format_func=lambda x: "中" if x == "zh" else "EN", key="lang", horizontal=True,
+                     label_visibility="collapsed")
+
+
+def _simple_restated(draft: ClaimDraft) -> plain.Restated:
+    snap = st.session_state.get("prefill_snapshot")
+    ticker = (draft.ticker or "").strip().upper()
+    company = snap.company_name if (snap is not None and snap.ticker.upper() == ticker) else None
+    deadline = None
+    try:
+        start = date.fromisoformat(str(draft.reference_price_date)) if draft.reference_price_date else get_service().today()
+        if draft.horizon_years:
+            deadline = deadline_from(start, Decimal(str(draft.horizon_years))).isoformat()
+    except Exception:
+        deadline = None
+    return plain.restate(draft, company=company, deadline=deadline)
+
+
+def view_simple_start() -> None:
+    simple_bridge()
+    with st.container(key="u-b-start"):
+        html_block(sm.start_head(zh()))
+        st.text_area(t("s_claim_label"), key="f_claim_text", placeholder=t("s_placeholder"), height=80, label_visibility="collapsed")
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            for n, pair in enumerate(SIMPLE_EXAMPLES):
+                text = pair[0 if zh() else 1]
+                st.button(t("s_try") + text, key=f"btn_s_ex{n}", on_click=_simple_example, args=(text,))
+            st.space("stretch")
+            st.button(t("s_read"), key="btn_s_read", type="primary", on_click=_simple_read)
+        show_msg("extract_msg", only=("warning", "error"))
+        show_msg("prefill_msg", only=("warning", "error"))
+        if st.session_state["sec_mode"] == "synthetic":
+            st.caption(t("s_synthetic"))
+        if sec_gate() and st.session_state["sec_mode"] in ("live", "record"):
+            render_sec_form()
+    with st.container(key="u-b-how"):
+        html_block(sm.cards(zh()))
+    footer_unit()
+    _sync_url()
+    st.html(ck.page_css([("u-b-start", 1), ("u-b-how", 2)]))
+
+
+def view_simple_confirm() -> None:
+    simple_bridge()
+    draft = current_draft()
+    validation = validate_draft(draft, today=get_service().today())
+    blocking = bool(validation.issues) or any(m.blocking for m in validation.missing_fields)
+    with st.container(key="u-b-cnf"):
+        html_block(f'<h2 class="tcs-h2">{esc(t("s_confirm_h"))}</h2>')
+        claim = st.session_state["f_claim_text"].strip()
+        if claim:
+            st.caption(t("s_you_wrote") + claim)
+        html_block(sm.confirm_sentence(zh(), _simple_restated(draft)))
+        show_msg("extract_msg", only=("warning", "error"))
+        show_msg("prefill_msg", only=("warning", "error"))
+        if blocking:
+            st.warning(t("s_cannot"))
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.button(t("s_yes"), key="btn_s_yes", type="primary", on_click=_simple_go, disabled=blocking)
+            st.button(t("s_edit_done") if st.session_state["s_edit"] else t("s_edit"), key="btn_s_edit", on_click=_simple_toggle_edit)
+            st.space("stretch")
+            st.button(t("s_more"), key="btn_s_more", on_click=_to_expert, args=("check",))
+        if st.session_state["s_edit"] or blocking:
+            render_key_inputs()
+            if blocking:
+                render_checks(validation)
+        if st.session_state["confirm_feedback"] and st.session_state["confirm_feedback"] == fingerprint(draft):
+            st.error(t("invalid_confirm"))
+        st.caption(t("s_defaults"))
+        if st.session_state["sec_mode"] == "synthetic":
+            st.caption(t("s_synthetic"))
+    with st.container(horizontal=True, vertical_alignment="center", key="navfoot"):
+        st.button(t("s_back"), key="btn_s_back", on_click=_go, args=("claim",))
+    footer_unit()
+    _sync_url()
+    st.html(ck.page_css([("u-b-cnf", 2)]))
+
+
+def view_simple_working() -> None:
+    simple_bridge()
+    with st.container(key="u-c-run"):
+        claim = st.session_state["f_claim_text"].strip() or st.session_state["f_ticker"].strip()
+        if claim:
+            html_block(f'<h1 class="tc-claim tc-claim-dark">{esc(claim)}</h1>')
+        board = st.empty()
+        pending = st.session_state["run_pending"]
+        if pending:
+            for _ in range(12):  # blank the slots of the page before, which would otherwise stay on screen, greyed, during the run
+                st.empty()
+        elif st.session_state["run_error"]:
+            st.error(t("s_failed") + st.session_state["run_error"])
+            with st.container(horizontal=True, key="runkeys"):
+                st.button(t("s_back"), key="btn_s_back", on_click=_go, args=("claim",))
+                if confirmation_state(current_draft(), st.session_state["confirmation"]) == "confirmed":
+                    st.button(t("s_retry"), key="btn_s_retry", type="primary", on_click=_start_run)
+        else:  # nothing is running: back to the sentence to confirm
+            st.session_state["page"] = "check"
+            st.rerun()
+    footer_unit()
+    st.html(ck.page_css([("u-c-run", 3)]))
+    if pending:  # the rest of the page is drawn first; the run then fills the board and opens the answer
+        for _ in range(4):
+            st.empty()
+        st.session_state["run_pending"] = False
+        run_case(current_draft(), st.session_state["confirmation"], board, painter=sm.working)
+
+
+def view_simple_answer(result: CaseResult) -> None:
+    simple_bridge()
+    head = plain.headline(result)
+    with st.container(key="u-c-ans"):
+        html_block(sm.answer_screen(zh(), head, plain.claim_sentence(result), plain.why_a_range(result), plain.other_condition(result)))
+    with st.container(key="u-b-why"):
+        html_block(f'<h2 class="tcs-h2">{esc(t("s_reasons"))}</h2>' + sm.reasons(zh(), plain.reasons(result)))
+        made = plain.assumptions(result)
+        if made:
+            with st.expander(t("s_assume", n=len(made))):
+                html_block(sm.assumptions(zh(), made))
+        failed = sorted({e.provider_id for e in result.provider_errors})
+        if failed:
+            st.warning(t("s_sources_missing", n=len(failed)))
+        if "synthetic" in result.data_modes.values():
+            st.caption(t("s_synthetic"))
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.button(t("s_detail"), key="btn_s_detail", type="primary", on_click=_to_expert, args=("result", "answer"))
+            st.button(t("s_again"), key="btn_s_again", on_click=_new_claim)
+        as_of = result.market.last_date if result.market is not None else result.created_at.date()  # the day of the latest price used
+        html_block(sm.warn(t("s_not_advice", d=f"{as_of:%Y-%m-%d}")))
+    footer_unit()
+    _sync_url()
+    st.html(ck.page_css([("u-c-ans", 4), ("u-b-why", 5)]))
+
+
+def view_simple(result: Optional[CaseResult], current: bool) -> None:
+    page = st.session_state["page"]
+    if page == "result":
+        if current:
+            view_simple_answer(result)
+            return
+        page = st.session_state["page"] = "check"  # the answer no longer matches the sentence
+    if page == "run":
+        view_simple_working()
+    elif page == "check" and st.session_state["f_ticker"].strip():
+        view_simple_confirm()
+    else:
+        st.session_state["page"] = "claim"
+        view_simple_start()
+
+
 # ------------------------------------------------------------------ page
 
 
@@ -2713,6 +2963,9 @@ def view_new() -> None:
     result: Optional[CaseResult] = st.session_state["result"]
     current = (result is not None and result.confirmed_claim is not None and result.input_fingerprint == fingerprint(draft)
                and st.session_state["result_mode"] == st.session_state["sec_mode"])
+    if st.session_state["ui"] == "simple":
+        view_simple(result, current)
+        return
     page = st.session_state["page"]
     if page == "result":
         if current:
@@ -2732,9 +2985,13 @@ def main() -> None:
     _restore_from_url()
     _keep_widget_state()
     st.html(ck.CSS)
+    st.html(sm.CSS)
     if st.session_state["tube"] == "amb":
         st.html(ck.AMBER_CSS)
-    if not st.session_state["booted"] and get_service().settings.boot_screen:
+    simple = st.session_state["ui"] == "simple"
+    if simple:
+        st.session_state["view"] = "new"  # history and setup are pages of the console
+    elif not st.session_state["booted"] and get_service().settings.boot_screen:
         view_boot()
         return
     if st.session_state["view"] == "history":

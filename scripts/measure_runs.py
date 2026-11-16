@@ -166,7 +166,7 @@ async def main() -> int:
     out = Path(args.out) if args.out else ROOT / "data" / "timings" / f"{stamp}_{args.mode}_{'warm' if args.warm else 'cold'}"
     (out / "runs").mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, TICKERCASE_TIMING_DIR=str(out / "timelines"), TICKERCASE_CASE_DIR=str(out / "cases"),
-               TICKERCASE_BOOT_SCREEN="0", TICKERCASE_TIMING_COLD="0" if args.warm else "1")
+               TICKERCASE_BOOT_SCREEN="0", TICKERCASE_UI="expert", TICKERCASE_TIMING_COLD="0" if args.warm else "1")
     chrome = next((c for c in CHROME_CANDIDATES if Path(c).is_file()), None)
     if chrome is None:
         raise RuntimeError("Chrome was not found")

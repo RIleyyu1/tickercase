@@ -1,0 +1,100 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Simple mode sketch</title>
+<style>
+:root{--ink:#15130f;--paper:#cdbf98;--paper2:#d8ccaa;--panel:#3b3934;--panel2:#2c2a26;--crt:#0b110c;--grn:#5fe08a;--amb:#f0a83c;--gold:#c9a24a;--key:#e4dcc4;--mute:#6f6652}
+*{box-sizing:border-box}body{margin:0;background:#1b1a16;font-family:'Noto Serif SC','Songti SC','SimSun',serif;color:var(--ink)}
+.wrap{width:1500px;margin:0 auto;padding:28px 0 40px}
+.lab{font:700 15px 'IBM Plex Mono',Consolas,monospace;letter-spacing:.14em;color:#e9dfc3;margin:26px 0 10px}
+.lab b{background:var(--gold);color:var(--ink);padding:3px 9px;margin-right:10px}
+.screen{background:var(--paper);border:3px solid var(--ink);box-shadow:8px 8px 0 #0c0b09;padding:22px 26px 26px}
+.top{background:var(--panel);border:3px solid var(--ink);padding:14px 18px;display:flex;align-items:center;gap:16px;color:#f1ebdc}
+.wm{font:700 24px 'IBM Plex Mono',Consolas,monospace;letter-spacing:.24em}
+.sub{font-size:14px;color:#cfc4a6;letter-spacing:.08em}
+.sp{flex:1}.key{font:700 14px 'IBM Plex Mono',Consolas,monospace;background:var(--key);color:var(--ink);border:2px solid var(--ink);padding:7px 12px;box-shadow:3px 3px 0 var(--ink)}
+.key.on{background:var(--gold)}.key.big{font-size:19px;padding:13px 26px}.key.ghost{background:transparent;color:#e9dfc3;border-color:#8f866e;box-shadow:none}
+h1{font-size:40px;line-height:1.25;margin:26px 0 8px}h2{font-size:27px;margin:0 0 6px}
+.en{font-family:Georgia,serif;font-size:17px;color:#5c5340;margin:0 0 18px}
+.input{background:#f3ecd8;border:3px solid var(--ink);font-size:24px;padding:16px 18px;display:flex;align-items:center;gap:14px}
+.input span{flex:1;color:#2a251b}.chips{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.chip{font-size:16px;background:var(--paper2);border:2px dashed #6b5f44;padding:7px 12px}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}
+.card{background:var(--paper2);border:2px solid var(--ink);padding:14px 16px;font-size:17px;line-height:1.55}
+.card b{display:block;font:700 13px 'IBM Plex Mono',Consolas,monospace;letter-spacing:.12em;color:#6b4e22;margin-bottom:4px}
+.crt{background:var(--crt);border:3px solid var(--ink);border-radius:10px;padding:20px 24px;color:var(--grn);font-family:'IBM Plex Mono',Consolas,monospace}
+.say{font-family:'Noto Serif SC','SimSun',serif;font-size:30px;line-height:1.5;color:#f1dfc0}.say em{font-style:normal;color:var(--amb);border-bottom:2px dashed var(--amb)}
+.row{display:flex;gap:14px;align-items:center;margin-top:18px}
+.note{font-size:15px;color:var(--mute);margin-top:12px}
+.steps{font-size:19px;line-height:2.0}.steps .ok{color:var(--grn)}.steps .now{color:var(--amb)}.steps .wait{color:#4d6b55}
+.bar{height:12px;background:#1d2a20;border:1px solid #2f4a37;margin-top:14px}.bar i{display:block;height:100%;width:62%;background:var(--grn)}
+.ans{display:grid;grid-template-columns:1.25fr 1fr;gap:20px;margin-top:18px}
+.verdict{font-family:'Noto Serif SC','SimSun',serif;font-size:34px;color:#f1dfc0;line-height:1.4}.verdict b{color:var(--grn)}
+.scale{position:relative;height:34px;background:#152018;border:1px solid #2f4a37;margin:22px 0 6px}
+.scale .rng{position:absolute;left:38%;width:40%;top:0;bottom:0;background:linear-gradient(90deg,#3fae68,#5fe08a)}
+.scale .half{position:absolute;left:50%;top:-8px;bottom:-8px;border-left:2px dashed var(--amb)}
+.ticks{display:flex;justify-content:space-between;font-size:13px;color:#7fb593}
+.why{font-size:18px;line-height:1.6;margin:0;padding:0;list-style:none}.why li{padding:11px 0;border-bottom:1px dashed #8d8163}
+.why .p{color:#1f6b3a;font-weight:700}.why .m{color:#a2401f;font-weight:700}
+.foot{display:flex;gap:14px;align-items:center;margin-top:18px}.warn{font-size:15px;background:#efe3bf;border:2px solid #a2401f;color:#7a2d14;padding:8px 12px}
+small.e{display:block;font-family:Georgia,serif;font-size:14px;color:#6f6652;margin-top:2px}
+.crt small.e{color:#7fb593}
+</style></head><body><div class="wrap">
+
+<div class="lab"><b>1</b>首屏 · START — 一句话说明用途，一个输入框，三个例句</div>
+<div class="screen">
+ <div class="top"><div><div class="wm">TICKERCASE</div><div class="sub">股票说法 · 可能性检查</div></div><div class="sp"></div>
+  <div class="key on">简单</div><div class="key">专家</div><div class="key on">中</div><div class="key">EN</div></div>
+ <h1>有人说某只股票会涨到多少？<br>输入这句话，看看它成真的可能性有多大。</h1>
+ <p class="en">Heard a claim about a stock price? Type it in and see how likely it is, and why.</p>
+ <div class="input"><span>英伟达三年内会涨到 300 美元</span><div class="key on big">看看可能性 →</div></div>
+ <div class="chips"><div class="chip">试试：特斯拉明年年底到 500 美元</div><div class="chip">试试：AAPL will hit $400 in 2 years</div><div class="chip">试试：台积电五年翻倍</div></div>
+ <div class="three">
+  <div class="card"><b>① 你说一句话</b>不用懂股票代码或财报，像聊天一样写就行。<small class="e">Say it in plain words.</small></div>
+  <div class="card"><b>② 我们查公开数据</b>公司财报、股价历史、期权市场的定价，都是免费的官方或公开来源。<small class="e">We check free public data.</small></div>
+  <div class="card"><b>③ 给你一个范围和理由</b>告诉你大概有几成可能，以及支持和反对的理由。不是买卖建议。<small class="e">You get a range and the reasons. Not advice.</small></div>
+ </div>
+</div>
+
+<div class="lab"><b>2</b>确认 · CONFIRM — 把读到的意思用一句话复述，只问“对不对”</div>
+<div class="screen">
+ <h2>我们这样理解你的话，对吗？</h2><p class="en">Did we read it right?</p>
+ <div class="crt"><div class="say"><em>英伟达（NVDA）</em>的股价，在 <em>2029 年 11 月 15 日</em>之前，<em>至少有一天</em>达到 <em>300 美元</em>。</div>
+  <small class="e" style="font-size:16px;margin-top:10px">NVIDIA (NVDA) trades at $300 or higher on at least one day before 15 Nov 2029.</small>
+  <div style="margin-top:14px;font-size:16px;color:#9fd9b3">现在的价格是 168.89 美元，也就是说还要涨 78%。 · Today: $168.89, so it needs to rise 78%.</div></div>
+ <div class="row"><div class="key on big">对，开始分析</div><div class="key big">改一下</div><div class="sp"></div><div class="key ghost">更多假设（专家）▾</div></div>
+ <div class="note">带下划线的四处可以直接点开修改。其余假设（估值方法、股本变化等）用默认值，收在“更多假设”里。</div>
+</div>
+
+<div class="lab"><b>3</b>等待 · WORKING — 用人话说正在做什么（约 20–30 秒）</div>
+<div class="screen">
+ <div class="crt"><div class="steps">
+  <div class="ok">✔ 读了这家公司最近的财报 <small class="e" style="display:inline">· Read the latest company filings</small></div>
+  <div class="ok">✔ 看了过去十年的股价 <small class="e" style="display:inline">· Looked at ten years of prices</small></div>
+  <div class="now">▸ 正在看期权市场怎么给这件事定价… <small class="e" style="display:inline">· Checking how the options market prices it</small></div>
+  <div class="wait">· 对比同规模公司过去的表现 <small class="e" style="display:inline">· Compare with similar companies</small></div>
+  <div class="wait">· 汇总成一个范围 <small class="e" style="display:inline">· Put it together</small></div></div>
+  <div class="bar"><i></i></div></div>
+</div>
+
+<div class="lab"><b>4</b>答案 · ANSWER — 先结论，再图，再三条理由；详细报告收在一个入口后面</div>
+<div class="screen">
+ <div class="ans">
+  <div class="crt">
+   <div style="font-size:15px;color:#9fd9b3;margin-bottom:8px">英伟达在 2029-11-15 前涨到 300 美元</div>
+   <div class="verdict">有可能，但<b>说不准</b>：<br>大约 <b>4 成到 8 成</b>。</div>
+   <small class="e" style="font-size:16px;margin-top:6px">Possible but uncertain: roughly 40% to 79%.</small>
+   <div class="scale"><div class="rng"></div><div class="half"></div></div>
+   <div class="ticks"><span>0% 几乎不可能</span><span>50% 像抛硬币</span><span>100% 几乎肯定</span></div>
+   <div style="margin-top:16px;font-size:15px;color:#9fd9b3;line-height:1.6">为什么是一个范围？我们用了几种不同的算法，它们的结果不一样，所以给范围而不是一个数。<br>如果问的是“到期那天收盘还在 300 以上”，可能性只有约 17%。</div>
+  </div>
+  <div>
+   <h2 style="font-size:22px">主要理由 <span style="font:14px Georgia;color:#6f6652">Main reasons</span></h2>
+   <ul class="why">
+    <li><span class="p">＋ 支持</span>　过去十年里，这只股票三年涨 78% 以上的情况很常见。</li>
+    <li><span class="p">＋ 支持</span>　期权市场的价格显示，交易者认为大涨并不罕见。</li>
+    <li><span class="m">－ 反对</span>　要撑住 300 美元，公司收入需要每年增长约 21%；同样规模的公司里，过去很少有做到的。</li>
+   </ul>
+   <div class="foot"><div class="key on">看详细依据（7 页报告）→</div><div class="key">换一句话</div></div>
+   <div class="foot"><div class="warn">这是根据公开数据算出的可能性，不是买卖建议。数据截至 2026-11-15。</div></div>
+  </div>
+ </div>
+</div>
+</div></body></html>

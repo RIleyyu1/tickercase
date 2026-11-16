@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
+
+# the page tests written for the console run on the console; tests of the simple view set TICKERCASE_UI=simple themselves
+os.environ.setdefault("TICKERCASE_UI", "expert")
 
 from tickercase.config import Settings
 from tickercase.http_client import FakeHttpClient
