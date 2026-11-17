@@ -41,6 +41,7 @@ CSS = """<style>
 .tcs-why{list-style:none;margin:0;padding:0;font-family:'Noto Serif SC',Georgia,serif;font-size:17px;line-height:1.65;color:var(--ink)}
 .tcs-why li{padding:10px 0;border-bottom:1px dashed #8D8163;display:flex;gap:12px}
 .tcs-why .s{flex:0 0 auto;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;white-space:nowrap;padding-top:3px}
+.tcs-grp{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.1em;color:#6B4E22;margin:14px 0 2px}
 .tcs-cav{display:block;font-size:14px;line-height:1.55;color:#5C5340;margin-top:3px}
 .tcs-why .p{color:#1F6B3A}.tcs-why .m{color:#A2401F}.tcs-why .n{color:#6B5F44}
 .tcs-warn{font-family:'Noto Serif SC',Georgia,serif;font-size:15px;line-height:1.6;background:rgba(255,246,214,.6);border:2px solid #A2401F;color:#7A2D14;padding:8px 12px}
@@ -151,14 +152,24 @@ def answer_screen(zh: bool, h: Headline, claim: tuple[str, str], why: Optional[t
     return crt(f'<div class="tcs-claim">{esc(claim[i])}</div>{verdict}{scale}{notes}')
 
 
-def reasons(zh: bool, items: list[Reason]) -> str:
+def reasons(zh: bool, items: list[Reason], basis: str = "", context: str = "") -> str:
+    """The reasons in two groups: what the main number rests on, then the numbers shown for context."""
     if not items:
         return f'<p class="tcs-lead">{esc(L(zh, "这次没有足够的数据列出理由。", "There was not enough data to list reasons this time."))}</p>'
     word = {"+": (L(zh, "＋ 支持", "+ For"), "p"), "-": (L(zh, "－ 反对", "− Against"), "m"), "0": (L(zh, "· 中性", "· Neutral"), "n")}
     i = 1 if zh else 0
-    rows = "".join(f'<li><span class="s {word[r.sign][1]}">{esc(word[r.sign][0])}</span><span>{esc(r.text[i])}'
-                   + (f'<small class="tcs-cav">{esc(r.note[i])}</small>' if r.note else "") + "</span></li>" for r in items)
-    return f'<ul class="tcs-why">{rows}</ul>'
+
+    def rows(group: list[Reason]) -> str:
+        return "".join(f'<li><span class="s {word[r.sign][1]}">{esc(word[r.sign][0])}</span><span>{esc(r.text[i])}'
+                       + (f'<small class="tcs-cav">{esc(r.note[i])}</small>' if r.note else "") + "</span></li>" for r in group)
+
+    main, rest = [r for r in items if r.counted], [r for r in items if not r.counted]
+    out = ""
+    if main:
+        out += (f'<div class="tcs-grp">{esc(basis)}</div>' if basis else "") + f'<ul class="tcs-why">{rows(main)}</ul>'
+    if rest:
+        out += (f'<div class="tcs-grp">{esc(context)}</div>' if context else "") + f'<ul class="tcs-why">{rows(rest)}</ul>'
+    return out
 
 
 def assumptions(zh: bool, items: list[tuple[str, str]]) -> str:

@@ -42,6 +42,16 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## A main number you can use (v0.17.0)
+
+Until now the headline was the lowest to the highest of every method. For a stock with an exceptional past that range was too wide to mean anything: NVDA to $300 in three years read "35% to 75%", because the stock's own history (75%) sat far from what the market prices in (35%).
+
+- **The headline is the two market-based methods**, M1 (option prices) and M2 (the stock's own volatility). They ask the same question of independent data, so the range is narrow when they agree: the same claim now reads "Unlikely: roughly 34% to 36%".
+- **The stock's own history (M4) and the peer base rate (M3) are context.** They are shown, with their numbers, under "For context (not part of the main number)", and each says why: the history is what happens if the stock repeats its own past, which is optimistic for a stock that is asked about because it rose; the peer rate is about the business, not the price.
+- When neither market method can be computed, the older rule applies and the page says so. Cases stored before keep the range they were saved with.
+- Each case records which methods made its headline (`oracle.counted`), and the console, the report text and the simple view read that one list.
+- Also from the second review round: a date written out ("2028-11-13") is the deadline as written, not the end of its year; a target that is not a number is named as that; "doubles" follows the new stock when the stock is changed on the confirmation page.
+
 ## One story in both views (v0.16.1)
 
 Five reviewers (retail investor, professional, economist, and two readers new to stocks, one Chinese and one English) used v0.16.0. What they found, fixed by class:

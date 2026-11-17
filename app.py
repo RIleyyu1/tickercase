@@ -59,6 +59,9 @@ S = {
     "s_back": ("◀ 换一句话", "◀ Another sentence"),
     "s_missing": ("还缺{what}，请在下面填上。", "Still needed: {what}. Please fill it in below."),
     "s_m_target": ("目标价（涨到多少）", "the price it should reach"),
+    "s_bad_number": ("目标价和期限要填数字，例如 300 和 3。", "The price and the time have to be numbers, for example 300 and 3."),
+    "s_basis": ("主数字的依据", "What the main number rests on"),
+    "s_context": ("参考（不计入主数字）", "For context (not part of the main number)"),
     "s_m_horizon": ("期限（几年）", "the time (in years)"),
     "s_no_data": ("这只股票的财务数据暂时取不到，简单模式算不了。可以换一只股票，或点“更多假设（专家）”手动填写。",
                   "The financial figures of this stock could not be fetched, so the simple view cannot work it out. Try another stock, or press “More assumptions (expert)” to fill them in."),
@@ -2844,6 +2847,8 @@ def _simple_restated(draft: ClaimDraft) -> plain.Restated:
             deadline = deadline_from(start, Decimal(str(draft.horizon_years))).isoformat()
     except Exception:
         deadline = None
+    if draft.target_price and not _is_number(str(draft.target_price).strip()):
+        draft = draft.model_copy(update={"target_price": None})  # "abc" is not a price to say back
     return plain.restate(draft, company=company, deadline=deadline)
 
 
@@ -2871,8 +2876,23 @@ def view_simple_start() -> None:
     st.html(ck.page_css([("u-b-start", 1), ("u-b-how", 2)]))
 
 
+def _simple_sync_multiple() -> None:
+    """"Doubles", "up 50%": the target is a multiple of the price today. When the stock is changed on this page the
+    target follows the new stock's price, as long as the reader has not typed a target of their own."""
+    ex = st.session_state.get("extraction")
+    src = st.session_state["prefill_sources"].get("target_price")
+    ref = st.session_state["f_reference_price"].strip()
+    if ex is None or ex.target_multiple is None or src is None or not _is_number(ref) or st.session_state["f_target_price"] != src[0]:
+        return
+    val = format((Decimal(ref) * ex.target_multiple).quantize(Decimal("0.01")).normalize(), "f")
+    if val != src[0]:
+        st.session_state["f_target_price"] = val
+        st.session_state["prefill_sources"]["target_price"] = (val, f"{CLAIM_TEXT_PREFIX}{ex.target_text} x {ex.target_multiple} of reference {ref}")
+
+
 def view_simple_confirm() -> None:
     simple_bridge()
+    _simple_sync_multiple()
     draft = current_draft()
     validation = validate_draft(draft, today=get_service().today())
     blocking = bool(validation.issues) or any(m.blocking for m in validation.missing_fields)
@@ -2884,8 +2904,12 @@ def view_simple_confirm() -> None:
         html_block(sm.confirm_sentence(zh(), _simple_restated(draft)))
         # one plain message: what the reader has to add, or that this stock cannot be worked out here
         needs = [t(k) for k, name in (("s_m_target", "target_price"), ("s_m_horizon", "horizon_years")) if not st.session_state[f"f_{name}"].strip()]
-        other = blocking and not needs
-        if needs:
+        bad = [name for name in ("target_price", "horizon_years") if st.session_state[f"f_{name}"].strip() and not _is_number(st.session_state[f"f_{name}"].strip())]
+        other = blocking and not needs and not bad
+        if bad:
+            st.warning(t("s_bad_number"))
+            needs = needs or [""]  # keep the form open
+        elif needs:
             st.warning(t("s_missing", what=("、" if zh() else " and ").join(needs)))
         elif other:
             st.warning(t("s_no_data"))
@@ -2944,7 +2968,7 @@ def view_simple_answer(result: CaseResult) -> None:
     with st.container(key="u-c-ans"):
         html_block(sm.answer_screen(zh(), head, plain.claim_sentence(result), plain.why_a_range(result), plain.other_condition(result)))
     with st.container(key="u-b-why"):
-        html_block(f'<h2 class="tcs-h2">{esc(t("s_reasons"))}</h2>' + sm.reasons(zh(), plain.reasons(result)))
+        html_block(f'<h2 class="tcs-h2">{esc(t("s_reasons"))}</h2>' + sm.reasons(zh(), plain.reasons(result), t("s_basis"), t("s_context")))
         made = plain.assumptions(result)
         if made:
             with st.expander(t("s_assume", n=len(made))):

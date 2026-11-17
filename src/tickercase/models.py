@@ -690,6 +690,10 @@ class OracleSummary(BaseModel):
     agreement: "Text"
     risk_free_rate: Optional[DecimalStr] = None
     condition: Literal["end", "touch"] = "end"  # which probability the range uses
+    # the methods whose results make the headline range (since v0.17.0: the market-based ones, M1 and M2, when they exist);
+    # empty in cases stored before, which keep the older rule
+    counted: list[str] = Field(default_factory=list)
+    basis: Literal["market", "fallback", ""] = ""  # "fallback": no market-based method could be computed
     spot: Optional[float] = None
     base_volatility: Optional[float] = None  # historical volatility, used by the scenario panel
     implied_volatility: Optional[float] = None

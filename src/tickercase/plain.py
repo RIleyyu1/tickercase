@@ -34,8 +34,10 @@ def rate(x) -> str:
 
 
 def counted(result: CaseResult, m) -> bool:
-    """Whether a method enters the headline range: the console's rule (M4 needs enough independent periods; M3, a
-    business condition, does not measure reaching a price at some point)."""
+    """Whether a method is part of the headline range: the list the case recorded, or the older rule for cases stored
+    before v0.17.0."""
+    if result.oracle.counted:
+        return m.id in result.oracle.counted
     if m.id == "M4" and independent_windows(result.price_base_rate) < MIN_INDEPENDENT_WINDOWS:
         return False
     if m.id == "M3" and result.oracle.condition == "touch":
@@ -96,6 +98,7 @@ class Reason:
     text: Pair
     page: str               # the report page that holds the number
     note: Optional[Pair] = None   # the limit of this number, which the console states and the simple view must keep
+    counted: bool = False         # part of the main number (True) or shown for context (False)
 
 
 def _sign(p: float) -> str:
@@ -110,46 +113,62 @@ def _months(n: int) -> Pair:
 
 
 def reasons(result: CaseResult) -> list[Reason]:
-    """Up to four reasons, each one number said in everyday words, in a fixed order."""
+    """Up to five reasons, each one number said in everyday words: first the methods the main number rests on, then
+    the numbers shown for context. ``counted`` says which group a reason belongs to, by the console's rule."""
     out: list[Reason] = []
     o = result.oracle
     touch = o is not None and o.condition == "touch"
     claim = result.confirmed_claim.values if result.confirmed_claim is not None else None
-    # 1. the stock's own history
+    by_id = {m.id: m for m in (o.methods if o is not None else []) if m.status == "ok"}
+    is_counted = lambda mid: mid in by_id and counted(result, by_id[mid])  # noqa: E731
+
+    def chance(mid: str) -> Optional[float]:
+        m = by_id.get(mid)
+        if m is None:
+            return None
+        return m.touch_probability if (touch and m.touch_probability is not None) else m.probability
+
+    # 1. what option prices imply
+    p = chance("M1")
+    if p is not None:
+        out.append(Reason(_sign(p), (
+            f"Worked out from option prices, where traders put money on future prices, the chance is about {pct(p)}.",
+            f"按期权市场（交易者用真金白银押未来价格的地方）的价格推算，这件事约有 {pct(p)} 的可能。"), "methods",
+            ("This number includes what traders charge for risk, so it is not the true chance; when the date or the price lies beyond the options on sale, it is extended from the nearest ones.",
+             "这个数含有交易者对风险的要价，不等于真实的可能性；期限或目标价超出现有期权时，是从最接近的期权推算的。"), is_counted("M1")))
+    # 2. the stock's own swings
+    p = chance("M2")
+    if p is not None:
+        out.append(Reason(_sign(p), (
+            f"Worked out from how much this stock's price usually swings, without looking at any news, the chance is about {pct(p)}.",
+            f"按这只股票平时的波动幅度推算（不看任何消息），这件事约有 {pct(p)} 的可能。"), "methods",
+            ("It assumes the price swings as much as it did in the past year and leaves out the long-run tendency of stocks to rise, so it may be low.",
+             "它假设以后的波动和过去一年差不多，而且不含股票长期上涨的倾向，所以可能偏低。"), is_counted("M2")))
+    # 3. the stock's own history
     pr = result.price_base_rate
     reached = pr is not None and float(pr.required_return) <= 0
     if reached:
         above = rate(-float(pr.required_return) / (1 + float(pr.required_return))) if float(pr.required_return) > -1 else "—"
         out.append(Reason("+", (f"The price today is already {above} above the target, so the claim holds unless the price falls back.",
-                                f"现在的股价已经比目标价高 {above}，只要不跌回去，这个说法就成立。"), "answer"))
+                                f"现在的股价已经比目标价高 {above}，只要不跌回去，这个说法就成立。"), "answer", None, True))
     elif pr is not None and pr.windows:
         use_touch = touch and pr.touch_hits is not None
         hits = pr.touch_hits if use_touch else pr.hits
         share = hits / pr.windows
         need = rate(pr.required_return)
         en_m, zh_m = _months(pr.window_months)
-        verb_en = "reached at least this gain at some point" if use_touch else "ended with at least this gain"
-        verb_zh = "中途达到过这个涨幅" if use_touch else "期末达到了这个涨幅"
+        verb_en = "reached at least this gain at a month-end" if use_touch else "ended with at least this gain"
+        verb_zh = "在某个月末达到过这个涨幅" if use_touch else "期末达到了这个涨幅"
         indep = independent_windows(pr)
-        only = indep < MIN_INDEPENDENT_WINDOWS
-        note = (f"These periods start a month apart and overlap: they amount to about {indep} separate {en_m} periods. The past does not promise the future."
-                + (" With so few, this number is shown for context and is not part of the range." if only else ""),
-                f"这些时间段按月起算、互相重叠，相当于约 {indep} 段独立的 {zh_m}；过去不代表未来。"
-                + ("独立的时间段太少，这个数只作参考，不计入上面的范围。" if only else ""))
+        own = is_counted("M4")
+        note = (f"This is what would happen if the stock repeated its own past. A stock is usually asked about because it already rose, so this number is optimistic. "
+                f"The periods start a month apart and overlap: they amount to about {indep} separate {en_m} periods.",
+                f"这是“如果它重复自己过去的表现”的结果。一只股票被拿来讨论，往往正因为它已经涨了很多，所以这个数偏乐观。"
+                f"这些时间段按月起算、互相重叠，相当于约 {indep} 段独立的 {zh_m}。")
         out.append(Reason(_sign(share), (
             f"The price needs to rise {need}. Of the {pr.windows} past {en_m} periods of this stock since {pr.history_start.year}, {hits} {verb_en} ({pct(share)}).",
-            f"股价需要上涨 {need}。从 {pr.history_start.year} 年起这只股票的 {pr.windows} 个 {zh_m}时间段里，有 {hits} 个{verb_zh}（{pct(share)}）。"), "methods", note))
-    # 2. what option prices imply
-    m1 = next((m for m in (o.methods if o is not None else []) if m.id == "M1" and m.status == "ok"), None)
-    if m1 is not None:
-        p = m1.touch_probability if (touch and m1.touch_probability is not None) else m1.probability
-        if p is not None:
-            out.append(Reason(_sign(p), (
-                f"Worked out from option prices, where traders put money on future prices, the chance is about {pct(p)}.",
-                f"按期权市场（交易者用真金白银押未来价格的地方）的价格推算，这件事约有 {pct(p)} 的可能。"), "methods",
-                ("This number includes what traders charge for risk, so it is not the true chance; when the date or the price lies beyond the options on sale, it is extended from the nearest ones.",
-                 "这个数含有交易者对风险的要价，不等于真实的可能性；期限或目标价超出现有期权时，是从最接近的期权推算的。")))
-    # 3 and 4. the business: how fast it would have to grow
+            f"股价需要上涨 {need}。从 {pr.history_start.year} 年起这只股票的 {pr.windows} 个 {zh_m}时间段里，有 {hits} 个{verb_zh}（{pct(share)}）。"), "methods", note, own))
+    # 4 and 5. the business: how fast it would have to grow
     br = result.base_rate
     metric = ("profit", "利润") if (claim is not None and claim.valuation_method.metric_name != "annual_revenue") else ("revenue", "收入")
     e1 = next((i for i in result.evidence_items if i.id == "E1"), None)
@@ -160,8 +179,8 @@ def reasons(result: CaseResult) -> list[Reason]:
         need_growth = Decimal(e1.measured["required_cagr_from_reported"])
     if need_growth is not None and need_growth <= 0:
         out.append(Reason("+", (f"If the company is valued as it is today, its {metric[0]} does not need to grow for the price to be at this level.",
-                                f"如果市场对公司的估值和今天一样，公司的{metric[1]}不用再增长，股价就能在这个水平。"), "fund"))
-        return out[:4]
+                                f"如果市场对公司的估值和今天一样，公司的{metric[1]}不用再增长，股价就能在这个水平。"), "fund", None, False))
+        return out[:5]
     if br is not None and br.companies and br.rate is not None:
         wide = ((" The size band was widened to a quarter to four times the company's size to find enough companies.", "为了凑够公司，规模范围已放宽到 0.25–4 倍。")
                 if br.band_widened else ("", ""))
@@ -170,15 +189,16 @@ def reasons(result: CaseResult) -> list[Reason]:
             f"Of {br.companies} companies of similar size, {br.achieved} grew that fast from {br.start_year} to {br.end_year} ({pct(br.rate)}).",
             f"股价要到这个水平才说得过去，公司的{metric[1]}每年得增长约 {rate(br.required_cagr)}（假设市场给它的估值不变）。"
             f"{br.companies} 家规模相近的公司里，{br.start_year} 到 {br.end_year} 年有 {br.achieved} 家做到（{pct(br.rate)}）。"), "fund",
-            ("Only companies that still report are counted, which makes this share look better than it was." + wide[0],
-             "只统计了至今仍在申报的公司，所以这个比例偏乐观。" + wide[1])))
+            ("This is about the business, not the price. Only companies that still report are counted, which makes this share look better than it was." + wide[0],
+             "这说的是公司的业绩，不是股价。只统计了至今仍在申报的公司，所以这个比例偏乐观。" + wide[1]), is_counted("M3")))
     if e1 is not None and "required_cagr_from_reported" in e1.measured and "reported_cagr" in e1.measured:
         need, got = Decimal(e1.measured["required_cagr_from_reported"]), Decimal(e1.measured["reported_cagr"])
         ok = got >= need
         out.append(Reason("+" if ok else "-", (
             f"The {metric[0]} the company has published grew about {rate(got)} a year in recent years, {'at or above' if ok else 'below'} the {rate(need)} a year the claim needs.",
-            f"公司公布的{metric[1]}近几年每年增长约 {rate(got)}，{'不低于' if ok else '低于'}这个说法需要的每年 {rate(need)}。"), "fund"))
-    return out[:4]
+            f"公司公布的{metric[1]}近几年每年增长约 {rate(got)}，{'不低于' if ok else '低于'}这个说法需要的每年 {rate(need)}。"), "fund",
+            ("Growth in the past does not promise the same growth later.", "过去增长快，不代表以后还能这么快。"), False))
+    return out[:5]
 
 
 def other_condition(result: CaseResult) -> Optional[Pair]:
@@ -198,20 +218,27 @@ def other_condition(result: CaseResult) -> Optional[Pair]:
 
 
 def why_a_range(result: CaseResult) -> Optional[Pair]:
+    """What the main number is made of. Since v0.17.0 it is the two market-based methods; a case without them says so."""
     o = result.oracle
     if o is None or o.low is None:
         return None
-    n = len(counted_methods(result))
+    used = counted_methods(result)
+    n = len(used)
+    ids = {m.id for m in used}
+    if ids and ids <= {"M1", "M2"}:
+        if n == 2:
+            return ("The main number comes from two methods that ask the same question of different data: the option prices of today, and how much this stock usually swings. "
+                    "It is not a margin of error, and the true chance can lie outside it.",
+                    "主数字来自两种算法，它们用不同的数据回答同一个问题：今天的期权价格，和这只股票平时的波动幅度。它不是误差范围，真实的可能性也可能落在范围之外。")
+        which = (("option prices", "期权价格") if "M1" in ids else ("how much this stock usually swings", "这只股票平时的波动幅度"))
+        return (f"The main number comes from one method only ({which[0]}); the other market-based method could not be computed this time.",
+                f"主数字这次只来自一种算法（{which[1]}），另一种市场算法没有算出结果。")
     if n < 2:
         return ("Only one method could be computed for this claim, so the estimate rests on that one method.",
                 "这个说法只有一种算法能算出结果，所以估计只依据这一种算法。")
-    if o.high - o.low < 0.05:
-        return (f"{n} different methods were used and their results are close to each other. The true chance can still lie outside this range.",
-                f"我们用了 {n} 种不同的算法，它们的结果很接近。真实的可能性仍然可能落在这个范围之外。")
-    return (f"Why a range? {n} different methods were used; the range runs from the lowest of their results to the highest. "
-            "It shows how far the methods disagree. It is not a margin of error, and the true chance can lie outside it.",
-            f"为什么是一个范围？我们用了 {n} 种不同的算法，范围是其中最低和最高的结果。"
-            "它表示算法之间的分歧，不是误差范围；真实的可能性也可能落在范围之外。")
+    return (f"Neither market-based method could be computed, so the range runs from the lowest to the highest of {n} other methods. "
+            "It shows how far they disagree; it is not a margin of error.",
+            f"两种市场算法都没有算出结果，所以范围取自其余 {n} 种算法中最低和最高的结果。它表示算法之间的分歧，不是误差范围。")
 
 
 def _share_pace(x) -> Pair:

@@ -262,7 +262,24 @@ def _year_end(year: int, qualifier: Optional[str]) -> date:
     return date(year, 12, 31)
 
 
+FULL_DATE_RE = re.compile(r"(?<!\d)(20\d{2})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*[日号]?(?!\d)")
+
+
+def find_full_date(text: str) -> Optional[_Found]:
+    """A whole date written out: 2028-11-13, 2028/11/13, 2028年11月13日. It is the deadline as written, not the end of its year."""
+    for m in FULL_DATE_RE.finditer(text):
+        try:
+            day = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            continue
+        return _Found(None, m.group(0).strip(), m.start(), extra={"kind": "date", "date": day, "end": m.end()})
+    return None
+
+
 def find_horizon(text: str, today: date) -> Optional[_Found]:
+    full = find_full_date(text)
+    if full is not None:
+        return full
     lowered = text.lower()
     # durations: 5年后 / 五年内 / in 5 years / within 18 months / 一年半
     dur = re.search(rf"({NUM}|{CN_NUM})\s*(?:个)?\s*(年|月)\s*(半)?\s*(?:后|内|以后|之后|之内|以内)?", text)
@@ -346,6 +363,9 @@ def extract_claim(text: str, *, today: date, is_known_ticker: Optional[Callable[
         out.valuation_text = val.text
         # the multiple's number must not be read as a target or as "rises 40 times"
         target_text = text[:val.start] + " " * (val.extra["end"] - val.start) + text[val.extra["end"]:]
+    full_date = find_full_date(target_text)
+    if full_date is not None:  # its month and day are not prices
+        target_text = target_text[:full_date.start] + " " * (full_date.extra["end"] - full_date.start) + target_text[full_date.extra["end"]:]
     tgt = find_target(target_text)
     if tgt and tgt.value is not None:
         out.target_price, out.target_text = tgt.value, tgt.text

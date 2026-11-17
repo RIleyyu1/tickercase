@@ -48,8 +48,9 @@ def test_the_headline_states_the_same_range_as_the_report(case):
     head = plain.headline(case)
     assert head.low == case.oracle.low and head.high == case.oracle.high
     assert head.tier == plain.tier(case.oracle.low, case.oracle.high)
+    from tickercase.fmt import prob_ends
     for text in head.range_text:
-        assert plain.pct(case.oracle.low) in text
+        assert prob_ends(case.oracle.low, case.oracle.high)[0] in text
 
 
 def test_every_reason_is_a_number_of_the_case_in_both_languages(case):
@@ -192,7 +193,11 @@ def test_the_simple_view_and_the_console_use_the_same_word_range_and_method_coun
                 and (m.touch_probability if c.oracle.condition == "touch" else m.probability) is not None]
         assert len(plain.counted_methods(c)) == len(used)
         why = plain.why_a_range(c)
-        assert str(len(used)) in why[0] or len(used) < 2
+        assert ("two methods" in why[0]) == (len(used) == 2 and c.oracle.basis == "market")
+        # the reasons marked as the basis of the main number are exactly the counted methods that have a reason
+        basis = [r for r in plain.reasons(c) if r.counted and r.page == "methods"]
+        assert len(basis) == len([m for m in used if m.id in ("M1", "M2", "M4")])
+        assert c.oracle.counted == [m.id for m in used]
         other = plain.other_condition(c)
         if other is not None:  # the same pair of market methods as the console's status bar
             assert ck.other_side(c, False)[0] in other[0]
@@ -270,3 +275,35 @@ def test_a_rise_of_more_than_double_is_not_capped_at_100_percent():
     r = plain.Restated(ticker="MSFT", company="MICROSOFT CORP", target="1200", currency="USD", deadline="2031-11-13", touch=False,
                        reference="523.88", needed=1200 / 523.88 - 1)
     assert "129%" in sm.confirm_sentence(False, r) and "129%" in sm.confirm_sentence(True, r)
+
+
+def test_the_headline_rests_on_the_two_market_methods_and_the_history_is_context(tmp_path):
+    for c in cases_of(tmp_path):
+        ok = {m.id: m for m in c.oracle.methods if m.status == "ok"}
+        if "M1" in ok or "M2" in ok:
+            assert c.oracle.basis == "market" and set(c.oracle.counted) <= {"M1", "M2"}
+            touch = c.oracle.condition == "touch"
+            vals = [(m.touch_probability if touch else m.probability) for i, m in ok.items() if i in c.oracle.counted]
+            assert c.oracle.low == min(vals) and c.oracle.high == max(vals)
+
+
+@pytest.mark.parametrize("sentence, day", [
+    ("LLY closes above $1500 on 2028-11-13", "2028-11-13"), ("礼来 2028年11月13日 收在 1500 美元以上", "2028-11-13"),
+    ("礼来 2028/11/13 收在 1500 美元以上", "2028-11-13"), ("特斯拉明年年底到 500 美元", "2027-12-31"),
+])
+def test_a_date_written_out_is_the_deadline_as_written(sentence, day):
+    from tickercase.extract import extract_claim
+
+    e = extract_claim(sentence, today=FIXED_TODAY)
+    assert str(e.target_date) == day
+    assert str(e.target_price) in ("1500", "500")
+
+
+def test_a_target_that_is_not_a_number_is_named_as_that(simple_env):
+    at = read(start("en"), "SYNT reaches $100 by 2031")
+    click(at, "btn_s_edit")
+    at.text_input(key="f_target_price").set_value("abc")
+    at.run(timeout=30)
+    warnings = " ".join(str(w.value) for w in at.warning)
+    assert "have to be numbers" in warnings and "could not be fetched" not in warnings
+    assert "abc USD" not in page_text(at)

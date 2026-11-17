@@ -243,7 +243,10 @@ def claim_unit(result: CaseResult, zh: bool, label: str) -> str:
 
 
 def counted(result: CaseResult, m) -> bool:
-    """Whether a method may enter the headline range (M4 needs enough independent windows; M3 does not measure a touch)."""
+    """Whether a method is part of the headline range: the list the case recorded, or the older rule for cases stored
+    before v0.17.0 (M4 needs enough independent windows; M3 does not measure a touch)."""
+    if result.oracle.counted:
+        return m.id in result.oracle.counted
     if m.id == "M4" and independent_windows(result.price_base_rate) < MIN_INDEPENDENT_WINDOWS:
         return False
     if m.id == "M3" and result.oracle.condition == "touch":

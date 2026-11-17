@@ -12,8 +12,12 @@ M4 history    share of past windows of the same length in which this stock rose 
               as much as needed. Windows overlap heavily, so it is used in the range only when
               the history covers at least 4 non-overlapping windows; otherwise it is context.
 
-The range is [min, max] over the usable methods. No method is weighted by judgement;
-where they disagree the summary says which is higher and why it measures something different.
+The headline range is [min, max] over the two market-based methods, M1 and M2 (v0.17.0). They ask the same question
+of two independent inputs, the option prices of today and the stock's own volatility, so when they agree the range is
+narrow. M3 and M4 are shown beside it as context: M3 is a condition on the business, and M4 says what would happen if
+the stock repeated its own past, which is optimistic for a stock that is asked about because it rose. Before v0.17.0
+all usable methods entered the range, and a single stock's exceptional history could double its width (NVDA: 35%-75%).
+When neither M1 nor M2 can be computed, the older rule applies and the summary says so.
 
 The claim's condition decides which probability the range uses: "end" (at or above the
 target on the date) or "touch" (reaches it at any time before). For touch, M1 and M2 use
@@ -54,6 +58,7 @@ from .models import (
 from .providers.options import iv_at
 
 _N = NormalDist()
+MARKET_METHODS = ("M1", "M2")  # option prices and the stock's own volatility: the headline
 MIN_INDEPENDENT_WINDOWS = 4
 
 
@@ -249,9 +254,12 @@ def build_oracle(
     def value(m: ProbabilityMethod) -> Optional[float]:
         return m.touch_probability if touch else m.probability
 
-    usable = [m for m in methods if m.status == "ok" and value(m) is not None
-              and not (m.id == "M4" and independent_windows(price_rate) < MIN_INDEPENDENT_WINDOWS)
-              and not (touch and m.id == "M3")]
+    computed = [m for m in methods if m.status == "ok" and value(m) is not None]
+    usable = [m for m in computed if m.id in MARKET_METHODS]
+    basis = "market" if usable else "fallback"
+    if not usable:  # no option chain and no volatility: the context methods are all there is
+        usable = [m for m in computed if not (m.id == "M4" and independent_windows(price_rate) < MIN_INDEPENDENT_WINDOWS)
+                  and not (touch and m.id == "M3")]
     if usable:
         values = sorted(value(m) for m in usable)
         low, high = values[0], values[-1]
@@ -275,6 +283,9 @@ def build_oracle(
                           f"它们衡量的东西不同：前者是{hi_m.measures.zh}；后者是{lo_m.measures.zh}。")
         tier_key = range_tier(low, high)
         tier_label = T(*TIER_WORDS[tier_key])
+        if basis == "fallback":
+            agreement = T("No market-based method could be computed, so the range rests on the context methods. " + agreement.en,
+                          "两种市场方法都没有算出结果，所以范围只依据参考方法。" + agreement.zh)
     else:
         low = high = None
         tier_key, tier_label = "unknown", T("Not enough data", "数据不足")
@@ -301,7 +312,8 @@ def build_oracle(
     return OracleSummary(target_price=claim.target_price, target_date=target_date, low=low, high=high, tier=tier_key, tier_label=tier_label,
                          methods=methods, ladder=ladder, agreement=agreement, risk_free_rate=risk_free, condition="touch" if touch else "end",
                          spot=spot, base_volatility=float(market.annualized_volatility) if market and market.annualized_volatility else None,
-                         implied_volatility=options.target_iv if options is not None else None)
+                         implied_volatility=options.target_iv if options is not None else None,
+                         counted=[m.id for m in usable], basis=basis if usable else "")
 
 
 # ---------------------------------------------------------------- event move from the term structure
