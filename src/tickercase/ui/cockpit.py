@@ -264,7 +264,7 @@ def _zone(x: float) -> str:
 
 
 def split_methods(result: CaseResult) -> tuple[list, list]:
-    """(methods inside the headline range, computed methods shown as context), each as (method, probability)."""
+    """(methods that make the main number, computed methods shown as context), each as (method, probability)."""
     o = result.oracle
     touch = o.condition == "touch"
     used, ref = [], []
@@ -272,7 +272,7 @@ def split_methods(result: CaseResult) -> tuple[list, list]:
         p = m.touch_probability if touch else m.probability
         if m.status != "ok" or p is None:
             continue
-        inside = o.low is not None and o.low - 1e-12 <= p <= o.high + 1e-12 and counted(result, m)
+        inside = o.low is not None and counted(result, m)
         (used if inside else ref).append((m, p))
     return used, ref
 
@@ -299,7 +299,8 @@ def prb_screen(result: CaseResult, zh: bool, anim: bool) -> str:
     used_ids = {m.id for m, _ in used}
     lines = []
     if used:
-        lines.append(("", L(zh, "计入区间　", "In range　") + " · ".join(f"{m.id} {num_small(p)}" for m, p in used)))
+        share = lambda m: (f"×{round(o.weights[m.id] * 100)}%" if o.weights.get(m.id) else "")  # noqa: E731
+        lines.append(("", L(zh, "加权计入　", "Weighted　") + " · ".join(f"{m.id} {num_small(p)}{share(m)}" for m, p in used)))
     if ref:
         lines.append(("tc-dim", L(zh, "仅作参考　", "Context only　") + " · ".join(f"{m.id} {num_small(p)}" for m, p in ref)))
     _, side_detail = other_side(result, zh)
@@ -314,7 +315,9 @@ def prb_screen(result: CaseResult, zh: bool, anim: bool) -> str:
                f'<div class="tc-col"><span class="tc-inv tc-tier">{esc(tier_text(o, zh))}</span>{lines_html}</div>')
     else:
         big = f'<span class="tc-nodata">{esc(L(zh, "数据不足，无法计算概率", "Not enough data to compute a probability"))}</span><div class="tc-col">{lines_html}</div>'
-    lo, hi = (sqrt_x(o.low), sqrt_x(o.high)) if o.low is not None else (None, None)
+    # the lit cells are the spread of the methods in the index; the main number is one point inside it
+    ends = (o.spread_low, o.spread_high) if o.spread_low is not None and o.spread_high is not None else (o.low, o.high)
+    lo, hi = (sqrt_x(ends[0]), sqrt_x(ends[1])) if o.low is not None else (None, None)
     cells = "".join(f'<span class="tc-cell {_zone(i * 2 + 1)}{" lit" if lo is not None and lo - 1 <= i * 2 + 1 <= hi + 1 else ""}"></span>' for i in range(50))
     groups: list[list] = []  # methods closer than 5% of the ruler share one label
     for m, p in sorted(used + ref, key=lambda x: x[1]):
@@ -340,14 +343,14 @@ def prb_screen(result: CaseResult, zh: bool, anim: bool) -> str:
     here = range_tier(o.low, o.high)
     zone_html = "".join(f'<span{" class=tc-am" if BANDS[i][0] == here else ""}>{esc(z)}</span>' for i, z in enumerate(zones))
     # the count says which methods make the range, as the ⓘ note does ("2 种方法相差不到 3 倍"), not every reading shown
-    count = (L(zh, f"{len(used)} 种方法计入区间 · {len(ref)} 种仅参考", f"{len(used)} methods in the range · {len(ref)} for context") if ref
-             else L(zh, f"{len(used)} 种方法交叉核对", f"{len(used)} methods cross-checked"))
+    count = (L(zh, f"{len(used)} 种方法加权 · {len(ref)} 种仅参考", f"{len(used)} methods weighted · {len(ref)} for context") if ref
+             else L(zh, f"{len(used)} 种方法加权", f"{len(used)} methods weighted"))
     return (f'<div class="tc-bezel"><div class="tc-crt{" tc-boot" if anim else ""}"><span class="tc-noise"></span><div class="tc-crt-in tc-ph" style="gap:12px">'
             f'<span class="tc-dim tc-small">PRB&gt; {esc(head)} · {esc(count)}</span>'
             f'<div class="tc-bigrow">{big}</div>'
             f'<div class="tc-marks">{"".join(top)}</div><div class="tc-cells" aria-hidden="true">{cells}</div><div class="tc-marks">{"".join(bottom)}{ticks}</div>'
             f'<div class="tc-zones tc-dim">{zone_html}</div>'
-            f'<span class="tc-dim tc-small">{esc(L(zh, "平方根刻度 · 亮格为区间 · ▼▲ 计入 · ▽△ 仅参考", "square-root scale · lit cells = range · ▼▲ counted · ▽△ context"))}</span>'
+            f'<span class="tc-dim tc-small">{esc(L(zh, "平方根刻度 · 亮格为各方法的范围 · ▼▲ 计入 · ▽△ 仅参考", "square-root scale · lit cells = spread of the methods · ▼▲ counted · ▽△ context"))}</span>'
             f'</div></div></div>')
 
 
@@ -361,7 +364,8 @@ def method_strips(result: CaseResult, zh: bool, anim: bool, *, solo: bool = Fals
     for m in o.methods:
         p = m.touch_probability if touch else m.probability
         ok = m.status == "ok" and p is not None
-        tag = L(zh, "计入", "in range") if m.id in used_ids else (L(zh, "参考", "context") if m.status == "ok" else L(zh, "缺数据", "no data"))
+        w = f" {round(o.weights[m.id] * 100)}%" if o.weights.get(m.id) else ""
+        tag = (L(zh, "计入", "counted") + w) if m.id in used_ids else (L(zh, "参考", "context") if m.status == "ok" else L(zh, "缺数据", "no data"))
         lit = min(24, int(sqrt_x(p) // 4)) if ok else -1
         mcells = "".join(f'<span class="tc-mcell {_zone(i * 4 + 2)}{" lit" if i == lit else ""}"></span>' for i in range(25))
         a = pct_small(m.touch_probability, 1) if m.status == "ok" else "—"

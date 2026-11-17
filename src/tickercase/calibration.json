@@ -1,0 +1,135 @@
+{
+ "made_at": "20261117T173641Z",
+ "stocks": 55,
+ "cases": 49332,
+ "first": "2006-03-31",
+ "last": "2025-09-30",
+ "min_cases": 1000,
+ "weights": {
+  "M1": 0.4,
+  "M2": 0.4,
+  "M4": 0.15,
+  "M3": 0.05
+ },
+ "note": "index of the product's weights with the volatility method standing in for option prices; survivors only",
+ "touch": {
+  "bins": [
+   {
+    "from": 0.0,
+    "to": 0.1,
+    "n": 9151,
+    "said": 0.0413,
+    "happened": 0.0353
+   },
+   {
+    "from": 0.1,
+    "to": 0.2,
+    "n": 5670,
+    "said": 0.1467,
+    "happened": 0.1649
+   },
+   {
+    "from": 0.2,
+    "to": 0.3,
+    "n": 4684,
+    "said": 0.2478,
+    "happened": 0.2857
+   },
+   {
+    "from": 0.3,
+    "to": 0.4,
+    "n": 4802,
+    "said": 0.3516,
+    "happened": 0.4321
+   },
+   {
+    "from": 0.4,
+    "to": 0.5,
+    "n": 4367,
+    "said": 0.4508,
+    "happened": 0.5406
+   },
+   {
+    "from": 0.5,
+    "to": 0.6,
+    "n": 4128,
+    "said": 0.5497,
+    "happened": 0.6572
+   },
+   {
+    "from": 0.6,
+    "to": 0.7,
+    "n": 5175,
+    "said": 0.6508,
+    "happened": 0.7619
+   },
+   {
+    "from": 0.7,
+    "to": 0.8,
+    "n": 5527,
+    "said": 0.7539,
+    "happened": 0.8404
+   },
+   {
+    "from": 0.8,
+    "to": 0.9,
+    "n": 5815,
+    "said": 0.8375,
+    "happened": 0.9068
+   },
+   {
+    "from": 0.9,
+    "to": 1.0,
+    "n": 13,
+    "said": 0.9018,
+    "happened": 1.0
+   }
+  ]
+ },
+ "end": {
+  "bins": [
+   {
+    "from": 0.0,
+    "to": 0.1,
+    "n": 13863,
+    "said": 0.0427,
+    "happened": 0.0478
+   },
+   {
+    "from": 0.1,
+    "to": 0.2,
+    "n": 8880,
+    "said": 0.1491,
+    "happened": 0.209
+   },
+   {
+    "from": 0.2,
+    "to": 0.3,
+    "n": 8755,
+    "said": 0.2461,
+    "happened": 0.4017
+   },
+   {
+    "from": 0.3,
+    "to": 0.4,
+    "n": 10208,
+    "said": 0.3528,
+    "happened": 0.561
+   },
+   {
+    "from": 0.4,
+    "to": 0.5,
+    "n": 7335,
+    "said": 0.4355,
+    "happened": 0.6555
+   },
+   {
+    "from": 0.5,
+    "to": 0.6,
+    "n": 291,
+    "said": 0.5203,
+    "happened": 0.3746
+   }
+  ]
+ }
+}

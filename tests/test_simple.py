@@ -277,14 +277,61 @@ def test_a_rise_of_more_than_double_is_not_capped_at_100_percent():
     assert "129%" in sm.confirm_sentence(False, r) and "129%" in sm.confirm_sentence(True, r)
 
 
-def test_the_headline_rests_on_the_two_market_methods_and_the_history_is_context(tmp_path):
+def test_the_headline_is_a_weighted_index_where_history_and_peers_are_a_small_share(tmp_path):
+    from tickercase.oracle import METHOD_WEIGHTS
+
+    assert abs(sum(METHOD_WEIGHTS.values()) - 1) < 1e-9 and METHOD_WEIGHTS["M4"] + METHOD_WEIGHTS["M3"] <= 0.25
+    seen = 0
     for c in cases_of(tmp_path):
-        ok = {m.id: m for m in c.oracle.methods if m.status == "ok"}
+        o = c.oracle
+        ok = {m.id: m for m in o.methods if m.status == "ok"}
         if "M1" in ok or "M2" in ok:
-            assert c.oracle.basis == "market" and set(c.oracle.counted) <= {"M1", "M2"}
-            touch = c.oracle.condition == "touch"
-            vals = [(m.touch_probability if touch else m.probability) for i, m in ok.items() if i in c.oracle.counted]
-            assert c.oracle.low == min(vals) and c.oracle.high == max(vals)
+            seen += 1
+            touch = o.condition == "touch"
+            vals = {i: (m.touch_probability if touch else m.probability) for i, m in ok.items() if i in o.counted}
+            assert o.basis == "index" and set(o.weights) == set(o.counted) == set(vals)
+            assert abs(sum(o.weights.values()) - 1) < 1e-9
+            assert o.low == o.high and abs(o.low - sum(o.weights[i] * vals[i] for i in vals)) < 1e-9
+            assert o.spread_low == min(vals.values()) and o.spread_high == max(vals.values())
+            assert not touch or "M3" not in o.counted           # the peer rate does not measure a touch
+            market = sum(o.weights.get(i, 0) for i in ("M1", "M2"))
+            assert market >= 0.75                                # the two market methods carry the number
+    assert seen
+
+
+def test_weights_are_shared_out_again_when_a_method_is_missing():
+    from tickercase.oracle import weighted_index
+
+    index, weights = weighted_index({"M2": 0.30, "M4": 0.60})
+    assert abs(sum(weights.values()) - 1) < 1e-9 and weights["M2"] > weights["M4"]
+    assert abs(index - (0.40 * 0.30 + 0.15 * 0.60) / 0.55) < 1e-9
+    assert weighted_index({"M1": 0.2})[0] == 0.2
+
+
+def test_the_backtest_line_reads_between_two_bins_and_is_silent_outside_them():
+    from tickercase import calibration
+
+    data = calibration.table()
+    assert data is not None and data["cases"] > 10000 and data["weights"]["M4"] == 0.15
+    for condition in ("touch", "end"):
+        bins = [b for b in data[condition]["bins"] if b["n"] >= data["min_cases"]]
+        mid = (bins[1]["said"] + bins[2]["said"]) / 2
+        got = calibration.calibrated(mid, condition)
+        assert min(bins[1]["happened"], bins[2]["happened"]) <= got <= max(bins[1]["happened"], bins[2]["happened"])
+        assert calibration.calibrated(bins[1]["said"], condition) == pytest.approx(bins[1]["happened"])
+        assert calibration.calibrated(bins[-1]["said"] + 0.01, condition) is None
+    assert calibration.calibrated(None, "touch") is None and calibration.calibrated(0.5, "other") is None
+
+
+def test_the_answer_page_carries_the_backtest_line_when_there_is_one(tmp_path):
+    from tickercase import plain
+
+    for c in cases_of(tmp_path):
+        line = plain.calibration_line(c)
+        if c.oracle.calibrated is None:
+            assert line is None
+        else:
+            assert plain.pct(c.oracle.calibrated) in line[0] and "companies that failed are missing" in line[0] and "倒闭的公司" in line[1]
 
 
 @pytest.mark.parametrize("sentence, day", [
@@ -307,3 +354,17 @@ def test_a_target_that_is_not_a_number_is_named_as_that(simple_env):
     warnings = " ".join(str(w.value) for w in at.warning)
     assert "have to be numbers" in warnings and "could not be fetched" not in warnings
     assert "abc USD" not in page_text(at)
+
+
+def test_the_history_reason_is_written_when_the_stock_has_a_price_history(tmp_path):
+    # the synthetic company has no price history, so a rate is put on the case: a live run met a name clash here
+    from datetime import date as _date
+
+    from tickercase import plain
+    from tickercase.models import PriceBaseRate
+
+    case = cases_of(tmp_path)[0]
+    fields = dict(symbol="SYNT", window_months=60, windows=120, hits=30, rate=0.25, required_return="1.0", history_start=_date(2005, 1, 31), touch_hits=45)
+    case = case.model_copy(update={"price_base_rate": PriceBaseRate.model_construct(**fields)})
+    texts = [r.text[0] for r in plain.reasons(case)]
+    assert any("Of the 120 past" in x for x in texts)

@@ -42,6 +42,15 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## One index, checked against the past (v0.18.0)
+
+v0.17.0 took the stock's own history and the peer rate out of the main number. Since v0.18.0 they are in it with a small weight, and the main number is one figure.
+
+- **The main number is a weighted index.** `oracle.METHOD_WEIGHTS`: option prices (M1) 40 %, the stock's own volatility (M2) 40 %, the stock's own history (M4) 15 %, the peer base rate (M3) 5 %. A method that could not be computed, or that does not measure the question (M3 for "reaches on any day", M4 with fewer than four separate periods), drops out and the others share its weight in proportion. NVDA to $300 in three years: options 35 % at 42 %, volatility 36 % at 42 %, history 75 % at 16 %, index **42 %**.
+- **The spread stays visible.** `oracle.spread_low` and `spread_high` are the lowest and the highest of the methods in the index; the simple view draws them as a faint band behind the marker and the console lights them on the ruler. Each reason shows its share.
+- **A line from the backtest.** `scripts/backtest_methods.py --export` replays the index on 49,332 past cases and writes `src/tickercase/calibration.json`; the page reads it and says "when this index said 42 %, the claim came true about 50 % of the time", with what the backtest leaves out (survivors only; no past option prices, so the volatility method stands in for them). The main number itself is not shifted by it. Bins with fewer than 1,000 cases are not used, and outside the bins the line is not shown.
+- The weights are a choice, not a fit. In the backtest the history would have earned a larger share than 15 % (see `docs/method-backtest.md`); it is kept small because no stock in the backtest rose as much as the ones this method misjudges.
+
 ## A main number you can use (v0.17.0)
 
 Until now the headline was the lowest to the highest of every method. For a stock with an exceptional past that range was too wide to mean anything: NVDA to $300 in three years read "35% to 75%", because the stock's own history (75%) sat far from what the market prices in (35%).

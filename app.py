@@ -60,8 +60,8 @@ S = {
     "s_missing": ("还缺{what}，请在下面填上。", "Still needed: {what}. Please fill it in below."),
     "s_m_target": ("目标价（涨到多少）", "the price it should reach"),
     "s_bad_number": ("目标价和期限要填数字，例如 300 和 3。", "The price and the time have to be numbers, for example 300 and 3."),
-    "s_basis": ("主数字的依据", "What the main number rests on"),
-    "s_context": ("参考（不计入主数字）", "For context (not part of the main number)"),
+    "s_basis": ("主数字由这些算法加权得出", "The main number is a weighted average of these"),
+    "s_context": ("其他参考", "Also worth knowing"),
     "s_m_horizon": ("期限（几年）", "the time (in years)"),
     "s_no_data": ("这只股票的财务数据暂时取不到，简单模式算不了。可以换一只股票，或点“更多假设（专家）”手动填写。",
                   "The financial figures of this stock could not be fetched, so the simple view cannot work it out. Try another stock, or press “More assumptions (expert)” to fill them in."),
@@ -1933,7 +1933,7 @@ def tab_levels(result: CaseResult) -> None:
     rows = []
     for m in o.methods:
         p = m.touch_probability if touch else m.probability
-        used = m.status == "ok" and p is not None and o.low is not None and o.low - 1e-12 <= p <= o.high + 1e-12 and ck.counted(result, m)
+        used = m.status == "ok" and p is not None and o.low is not None and ck.counted(result, m)
         rows.append((f"{m.id} {tr(m.name)}", pct_p(m.probability) if m.status == "ok" else "—", pct_p(m.touch_probability) if m.status == "ok" else "—",
                      tr(m.measures), t("m_yes") if used else (t("m_no") if m.status == "ok" else "—")))
     html_block(table(S["m_cols"][i], rows, nums=(1, 2), on=2 if touch else 1))
@@ -2966,7 +2966,8 @@ def view_simple_answer(result: CaseResult) -> None:
     simple_bridge()
     head = plain.headline(result)
     with st.container(key="u-c-ans"):
-        html_block(sm.answer_screen(zh(), head, plain.claim_sentence(result), plain.why_a_range(result), plain.other_condition(result)))
+        html_block(sm.answer_screen(zh(), head, plain.claim_sentence(result), plain.why_a_range(result), plain.other_condition(result),
+                                    plain.calibration_line(result)))
     with st.container(key="u-b-why"):
         html_block(f'<h2 class="tcs-h2">{esc(t("s_reasons"))}</h2>' + sm.reasons(zh(), plain.reasons(result), t("s_basis"), t("s_context")))
         made = plain.assumptions(result)

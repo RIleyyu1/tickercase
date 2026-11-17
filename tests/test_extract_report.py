@@ -119,12 +119,13 @@ def test_report_layers_and_scenarios_ps():
 def test_report_not_supported_pe_explains_the_divergence():
     r = _run(pe_draft(ticker="SYNT", base_annual_metric="40000000", current_shares="95000000"))
     rep = r.report
-    # no similar company grew net income that fast: an exact 0, written "0.0%" and not "<0.1%". Since v0.17.0 that
-    # number is context: the headline rests on the two market-based methods only.
+    # no similar company grew net income that fast: an exact 0, written "0.0%" and not "<0.1%". Since v0.18.0 that
+    # number is a small share (5 %) of the index and cannot pull the headline to zero.
     from tickercase.fmt import prob
     m3 = next(m for m in r.oracle.methods if m.id == "M3")
     assert m3.probability == 0 and prob(m3.probability) == "0.0%"
-    assert r.oracle.counted == ["M1", "M2"] and "0.0%" not in rep.headline.zh
+    assert r.oracle.counted[:2] == ["M1", "M2"] and "M3" in r.oracle.counted and r.oracle.weights["M3"] < 0.1
+    assert r.oracle.low == r.oracle.high > 0.1 and prob(r.oracle.low) in rep.headline.zh
     assert any("问题不在估值" in d.zh or "期权市场" in d.zh for d in rep.divergences)
     assert any(row.tone == "bad" for row in rep.layers[0].rows)
 

@@ -20,7 +20,8 @@ from .oracle import MIN_INDEPENDENT_WINDOWS, independent_windows
 from .tiers import TIERS, tier
 
 Pair = tuple[str, str]
-__all__ = ["TIERS", "tier", "pct", "rate", "headline", "claim_sentence", "reasons", "other_condition", "why_a_range", "assumptions", "restate"]
+__all__ = ["TIERS", "tier", "pct", "rate", "headline", "claim_sentence", "reasons", "other_condition", "why_a_range", "calibration_line",
+           "assumptions", "restate"]
 
 
 def pct(p: float) -> str:
@@ -63,6 +64,8 @@ class Headline:
     range_text: Pair          # "roughly 40% to 79%"
     low: Optional[float]
     high: Optional[float]
+    spread_low: Optional[float] = None    # the lowest and highest of the methods in the index, for the faint band on the bar
+    spread_high: Optional[float] = None
 
 
 def headline(result: CaseResult) -> Headline:
@@ -74,7 +77,7 @@ def headline(result: CaseResult) -> Headline:
     else:
         a, b = fmt.prob_ends(low, high)
         text = (f"about {a}", f"大约 {a}") if a == b else (f"roughly {a} to {b}", f"大约 {a} 到 {b}")
-    return Headline(key, TIERS[key], text, low, high)
+    return Headline(key, TIERS[key], text, low, high, o.spread_low if o is not None else None, o.spread_high if o is not None else None)
 
 
 def claim_sentence(result: CaseResult) -> Pair:
@@ -99,6 +102,7 @@ class Reason:
     page: str               # the report page that holds the number
     note: Optional[Pair] = None   # the limit of this number, which the console states and the simple view must keep
     counted: bool = False         # part of the main number (True) or shown for context (False)
+    weight: Optional[float] = None  # its share of the main number, 0.42 = 42 %
 
 
 def _sign(p: float) -> str:
@@ -121,6 +125,7 @@ def reasons(result: CaseResult) -> list[Reason]:
     claim = result.confirmed_claim.values if result.confirmed_claim is not None else None
     by_id = {m.id: m for m in (o.methods if o is not None else []) if m.status == "ok"}
     is_counted = lambda mid: mid in by_id and counted(result, by_id[mid])  # noqa: E731
+    weight_of = lambda mid: (o.weights.get(mid) if (o is not None and is_counted(mid)) else None)  # noqa: E731
 
     def chance(mid: str) -> Optional[float]:
         m = by_id.get(mid)
@@ -135,15 +140,15 @@ def reasons(result: CaseResult) -> list[Reason]:
             f"Worked out from option prices, where traders put money on future prices, the chance is about {pct(p)}.",
             f"按期权市场（交易者用真金白银押未来价格的地方）的价格推算，这件事约有 {pct(p)} 的可能。"), "methods",
             ("This number includes what traders charge for risk, so it is not the true chance; when the date or the price lies beyond the options on sale, it is extended from the nearest ones.",
-             "这个数含有交易者对风险的要价，不等于真实的可能性；期限或目标价超出现有期权时，是从最接近的期权推算的。"), is_counted("M1")))
+             "这个数含有交易者对风险的要价，不等于真实的可能性；期限或目标价超出现有期权时，是从最接近的期权推算的。"), is_counted("M1"), weight_of("M1")))
     # 2. the stock's own swings
     p = chance("M2")
     if p is not None:
         out.append(Reason(_sign(p), (
             f"Worked out from how much this stock's price usually swings, without looking at any news, the chance is about {pct(p)}.",
             f"按这只股票平时的波动幅度推算（不看任何消息），这件事约有 {pct(p)} 的可能。"), "methods",
-            ("It assumes the price swings as much as it did in the past year and leaves out the long-run tendency of stocks to rise, so it may be low.",
-             "它假设以后的波动和过去一年差不多，而且不含股票长期上涨的倾向，所以可能偏低。"), is_counted("M2")))
+            ("It leaves out the long-run tendency of stocks to rise. In the backtest it was low: by about 8 points on average, more at three years.",
+             "它不含股票长期上涨的倾向。回测里它偏低：平均低约 8 个百分点，三年期更多。"), is_counted("M2"), weight_of("M2")))
     # 3. the stock's own history
     pr = result.price_base_rate
     reached = pr is not None and float(pr.required_return) <= 0
@@ -161,13 +166,13 @@ def reasons(result: CaseResult) -> list[Reason]:
         verb_zh = "在某个月末达到过这个涨幅" if use_touch else "期末达到了这个涨幅"
         indep = independent_windows(pr)
         own = is_counted("M4")
-        note = (f"This is what would happen if the stock repeated its own past. A stock is usually asked about because it already rose, so this number is optimistic. "
-                f"The periods start a month apart and overlap: they amount to about {indep} separate {en_m} periods.",
-                f"这是“如果它重复自己过去的表现”的结果。一只股票被拿来讨论，往往正因为它已经涨了很多，所以这个数偏乐观。"
-                f"这些时间段按月起算、互相重叠，相当于约 {indep} 段独立的 {zh_m}。")
+        note = (f"This is what would happen if the stock repeated its own past, so it gets a small share. In the backtest it was a little high (3 to 5 points); "
+                f"no stock there had risen as much as some that are asked about. The periods overlap: about {indep} separate {en_m} periods.",
+                f"这是“如果它重复自己过去的表现”的结果，所以只占小比例。回测里它略偏高（3 到 5 个百分点），但回测里没有涨幅特别极端的股票。"
+                f"这些时间段互相重叠，相当于约 {indep} 段独立的 {zh_m}。")
         out.append(Reason(_sign(share), (
             f"The price needs to rise {need}. Of the {pr.windows} past {en_m} periods of this stock since {pr.history_start.year}, {hits} {verb_en} ({pct(share)}).",
-            f"股价需要上涨 {need}。从 {pr.history_start.year} 年起这只股票的 {pr.windows} 个 {zh_m}时间段里，有 {hits} 个{verb_zh}（{pct(share)}）。"), "methods", note, own))
+            f"股价需要上涨 {need}。从 {pr.history_start.year} 年起这只股票的 {pr.windows} 个 {zh_m}时间段里，有 {hits} 个{verb_zh}（{pct(share)}）。"), "methods", note, own, weight_of("M4")))
     # 4 and 5. the business: how fast it would have to grow
     br = result.base_rate
     metric = ("profit", "利润") if (claim is not None and claim.valuation_method.metric_name != "annual_revenue") else ("revenue", "收入")
@@ -190,7 +195,7 @@ def reasons(result: CaseResult) -> list[Reason]:
             f"股价要到这个水平才说得过去，公司的{metric[1]}每年得增长约 {rate(br.required_cagr)}（假设市场给它的估值不变）。"
             f"{br.companies} 家规模相近的公司里，{br.start_year} 到 {br.end_year} 年有 {br.achieved} 家做到（{pct(br.rate)}）。"), "fund",
             ("This is about the business, not the price. Only companies that still report are counted, which makes this share look better than it was." + wide[0],
-             "这说的是公司的业绩，不是股价。只统计了至今仍在申报的公司，所以这个比例偏乐观。" + wide[1]), is_counted("M3")))
+             "这说的是公司的业绩，不是股价。只统计了至今仍在申报的公司，所以这个比例偏乐观。" + wide[1]), is_counted("M3"), weight_of("M3")))
     if e1 is not None and "required_cagr_from_reported" in e1.measured and "reported_cagr" in e1.measured:
         need, got = Decimal(e1.measured["required_cagr_from_reported"]), Decimal(e1.measured["reported_cagr"])
         ok = got >= need
@@ -213,32 +218,38 @@ def other_condition(result: CaseResult) -> Optional[Pair]:
     if not ends:
         return None
     rng = fmt.prob_range(min(ends), max(ends))
-    return (f"The range above counts any day the price gets there. Still being at or above the target on {o.target_date} is less likely: about {rng}.",
-            f"上面的范围只要中途有一天到过就算。如果要求 {o.target_date} 那天收盘还在目标价以上，可能性更低：约 {rng}。")
+    return (f"The number above counts any day the price gets there. Still being at or above the target on {o.target_date} is less likely: about {rng}.",
+            f"上面的数字只要中途有一天到过就算。如果要求 {o.target_date} 那天收盘还在目标价以上，可能性更低：约 {rng}。")
 
 
 def why_a_range(result: CaseResult) -> Optional[Pair]:
-    """What the main number is made of. Since v0.17.0 it is the two market-based methods; a case without them says so."""
+    """What the main number is made of: the methods, the share of each, and how far apart they are."""
     o = result.oracle
     if o is None or o.low is None:
         return None
     used = counted_methods(result)
     n = len(used)
-    ids = {m.id for m in used}
-    if ids and ids <= {"M1", "M2"}:
-        if n == 2:
-            return ("The main number comes from two methods that ask the same question of different data: the option prices of today, and how much this stock usually swings. "
-                    "It is not a margin of error, and the true chance can lie outside it.",
-                    "主数字来自两种算法，它们用不同的数据回答同一个问题：今天的期权价格，和这只股票平时的波动幅度。它不是误差范围，真实的可能性也可能落在范围之外。")
-        which = (("option prices", "期权价格") if "M1" in ids else ("how much this stock usually swings", "这只股票平时的波动幅度"))
-        return (f"The main number comes from one method only ({which[0]}); the other market-based method could not be computed this time.",
-                f"主数字这次只来自一种算法（{which[1]}），另一种市场算法没有算出结果。")
     if n < 2:
         return ("Only one method could be computed for this claim, so the estimate rests on that one method.",
                 "这个说法只有一种算法能算出结果，所以估计只依据这一种算法。")
-    return (f"Neither market-based method could be computed, so the range runs from the lowest to the highest of {n} other methods. "
-            "It shows how far they disagree; it is not a margin of error.",
-            f"两种市场算法都没有算出结果，所以范围取自其余 {n} 种算法中最低和最高的结果。它表示算法之间的分歧，不是误差范围。")
+    if o.basis == "index" and o.spread_low is not None:
+        rng = fmt.prob_range(o.spread_low, o.spread_high)
+        return (f"The main number is a weighted average of {n} methods, listed below with the share of each. On their own they give {rng}. "
+                "It is an estimate, not a promise.",
+                f"主数字是 {n} 种算法的加权平均，每种的比例列在下面。它们各自的结果是 {rng}。这是一个估计，不是保证。")
+    return (f"{n} methods were used; the range runs from the lowest of their results to the highest. It is not a margin of error.",
+            f"我们用了 {n} 种算法，范围是其中最低和最高的结果。它不是误差范围。")
+
+
+def calibration_line(result: CaseResult) -> Optional[Pair]:
+    """What a number like this has been worth in the backtest, with what the backtest leaves out."""
+    o = result.oracle
+    if o is None or o.calibrated is None or o.low is None:
+        return None
+    return (f"Checked against the past: when this index said {pct(o.low)}, the claim came true about {pct(o.calibrated)} of the time "
+            "(large US companies that still trade, 2006 to 2025; companies that failed are missing, so this is on the high side).",
+            f"和过去对照：这个指数说 {pct(o.low)} 的时候，实际发生了约 {pct(o.calibrated)}"
+            "（2006 到 2025 年、至今仍在交易的美国大公司；倒闭的公司不在其中，所以这个数偏高）。")
 
 
 def _share_pace(x) -> Pair:

@@ -1,7 +1,7 @@
 # Backtest of the methods that can be replayed
 
 When a method said "30 %", did the thing happen about 30 % of the time? This note answers that for the two methods
-that can be replayed on past prices. Run of 2026-11-17, version 0.17.0, `python scripts/backtest_methods.py`.
+that can be replayed on past prices. Run of 2026-11-17, versions 0.17.0 and 0.18.0, `python scripts/backtest_methods.py`.
 
 ## What was tested
 
@@ -63,6 +63,34 @@ five years before:
 M4 is 5 points high here against 3 points for the other stocks: the selection effect is there, and it is small in this
 set. M2 is 11 points low.
 
+## The weighted index of v0.18.0
+
+Since v0.18.0 the main number is a weighted index (M1 40 %, M2 40 %, M4 15 %, M3 5 %). It is replayed here with M2
+standing in for M1, because past option prices are missing, and without M3: M2 at 84 %, M4 at 16 %.
+
+| Index and question | Cases | Said, on average | Happened | Skill |
+|---|---|---|---|---|
+| Index, reached on any day | 49,332 | 42 % | 48 % | 0.38 |
+| Index, at or above on the last day | 49,332 | 22 % | 34 % | 0.14 |
+
+| When the index said (reached on any day) | 4 % | 15 % | 25 % | 35 % | 45 % | 55 % | 65 % | 75 % | 84 % |
+|---|---|---|---|---|---|---|---|---|---|
+| it happened | 4 % | 16 % | 29 % | 43 % | 54 % | 66 % | 76 % | 84 % | 91 % |
+
+| When the index said (on the last day) | 4 % | 15 % | 25 % | 35 % | 44 % |
+|---|---|---|---|---|---|
+| it happened | 5 % | 21 % | 40 % | 56 % | 66 % |
+
+These two tables are `src/tickercase/calibration.json` (`--export`), which the page reads for the line "when this index
+said X, the claim came true about Y of the time". The index is still low, by 6 points for "on any day" and 12 for "on
+the last day", because M2 carries most of it. The page states the checked figure beside the main number and does not
+shift the main number.
+
+**The weight of the history is a choice, not a fit.** Beside M2 alone, the share of M4 with the best Brier score for
+"reached on any day" was 50 % (Brier 0.151 against 0.154 for the index as weighted). It is kept at 15 % because the
+backtest holds survivors and no stock with a past like the ones M4 misjudges most; the gain from a larger share is small
+and rests on the part of the evidence that is weakest.
+
 ## What this does and does not show
 
 - It shows that M2, one of the two methods of the headline since v0.17.0, has been **low** by 8 to 13 points for
@@ -79,4 +107,4 @@ set. M2 is 11 points low.
 - **No stock like NVDA.** "At least tripled" is the strongest past in this set; nothing in it rose tenfold in five
   years. What M4 is worth for such a stock is not tested here.
 
-Data: `data/backtest/v1/cases.csv` and `summary.json` (not in the repository; rerun the script to rebuild them).
+Data: `data/backtest/v2/cases.csv` and `summary.json` (not in the repository; rerun the script to rebuild them).

@@ -41,7 +41,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from tickercase.acquisition import build_fetcher  # noqa: E402
 from tickercase.config import load_settings  # noqa: E402
-from tickercase.oracle import MIN_INDEPENDENT_WINDOWS, p_end_above, p_touch  # noqa: E402
+from tickercase.oracle import MIN_INDEPENDENT_WINDOWS, METHOD_WEIGHTS, p_end_above, p_touch, weighted_index  # noqa: E402
 from tickercase.providers.market import annualized_volatility, daily_closes, price_base_rate, price_touch_hits  # noqa: E402
 
 # the largest US companies by market value around the end of 2005 that still trade under the same symbol
@@ -114,11 +114,21 @@ def one_stock(symbol: str, days: list[date], closes: list[float], rate_days: lis
                 windows, hits, _, _ = price_base_rate(past, months, Decimal(str(rise)))
                 touch_hits = price_touch_hits(past, months, Decimal(str(rise))) if windows else 0
                 indep = (windows + months) // months if windows else 0
+                m2_end, m2_touch = p_end_above(spot, level, vol, h, r), p_touch(spot, level, vol, h, r)
+                m4_end, m4_touch = (hits / windows, touch_hits / windows) if windows else (None, None)
+                own = bool(windows) and indep >= MIN_INDEPENDENT_WINDOWS
+
+                def index(market: float, history) -> float:
+                    # the product's index with its own weights; past option prices do not exist, so the volatility
+                    # method stands in for the option method (the two are usually close)
+                    values = {"M1": market, "M2": market} | ({"M4": history} if own else {})
+                    return weighted_index(values)[0]
+
                 rows.append({
                     "symbol": symbol, "date": t.isoformat(), "years": h, "rise": rise, "vol": round(vol, 4), "rate": round(r, 4),
                     "past_5y_return": round(spot / closes[i - VOL_DAYS] - 1, 4),
-                    "m2_end": p_end_above(spot, level, vol, h, r), "m2_touch": p_touch(spot, level, vol, h, r),
-                    "m4_end": hits / windows if windows else None, "m4_touch": touch_hits / windows if windows else None,
+                    "m2_end": m2_end, "m2_touch": m2_touch, "m4_end": m4_end, "m4_touch": m4_touch,
+                    "index_end": index(m2_end, m4_end), "index_touch": index(m2_touch, m4_touch),
                     "m4_independent": indep,
                     "real_end": int(window[-1] >= level), "real_touch": int(max(window) >= level),
                     "real_touch_month_end": int(bool(window_me) and max(window_me) >= level),
@@ -149,6 +159,7 @@ def summarise(rows: list[dict]) -> dict:
         "M2 end": ("m2_end", "real_end", None), "M2 touch": ("m2_touch", "real_touch", None),
         "M4 end": ("m4_end", "real_end", MIN_INDEPENDENT_WINDOWS), "M4 touch (daily closes)": ("m4_touch", "real_touch", MIN_INDEPENDENT_WINDOWS),
         "M4 touch (month-end closes)": ("m4_touch", "real_touch_month_end", MIN_INDEPENDENT_WINDOWS),
+        "Index end": ("index_end", "real_end", None), "Index touch": ("index_touch", "real_touch", None),
     }
     for name, (said, real, need) in views.items():
         use = [r for r in rows if r[said] is not None and (need is None or r["m4_independent"] >= need)]
@@ -170,6 +181,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="")
     ap.add_argument("--symbols", default="")
+    ap.add_argument("--export", action="store_true", help="write the calibration table the product reads (src/tickercase/calibration.json)")
     args = ap.parse_args()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     out = Path(args.out) if args.out else ROOT / "data" / "backtest" / stamp
@@ -203,6 +215,22 @@ def main() -> int:
             w.writerow({k: (round(v, 5) if isinstance(v, float) else v) for k, v in r.items()})
     summary = {"made_at": stamp, "stocks": used, "skipped": skipped, "cases": len(rows), "first": min(r["date"] for r in rows),
                "last": max(r["date"] for r in rows), "horizons_years": HORIZONS, "rises": RISES, "methods": summarise(rows)}
+    if args.export:
+        def bins(name):
+            return [{k: round(v, 4) if isinstance(v, float) else v for k, v in b.items()} for b in summary["methods"][name]["bins"]]
+
+        table = {"made_at": stamp, "stocks": len(used), "cases": len(rows), "first": summary["first"], "last": summary["last"], "min_cases": 1000,
+                 "weights": METHOD_WEIGHTS,
+                 "note": "index of the product's weights with the volatility method standing in for option prices; survivors only",
+                 "touch": {"bins": bins("Index touch")}, "end": {"bins": bins("Index end")}}
+        target = ROOT / "src" / "tickercase" / "calibration.json"
+        target.write_text(json.dumps(table, indent=1) + "\n", encoding="utf-8")
+        print("calibration table written to", target)
+    # for information: the share of the history that would have scored best beside the volatility method
+    both = [r for r in rows if r["m4_touch"] is not None and r["m4_independent"] >= MIN_INDEPENDENT_WINDOWS]
+    best = min((sum(((1 - w) * r["m2_touch"] + w * r["m4_touch"] - r["real_touch"]) ** 2 for r in both) / len(both), w) for w in [x / 20 for x in range(21)])
+    summary["best_history_share_touch"] = {"share": best[1], "brier": best[0]}
+    print(f"share of the history that scored best beside the volatility method (touch): {best[1]:.2f} (Brier {best[0]:.4f})")
     (out / "summary.json").write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
     print(f"\n{len(rows)} cases, {len(used)} stocks, {summary['first']} to {summary['last']}; written to {out}")
     print(f"{'method':30s} {'n':>7s} {'said':>7s} {'happened':>9s} {'Brier':>7s} {'ref':>7s} {'skill':>7s}")

@@ -103,7 +103,7 @@ def test_touch_claim_uses_touch_probabilities(svc):
     touch = svc.evaluate(touch_draft, confirm(touch_draft, today=FIXED_TODAY, now=lambda: FIXED_NOW), sec_mode="synthetic")
     assert end.oracle.condition == "end" and touch.oracle.condition == "touch"
     m1 = next(m for m in touch.oracle.methods if m.id == "M1")
-    assert touch.oracle.high >= m1.touch_probability > m1.probability
+    assert touch.oracle.spread_high >= m1.touch_probability > m1.probability
     assert touch.oracle.low > end.oracle.low
     assert "任意时点触及" in touch.report.headline.zh
     m3 = next(m for m in touch.oracle.methods if m.id == "M3")

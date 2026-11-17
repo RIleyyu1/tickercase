@@ -68,10 +68,11 @@ def test_probability_unit_lights_the_range_and_keeps_m3_as_context_for_touch(cas
     o = case.oracle
     assert o.condition == "touch" and o.low is not None
     html = ck.prb_unit(case, True, "PRB", anim=False)
-    assert f"{o.low * 100:.0f}%–{o.high * 100:.0f}%" in html
+    assert ck.range_str(o.low, o.high) in html and o.low == o.high
     assert " lit" in html and "tc-boot" not in html
     used, ref = ck.split_methods(case)
-    assert used and all(o.low - 1e-12 <= p <= o.high + 1e-12 for _, p in used)
+    assert used and all(o.spread_low - 1e-12 <= p <= o.spread_high + 1e-12 for _, p in used)
+    assert o.spread_low - 1e-12 <= o.low <= o.spread_high + 1e-12
     assert "M3" not in {m.id for m, _ in used}  # peer base rate does not measure a touch
     m3 = next(m for m in o.methods if m.id == "M3")
     strip = html.split(">M3<", 1)[1].split("tc-basis", 1)[0]

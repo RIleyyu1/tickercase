@@ -693,7 +693,12 @@ class OracleSummary(BaseModel):
     # the methods whose results make the headline range (since v0.17.0: the market-based ones, M1 and M2, when they exist);
     # empty in cases stored before, which keep the older rule
     counted: list[str] = Field(default_factory=list)
-    basis: Literal["market", "fallback", ""] = ""  # "fallback": no market-based method could be computed
+    basis: Literal["index", "market", "fallback", ""] = ""  # "index" since v0.18.0; the others belong to cases of v0.17.0
+    # since v0.18.0 the headline is one number, a weighted index of the counted methods: low == high == the index
+    weights: dict[str, float] = Field(default_factory=dict)   # method id -> its share of the index (they add up to 1)
+    spread_low: Optional[float] = None                         # the lowest and the highest of the counted methods
+    spread_high: Optional[float] = None
+    calibrated: Optional[float] = None                         # how often the claim came true in the backtest when the index said this
     spot: Optional[float] = None
     base_volatility: Optional[float] = None  # historical volatility, used by the scenario panel
     implied_volatility: Optional[float] = None

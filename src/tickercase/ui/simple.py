@@ -33,7 +33,8 @@ CSS = """<style>
 .tcs-verdict{font-family:'Noto Serif SC',Georgia,serif;font-size:clamp(26px,2.8vw,36px);line-height:1.4;font-weight:900;color:var(--scr-text)}
 .tcs-verdict b{color:var(--ph)}
 .tcs-scale{position:relative;height:34px;background:var(--z2);border:1px solid var(--scr-line);margin:18px 0 6px}
-.tcs-scale .rng{position:absolute;top:0;bottom:0;background:var(--ph);opacity:.9;min-width:6px}
+.tcs-scale .rng{position:absolute;top:-4px;bottom:-4px;background:var(--ph);min-width:8px;margin-left:-4px}
+.tcs-scale .spr{position:absolute;top:0;bottom:0;background:var(--ph);opacity:.22}
 .tcs-scale .half{position:absolute;left:50%;top:-8px;bottom:-8px;border-left:2px dashed var(--am)}
 .tcs-ticks{display:flex;justify-content:space-between;font-size:15px;color:var(--dim)}
 .tcs-note{font-size:18px;line-height:1.6;color:var(--scr-text);margin-top:12px}
@@ -42,6 +43,7 @@ CSS = """<style>
 .tcs-why li{padding:10px 0;border-bottom:1px dashed #8D8163;display:flex;gap:12px}
 .tcs-why .s{flex:0 0 auto;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;white-space:nowrap;padding-top:3px}
 .tcs-grp{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.1em;color:#6B4E22;margin:14px 0 2px}
+.tcs-w{font-family:'IBM Plex Mono',monospace;font-size:13px;color:#6B4E22;white-space:nowrap}
 .tcs-cav{display:block;font-size:14px;line-height:1.55;color:#5C5340;margin-top:3px}
 .tcs-why .p{color:#1F6B3A}.tcs-why .m{color:#A2401F}.tcs-why .n{color:#6B5F44}
 .tcs-warn{font-family:'Noto Serif SC',Georgia,serif;font-size:15px;line-height:1.6;background:rgba(255,246,214,.6);border:2px solid #A2401F;color:#7A2D14;padding:8px 12px}
@@ -137,7 +139,8 @@ def working(steps: dict, zh: bool, labels: Optional[dict] = None) -> str:
     return crt(f'<div class="tcs-claim">{esc(head)}</div><div class="tcs-steps">{"".join(rows)}</div><div class="tcs-bar"><span style="width:{share}%"></span></div>')
 
 
-def answer_screen(zh: bool, h: Headline, claim: tuple[str, str], why: Optional[tuple[str, str]], other: Optional[tuple[str, str]]) -> str:
+def answer_screen(zh: bool, h: Headline, claim: tuple[str, str], why: Optional[tuple[str, str]], other: Optional[tuple[str, str]],
+                  checked: Optional[tuple[str, str]] = None) -> str:
     i = 1 if zh else 0
     if h.low is None:
         verdict = f'<div class="tcs-verdict">{esc(h.word[i])}{L(zh, "：", ": ")}{esc(h.range_text[i])}{L(zh, "。", ".")}</div>'
@@ -145,10 +148,13 @@ def answer_screen(zh: bool, h: Headline, claim: tuple[str, str], why: Optional[t
     else:
         verdict = f'<div class="tcs-verdict">{esc(h.word[i])}{L(zh, "：", ":")}<br><b>{esc(h.range_text[i])}</b>{L(zh, "。", ".")}</div>'
         left, width = 100 * h.low, max(100 * (h.high - h.low), 0.8)
-        scale = (f'<div class="tcs-scale"><span class="rng" style="left:{left:.1f}%;width:{width:.1f}%"></span><span class="half"></span></div>'
+        band = ""
+        if h.spread_low is not None and h.spread_high is not None and h.spread_high - h.spread_low > 0.005:
+            band = f'<span class="spr" style="left:{100 * h.spread_low:.1f}%;width:{100 * (h.spread_high - h.spread_low):.1f}%"></span>'
+        scale = (f'<div class="tcs-scale">{band}<span class="rng" style="left:{left:.1f}%;width:{width:.1f}%"></span><span class="half"></span></div>'
                  f'<div class="tcs-ticks"><span>{esc(L(zh, "0% 几乎不可能", "0% almost never"))}</span><span>{esc(L(zh, "50% 像抛硬币", "50% a coin flip"))}</span>'
                  f'<span>{esc(L(zh, "100% 几乎肯定", "100% almost sure"))}</span></div>')
-    notes = "".join(f'<div class="tcs-note">{esc(x[i])}</div>' for x in (why, other) if x)
+    notes = "".join(f'<div class="tcs-note">{esc(x[i])}</div>' for x in (checked, why, other) if x)
     return crt(f'<div class="tcs-claim">{esc(claim[i])}</div>{verdict}{scale}{notes}')
 
 
@@ -160,7 +166,8 @@ def reasons(zh: bool, items: list[Reason], basis: str = "", context: str = "") -
     i = 1 if zh else 0
 
     def rows(group: list[Reason]) -> str:
-        return "".join(f'<li><span class="s {word[r.sign][1]}">{esc(word[r.sign][0])}</span><span>{esc(r.text[i])}'
+        share = lambda r: (f' <b class="tcs-w">{L(zh, "占", "share")} {round(r.weight * 100)}%</b>' if r.weight else "")  # noqa: E731
+        return "".join(f'<li><span class="s {word[r.sign][1]}">{esc(word[r.sign][0])}</span><span>{esc(r.text[i])}{share(r)}'
                        + (f'<small class="tcs-cav">{esc(r.note[i])}</small>' if r.note else "") + "</span></li>" for r in group)
 
     main, rest = [r for r in items if r.counted], [r for r in items if not r.counted]
