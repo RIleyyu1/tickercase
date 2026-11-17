@@ -63,33 +63,49 @@ five years before:
 M4 is 5 points high here against 3 points for the other stocks: the selection effect is there, and it is small in this
 set. M2 is 11 points low.
 
-## The weighted index of v0.18.0
+## The weighted index (v0.18.0, weights of v0.18.1)
 
-Since v0.18.0 the main number is a weighted index (M1 40 %, M2 40 %, M4 15 %, M3 5 %). It is replayed here with M2
-standing in for M1, because past option prices are missing, and without M3: M2 at 84 %, M4 at 16 %.
+Since v0.18.0 the main number is a weighted index. It is replayed here with M2 standing in for M1, because past option
+prices are missing, and without M3. v0.18.0 used M1 40 %, M2 40 %, M4 15 %, M3 5 % (in the replay: M4 at 16 %);
+v0.18.1 uses M1 35 %, M2 30 %, M4 30 %, M3 5 % (in the replay: M4 at 32 %).
 
-| Index and question | Cases | Said, on average | Happened | Skill |
-|---|---|---|---|---|
-| Index, reached on any day | 49,332 | 42 % | 48 % | 0.38 |
-| Index, at or above on the last day | 49,332 | 22 % | 34 % | 0.14 |
+| Index and question | Said, on average | Happened | Skill |
+|---|---|---|---|
+| v0.18.0, reached on any day | 42 % | 48 % | 0.38 |
+| v0.18.1, reached on any day | 44 % | 48 % | 0.39 |
+| v0.18.0, at or above on the last day | 22 % | 34 % | 0.14 |
+| v0.18.1, at or above on the last day | 26 % | 34 % | 0.18 |
+
+With the weights of v0.18.1 (49,332 cases):
 
 | When the index said (reached on any day) | 4 % | 15 % | 25 % | 35 % | 45 % | 55 % | 65 % | 75 % | 84 % |
 |---|---|---|---|---|---|---|---|---|---|
-| it happened | 4 % | 16 % | 29 % | 43 % | 54 % | 66 % | 76 % | 84 % | 91 % |
+| it happened | 3 % | 14 % | 24 % | 40 % | 52 % | 63 % | 75 % | 83 % | 90 % |
 
-| When the index said (on the last day) | 4 % | 15 % | 25 % | 35 % | 44 % |
-|---|---|---|---|---|---|
-| it happened | 5 % | 21 % | 40 % | 56 % | 66 % |
+| When the index said (on the last day) | 4 % | 15 % | 25 % | 36 % | 45 % | 53 % |
+|---|---|---|---|---|---|---|
+| it happened | 4 % | 15 % | 35 % | 52 % | 62 % | 61 % |
 
 These two tables are `src/tickercase/calibration.json` (`--export`), which the page reads for the line "when this index
-said X, the claim came true about Y of the time". The index is still low, by 6 points for "on any day" and 12 for "on
-the last day", because M2 carries most of it. The page states the checked figure beside the main number and does not
-shift the main number.
+said X, the claim came true about Y of the time". The index is still low, by 4 points for "on any day" and 8 for "on
+the last day" (v0.18.0: 6 and 12). The page states the checked figure beside the main number and does not shift the
+main number.
 
-**The weight of the history is a choice, not a fit.** Beside M2 alone, the share of M4 with the best Brier score for
-"reached on any day" was 50 % (Brier 0.151 against 0.154 for the index as weighted). It is kept at 15 % because the
-backtest holds survivors and no stock with a past like the ones M4 misjudges most; the gain from a larger share is small
-and rests on the part of the evidence that is weakest.
+### How the share of the history was chosen
+
+The share of M4 beside M2, on the 48,868 cases where M4 can be computed:
+
+| Share of M4 | 0 % | 15 % | 30 % | 40 % | 50 % | 70 % | 100 % |
+|---|---|---|---|---|---|---|---|
+| Brier, reached on any day | 0.1576 | 0.1542 | 0.1520 | 0.1513 | 0.1511 | 0.1525 | 0.1588 |
+| said, against 47.8 % that happened | 40.2 % | 41.8 % | 43.4 % | 44.5 % | 45.5 % | 47.7 % | 50.8 % |
+| Brier, on the last day | 0.2024 | 0.1915 | 0.1833 | 0.1793 | 0.1765 | 0.1745 | 0.1802 |
+| said, against 33.8 % that happened | 19.1 % | 22.2 % | 25.2 % | 27.2 % | 29.3 % | 33.3 % | 39.4 % |
+
+The score is best near a half and the curve is flat from 30 % to 60 %. v0.18.1 takes 30 % (32 % in the replay): most of
+the gain, with the history still under a third of the number. It does not go to a half because the backtest holds
+survivors only and no stock with a past like the ones M4 misjudges most (NVDA: 75 % from its own history against 35 %
+from option prices), so the part of the evidence that favours a larger share is its weakest part.
 
 ## What this does and does not show
 
@@ -107,4 +123,4 @@ and rests on the part of the evidence that is weakest.
 - **No stock like NVDA.** "At least tripled" is the strongest past in this set; nothing in it rose tenfold in five
   years. What M4 is worth for such a stock is not tested here.
 
-Data: `data/backtest/v2/cases.csv` and `summary.json` (not in the repository; rerun the script to rebuild them).
+Data: `data/backtest/v3/cases.csv` and `summary.json` (not in the repository; rerun the script to rebuild them).

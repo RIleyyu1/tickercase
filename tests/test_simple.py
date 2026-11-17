@@ -280,7 +280,7 @@ def test_a_rise_of_more_than_double_is_not_capped_at_100_percent():
 def test_the_headline_is_a_weighted_index_where_history_and_peers_are_a_small_share(tmp_path):
     from tickercase.oracle import METHOD_WEIGHTS
 
-    assert abs(sum(METHOD_WEIGHTS.values()) - 1) < 1e-9 and METHOD_WEIGHTS["M4"] + METHOD_WEIGHTS["M3"] <= 0.25
+    assert abs(sum(METHOD_WEIGHTS.values()) - 1) < 1e-9 and METHOD_WEIGHTS["M4"] < 1 / 3 and METHOD_WEIGHTS["M3"] <= 0.05
     seen = 0
     for c in cases_of(tmp_path):
         o = c.oracle
@@ -295,16 +295,16 @@ def test_the_headline_is_a_weighted_index_where_history_and_peers_are_a_small_sh
             assert o.spread_low == min(vals.values()) and o.spread_high == max(vals.values())
             assert not touch or "M3" not in o.counted           # the peer rate does not measure a touch
             market = sum(o.weights.get(i, 0) for i in ("M1", "M2"))
-            assert market >= 0.75                                # the two market methods carry the number
+            assert market >= 0.6                                 # the two market methods carry most of the number
     assert seen
 
 
 def test_weights_are_shared_out_again_when_a_method_is_missing():
-    from tickercase.oracle import weighted_index
+    from tickercase.oracle import METHOD_WEIGHTS as W, weighted_index
 
-    index, weights = weighted_index({"M2": 0.30, "M4": 0.60})
-    assert abs(sum(weights.values()) - 1) < 1e-9 and weights["M2"] > weights["M4"]
-    assert abs(index - (0.40 * 0.30 + 0.15 * 0.60) / 0.55) < 1e-9
+    index, weights = weighted_index({"M1": 0.30, "M4": 0.60})
+    assert abs(sum(weights.values()) - 1) < 1e-9 and weights["M1"] > weights["M4"]
+    assert abs(index - (W["M1"] * 0.30 + W["M4"] * 0.60) / (W["M1"] + W["M4"])) < 1e-9
     assert weighted_index({"M1": 0.2})[0] == 0.2
 
 
@@ -312,7 +312,7 @@ def test_the_backtest_line_reads_between_two_bins_and_is_silent_outside_them():
     from tickercase import calibration
 
     data = calibration.table()
-    assert data is not None and data["cases"] > 10000 and data["weights"]["M4"] == 0.15
+    assert data is not None and data["cases"] > 10000 and data["weights"] == __import__("tickercase.oracle", fromlist=["x"]).METHOD_WEIGHTS
     for condition in ("touch", "end"):
         bins = [b for b in data[condition]["bins"] if b["n"] >= data["min_cases"]]
         mid = (bins[1]["said"] + bins[2]["said"]) / 2

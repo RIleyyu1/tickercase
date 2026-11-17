@@ -166,9 +166,9 @@ def reasons(result: CaseResult) -> list[Reason]:
         verb_zh = "在某个月末达到过这个涨幅" if use_touch else "期末达到了这个涨幅"
         indep = independent_windows(pr)
         own = is_counted("M4")
-        note = (f"This is what would happen if the stock repeated its own past, so it gets a small share. In the backtest it was a little high (3 to 5 points); "
+        note = (f"This is what would happen if the stock repeated its own past, so it gets under a third of the main number. In the backtest it was a little high (3 to 5 points); "
                 f"no stock there had risen as much as some that are asked about. The periods overlap: about {indep} separate {en_m} periods.",
-                f"这是“如果它重复自己过去的表现”的结果，所以只占小比例。回测里它略偏高（3 到 5 个百分点），但回测里没有涨幅特别极端的股票。"
+                f"这是“如果它重复自己过去的表现”的结果，所以占比不到三分之一。回测里它略偏高（3 到 5 个百分点），但回测里没有涨幅特别极端的股票。"
                 f"这些时间段互相重叠，相当于约 {indep} 段独立的 {zh_m}。")
         out.append(Reason(_sign(share), (
             f"The price needs to rise {need}. Of the {pr.windows} past {en_m} periods of this stock since {pr.history_start.year}, {hits} {verb_en} ({pct(share)}).",

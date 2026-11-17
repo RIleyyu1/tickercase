@@ -1,14 +1,14 @@
 {
- "made_at": "20261117T173641Z",
+ "made_at": "20261117T221129Z",
  "stocks": 55,
  "cases": 49332,
  "first": "2006-03-31",
  "last": "2025-09-30",
  "min_cases": 1000,
  "weights": {
-  "M1": 0.4,
-  "M2": 0.4,
-  "M4": 0.15,
+  "M1": 0.35,
+  "M2": 0.3,
+  "M4": 0.3,
   "M3": 0.05
  },
  "note": "index of the product's weights with the volatility method standing in for option prices; survivors only",
@@ -17,72 +17,72 @@
    {
     "from": 0.0,
     "to": 0.1,
-    "n": 9151,
-    "said": 0.0413,
-    "happened": 0.0353
+    "n": 8033,
+    "said": 0.0424,
+    "happened": 0.0278
    },
    {
     "from": 0.1,
     "to": 0.2,
-    "n": 5670,
-    "said": 0.1467,
-    "happened": 0.1649
+    "n": 5723,
+    "said": 0.1484,
+    "happened": 0.1447
    },
    {
     "from": 0.2,
     "to": 0.3,
-    "n": 4684,
-    "said": 0.2478,
-    "happened": 0.2857
+    "n": 4625,
+    "said": 0.248,
+    "happened": 0.2402
    },
    {
     "from": 0.3,
     "to": 0.4,
-    "n": 4802,
-    "said": 0.3516,
-    "happened": 0.4321
+    "n": 4676,
+    "said": 0.3507,
+    "happened": 0.3997
    },
    {
     "from": 0.4,
     "to": 0.5,
-    "n": 4367,
-    "said": 0.4508,
-    "happened": 0.5406
+    "n": 4743,
+    "said": 0.4484,
+    "happened": 0.5191
    },
    {
     "from": 0.5,
     "to": 0.6,
-    "n": 4128,
-    "said": 0.5497,
-    "happened": 0.6572
+    "n": 4087,
+    "said": 0.5498,
+    "happened": 0.6325
    },
    {
     "from": 0.6,
     "to": 0.7,
-    "n": 5175,
-    "said": 0.6508,
-    "happened": 0.7619
+    "n": 5217,
+    "said": 0.6527,
+    "happened": 0.75
    },
    {
     "from": 0.7,
     "to": 0.8,
-    "n": 5527,
-    "said": 0.7539,
-    "happened": 0.8404
+    "n": 5650,
+    "said": 0.7493,
+    "happened": 0.8283
    },
    {
     "from": 0.8,
     "to": 0.9,
-    "n": 5815,
-    "said": 0.8375,
-    "happened": 0.9068
+    "n": 6535,
+    "said": 0.8422,
+    "happened": 0.9037
    },
    {
     "from": 0.9,
     "to": 1.0,
-    "n": 13,
-    "said": 0.9018,
-    "happened": 1.0
+    "n": 43,
+    "said": 0.9083,
+    "happened": 0.9767
    }
   ]
  },
@@ -91,44 +91,51 @@
    {
     "from": 0.0,
     "to": 0.1,
-    "n": 13863,
-    "said": 0.0427,
-    "happened": 0.0478
+    "n": 11816,
+    "said": 0.0437,
+    "happened": 0.0398
    },
    {
     "from": 0.1,
     "to": 0.2,
-    "n": 8880,
-    "said": 0.1491,
-    "happened": 0.209
+    "n": 8041,
+    "said": 0.1476,
+    "happened": 0.152
    },
    {
     "from": 0.2,
     "to": 0.3,
-    "n": 8755,
-    "said": 0.2461,
-    "happened": 0.4017
+    "n": 8794,
+    "said": 0.2492,
+    "happened": 0.3459
    },
    {
     "from": 0.3,
     "to": 0.4,
-    "n": 10208,
-    "said": 0.3528,
-    "happened": 0.561
+    "n": 8155,
+    "said": 0.3556,
+    "happened": 0.5181
    },
    {
     "from": 0.4,
     "to": 0.5,
-    "n": 7335,
-    "said": 0.4355,
-    "happened": 0.6555
+    "n": 10026,
+    "said": 0.4455,
+    "happened": 0.6189
    },
    {
     "from": 0.5,
     "to": 0.6,
-    "n": 291,
-    "said": 0.5203,
-    "happened": 0.3746
+    "n": 2461,
+    "said": 0.5267,
+    "happened": 0.6136
+   },
+   {
+    "from": 0.6,
+    "to": 0.7,
+    "n": 39,
+    "said": 0.6143,
+    "happened": 0.1282
    }
   ]
  }

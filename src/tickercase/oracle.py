@@ -62,8 +62,11 @@ from .providers.options import iv_at
 
 _N = NormalDist()
 MARKET_METHODS = ("M1", "M2")  # option prices and the stock's own volatility
-# the share of each method in the headline index; the shares of the methods present are scaled to add up to 1
-METHOD_WEIGHTS = {"M1": 0.40, "M2": 0.40, "M4": 0.15, "M3": 0.05}
+# the share of each method in the headline index; the shares of the methods present are scaled to add up to 1.
+# Since v0.18.1 the history holds 30 %: in the backtest the index scored better and ran less low as its share rose
+# to about a half (docs/method-backtest.md). It stays under a third because the backtest holds no stock with a past
+# as extreme as the ones this method misjudges most.
+METHOD_WEIGHTS = {"M1": 0.35, "M2": 0.30, "M4": 0.30, "M3": 0.05}
 
 
 def weighted_index(values: dict[str, float]) -> tuple[Optional[float], dict[str, float]]:
