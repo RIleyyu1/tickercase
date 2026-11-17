@@ -368,3 +368,23 @@ def test_the_history_reason_is_written_when_the_stock_has_a_price_history(tmp_pa
     case = case.model_copy(update={"price_base_rate": PriceBaseRate.model_construct(**fields)})
     texts = [r.text[0] for r in plain.reasons(case)]
     assert any("Of the 120 past" in x for x in texts)
+
+
+def test_the_moving_answer_keeps_every_sentence_and_the_style_sheet_survives_the_page(tmp_path):
+    from tickercase import plain
+    from tickercase.ui import simple as sm
+
+    assert sm.CSS.count("<") == 2                      # an angle bracket inside the sheet makes the page drop all of it
+    for c in cases_of(tmp_path):
+        chips, parts = plain.answer_chips(c), plain.index_parts(c)
+        html = sm.answer_screen(False, plain.headline(c), plain.claim_sentence(c), chips, parts, c.oracle.calibrated)
+        assert plain.headline(c).word[0] in html
+        for full in (plain.calibration_line(c), plain.why_a_range(c), plain.other_condition(c)):
+            assert full is None or sm.esc(full[0]) in html          # what was a paragraph is still in the page
+        assert abs(sum(p.weight for p in parts) - 1) < 1e-9 and html.count("tcs-dot") == (len(parts) if len(parts) > 1 else 0)
+        if 0.01 <= c.oracle.low <= 0.99:
+            assert f'--to:{round(c.oracle.low * 100)}"' in html and f"{round(c.oracle.low * 100)}%</span>" in html
+        cards = sm.reasons(False, plain.reasons(c))
+        for r in plain.reasons(c):
+            assert r.title and r.value and r.short
+            assert sm.esc(r.text[0]) in cards and (r.note is None or sm.esc(r.note[0]) in cards)

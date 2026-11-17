@@ -1,3 +1,3 @@
 """TickerCase: turn a stock claim into explicit assumptions, reproducible numbers and traceable sources."""
 
-__version__ = "0.18.1"
+__version__ = "0.19.0"

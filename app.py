@@ -2966,8 +2966,8 @@ def view_simple_answer(result: CaseResult) -> None:
     simple_bridge()
     head = plain.headline(result)
     with st.container(key="u-c-ans"):
-        html_block(sm.answer_screen(zh(), head, plain.claim_sentence(result), plain.why_a_range(result), plain.other_condition(result),
-                                    plain.calibration_line(result)))
+        html_block(sm.answer_screen(zh(), head, plain.claim_sentence(result), plain.answer_chips(result), plain.index_parts(result),
+                                    result.oracle.calibrated if result.oracle is not None else None))
     with st.container(key="u-b-why"):
         html_block(f'<h2 class="tcs-h2">{esc(t("s_reasons"))}</h2>' + sm.reasons(zh(), plain.reasons(result), t("s_basis"), t("s_context")))
         made = plain.assumptions(result)

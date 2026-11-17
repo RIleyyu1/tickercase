@@ -42,6 +42,16 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## A simple view that moves (v0.19.0)
+
+The simple view was plain: a number, three paragraphs and a list. It now shows the same facts as a picture, and the small print opens on request.
+
+- **The answer arrives.** The screen flickers on, the verdict is uncovered, the main number counts up from zero while its marker slides along the bar. One dot per method drops onto the bar where that method stands, sized by its share, and a spark flies from each dot to the marker: the weighted average, drawn instead of described.
+- **Three chips replace three paragraphs.** "In the past it really happened: about 56%" (a diamond on the bar marks the place), "Still there on the last day: about 15%" and "3 methods, weighted". Each opens in place and shows the full sentence it replaced.
+- **Reasons are cards.** A title, one large number, one short line and the share of the main number as a bar; the full sentence and the limit of the number open under "details". The numbers shown for context are smaller cards below.
+- **Nothing was removed.** Every limit the page stated before is still in the page, one tap away. The page takes no script: all of it is CSS, and a reader who asked the system for less motion gets the finished page without the animation.
+- A note for whoever edits the style sheet: Streamlit drops a whole style block that holds an angle bracket, so the one in the counter's property is written as a CSS escape.
+
 ## One index, checked against the past (v0.18.0, weights of v0.18.1)
 
 v0.17.0 took the stock's own history and the peer rate out of the main number. Since v0.18.0 they are in it with a weight, and the main number is one figure.

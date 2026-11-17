@@ -20,7 +20,7 @@ from .oracle import MIN_INDEPENDENT_WINDOWS, independent_windows
 from .tiers import TIERS, tier
 
 Pair = tuple[str, str]
-__all__ = ["TIERS", "tier", "pct", "rate", "headline", "claim_sentence", "reasons", "other_condition", "why_a_range", "calibration_line",
+__all__ = ["TIERS", "tier", "pct", "rate", "headline", "claim_sentence", "reasons", "other_condition", "why_a_range", "calibration_line", "index_parts", "answer_chips",
            "assumptions", "restate"]
 
 
@@ -103,6 +103,9 @@ class Reason:
     note: Optional[Pair] = None   # the limit of this number, which the console states and the simple view must keep
     counted: bool = False         # part of the main number (True) or shown for context (False)
     weight: Optional[float] = None  # its share of the main number, 0.42 = 42 %
+    title: Optional[Pair] = None    # the card of this reason in the simple view: two or three words,
+    value: Optional[str] = None     # the one number of the reason, written large,
+    short: Optional[Pair] = None    # and one short line; the full sentence and the note open under the card
 
 
 def _sign(p: float) -> str:
@@ -140,7 +143,8 @@ def reasons(result: CaseResult) -> list[Reason]:
             f"Worked out from option prices, where traders put money on future prices, the chance is about {pct(p)}.",
             f"按期权市场（交易者用真金白银押未来价格的地方）的价格推算，这件事约有 {pct(p)} 的可能。"), "methods",
             ("This number includes what traders charge for risk, so it is not the true chance; when the date or the price lies beyond the options on sale, it is extended from the nearest ones.",
-             "这个数含有交易者对风险的要价，不等于真实的可能性；期限或目标价超出现有期权时，是从最接近的期权推算的。"), is_counted("M1"), weight_of("M1")))
+             "这个数含有交易者对风险的要价，不等于真实的可能性；期限或目标价超出现有期权时，是从最接近的期权推算的。"), is_counted("M1"), weight_of("M1"),
+            title=("Options market", "期权市场"), value=pct(p), short=("what traders bet with real money", "交易者用真金白银押出来的看法")))
     # 2. the stock's own swings
     p = chance("M2")
     if p is not None:
@@ -148,14 +152,16 @@ def reasons(result: CaseResult) -> list[Reason]:
             f"Worked out from how much this stock's price usually swings, without looking at any news, the chance is about {pct(p)}.",
             f"按这只股票平时的波动幅度推算（不看任何消息），这件事约有 {pct(p)} 的可能。"), "methods",
             ("It leaves out the long-run tendency of stocks to rise. In the backtest it was low: by about 8 points on average, more at three years.",
-             "它不含股票长期上涨的倾向。回测里它偏低：平均低约 8 个百分点，三年期更多。"), is_counted("M2"), weight_of("M2")))
+             "它不含股票长期上涨的倾向。回测里它偏低：平均低约 8 个百分点，三年期更多。"), is_counted("M2"), weight_of("M2"),
+            title=("Its usual swings", "平时的波动"), value=pct(p), short=("from how much its price usually moves", "只看它平时涨跌有多大")))
     # 3. the stock's own history
     pr = result.price_base_rate
     reached = pr is not None and float(pr.required_return) <= 0
     if reached:
         above = rate(-float(pr.required_return) / (1 + float(pr.required_return))) if float(pr.required_return) > -1 else "—"
         out.append(Reason("+", (f"The price today is already {above} above the target, so the claim holds unless the price falls back.",
-                                f"现在的股价已经比目标价高 {above}，只要不跌回去，这个说法就成立。"), "answer", None, True))
+                                f"现在的股价已经比目标价高 {above}，只要不跌回去，这个说法就成立。"), "answer", None, True,
+                          title=("Already there", "已经到了"), value=above, short=("above the target today", "现在已经高于目标价")))
     elif pr is not None and pr.windows:
         use_touch = touch and pr.touch_hits is not None
         hits = pr.touch_hits if use_touch else pr.hits
@@ -172,7 +178,9 @@ def reasons(result: CaseResult) -> list[Reason]:
                 f"这些时间段互相重叠，相当于约 {indep} 段独立的 {zh_m}。")
         out.append(Reason(_sign(share), (
             f"The price needs to rise {need}. Of the {pr.windows} past {en_m} periods of this stock since {pr.history_start.year}, {hits} {verb_en} ({pct(share)}).",
-            f"股价需要上涨 {need}。从 {pr.history_start.year} 年起这只股票的 {pr.windows} 个 {zh_m}时间段里，有 {hits} 个{verb_zh}（{pct(share)}）。"), "methods", note, own, weight_of("M4")))
+            f"股价需要上涨 {need}。从 {pr.history_start.year} 年起这只股票的 {pr.windows} 个 {zh_m}时间段里，有 {hits} 个{verb_zh}（{pct(share)}）。"), "methods", note, own, weight_of("M4"),
+            title=("Its own past", "它自己的过去"), value=pct(share),
+            short=(f"{hits} of {pr.windows} past {en_m} periods did it", f"过去 {pr.windows} 个 {zh_m}里有 {hits} 个做到")))
     # 4 and 5. the business: how fast it would have to grow
     br = result.base_rate
     metric = ("profit", "利润") if (claim is not None and claim.valuation_method.metric_name != "annual_revenue") else ("revenue", "收入")
@@ -184,7 +192,8 @@ def reasons(result: CaseResult) -> list[Reason]:
         need_growth = Decimal(e1.measured["required_cagr_from_reported"])
     if need_growth is not None and need_growth <= 0:
         out.append(Reason("+", (f"If the company is valued as it is today, its {metric[0]} does not need to grow for the price to be at this level.",
-                                f"如果市场对公司的估值和今天一样，公司的{metric[1]}不用再增长，股价就能在这个水平。"), "fund", None, False))
+                                f"如果市场对公司的估值和今天一样，公司的{metric[1]}不用再增长，股价就能在这个水平。"), "fund", None, False,
+                          title=("The business", "公司业绩"), value="0%", short=(f"more {metric[0]} growth is not needed", f"{metric[1]}不用再增长")))
         return out[:5]
     if br is not None and br.companies and br.rate is not None:
         wide = ((" The size band was widened to a quarter to four times the company's size to find enough companies.", "为了凑够公司，规模范围已放宽到 0.25–4 倍。")
@@ -195,15 +204,27 @@ def reasons(result: CaseResult) -> list[Reason]:
             f"股价要到这个水平才说得过去，公司的{metric[1]}每年得增长约 {rate(br.required_cagr)}（假设市场给它的估值不变）。"
             f"{br.companies} 家规模相近的公司里，{br.start_year} 到 {br.end_year} 年有 {br.achieved} 家做到（{pct(br.rate)}）。"), "fund",
             ("This is about the business, not the price. Only companies that still report are counted, which makes this share look better than it was." + wide[0],
-             "这说的是公司的业绩，不是股价。只统计了至今仍在申报的公司，所以这个比例偏乐观。" + wide[1]), is_counted("M3"), weight_of("M3")))
+             "这说的是公司的业绩，不是股价。只统计了至今仍在申报的公司，所以这个比例偏乐观。" + wide[1]), is_counted("M3"), weight_of("M3"),
+            title=("Similar companies", "规模相近的公司"), value=pct(br.rate),
+            short=(f"{br.achieved} of {br.companies} grew fast enough", f"{br.companies} 家里有 {br.achieved} 家增长够快")))
     if e1 is not None and "required_cagr_from_reported" in e1.measured and "reported_cagr" in e1.measured:
         need, got = Decimal(e1.measured["required_cagr_from_reported"]), Decimal(e1.measured["reported_cagr"])
         ok = got >= need
         out.append(Reason("+" if ok else "-", (
             f"The {metric[0]} the company has published grew about {rate(got)} a year in recent years, {'at or above' if ok else 'below'} the {rate(need)} a year the claim needs.",
             f"公司公布的{metric[1]}近几年每年增长约 {rate(got)}，{'不低于' if ok else '低于'}这个说法需要的每年 {rate(need)}。"), "fund",
-            ("Growth in the past does not promise the same growth later.", "过去增长快，不代表以后还能这么快。"), False))
+            ("Growth in the past does not promise the same growth later.", "过去增长快，不代表以后还能这么快。"), False,
+            title=(f"Its {metric[0]} growth", f"公司的{metric[1]}增长"), value=rate(got),
+            short=(f"a year; the claim needs {rate(need)}", f"每年；这个说法需要 {rate(need)}")))
     return out[:5]
+
+
+def _last_day_range(result: CaseResult) -> Optional[str]:
+    o = result.oracle
+    if o is None or o.condition != "touch":
+        return None
+    ends = [m.probability for m in o.methods if m.id in ("M1", "M2") and m.status == "ok" and m.probability is not None]
+    return fmt.prob_range(min(ends), max(ends)) if ends else None
 
 
 def other_condition(result: CaseResult) -> Optional[Pair]:
@@ -212,14 +233,61 @@ def other_condition(result: CaseResult) -> Optional[Pair]:
     The two market-based methods only, the same pair the console shows in its status bar.
     """
     o = result.oracle
-    if o is None or o.condition != "touch":
+    rng = _last_day_range(result)
+    if rng is None:
         return None
-    ends = [m.probability for m in o.methods if m.id in ("M1", "M2") and m.status == "ok" and m.probability is not None]
-    if not ends:
-        return None
-    rng = fmt.prob_range(min(ends), max(ends))
     return (f"The number above counts any day the price gets there. Still being at or above the target on {o.target_date} is less likely: about {rng}.",
             f"上面的数字只要中途有一天到过就算。如果要求 {o.target_date} 那天收盘还在目标价以上，可能性更低：约 {rng}。")
+
+
+SHORT_NAMES = {"M1": ("options", "期权"), "M2": ("swings", "波动"), "M4": ("own past", "自己的过去"), "M3": ("similar companies", "同类公司")}
+
+
+@dataclass(frozen=True)
+class Part:
+    """One method of the index, for its dot on the bar."""
+
+    id: str
+    name: Pair
+    value: float
+    weight: float
+
+
+def index_parts(result: CaseResult) -> list[Part]:
+    """The methods that make the main number, with the result and the share of each, lowest result first."""
+    o = result.oracle
+    if o is None or o.basis != "index":
+        return []
+    parts = [Part(m.id, SHORT_NAMES.get(m.id, (m.id, m.id)), _value(result, m), o.weights.get(m.id, 0.0)) for m in counted_methods(result)]
+    return sorted(parts, key=lambda p: p.value)
+
+
+@dataclass(frozen=True)
+class Chip:
+    """A fact beside the main number: a few words and a figure on the page, the full sentence one tap away."""
+
+    kind: str          # "past", "last_day", "made_of"
+    label: Pair
+    value: Pair
+    full: Pair
+
+
+def answer_chips(result: CaseResult) -> list[Chip]:
+    out: list[Chip] = []
+    o = result.oracle
+    line = calibration_line(result)
+    if line is not None:
+        out.append(Chip("past", ("In the past it really happened", "过去实际发生"), (f"about {pct(o.calibrated)}", f"约 {pct(o.calibrated)}"), line))
+    other = other_condition(result)
+    rng = _last_day_range(result)
+    if other is not None and rng is not None:
+        out.append(Chip("last_day", ("Still there on the last day", "到期那天还在"), (f"about {rng}", f"约 {rng}"), other))
+    why = why_a_range(result)
+    if why is not None:
+        n = len(counted_methods(result))
+        label = (f"{n} methods, weighted", f"{n} 种算法加权") if n > 1 else ("One method", "一种算法")
+        out.append(Chip("made_of", label, ("", ""), why))
+    return out
 
 
 def why_a_range(result: CaseResult) -> Optional[Pair]:
