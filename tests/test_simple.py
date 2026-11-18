@@ -388,3 +388,22 @@ def test_the_moving_answer_keeps_every_sentence_and_the_style_sheet_survives_the
         for r in plain.reasons(c):
             assert r.title and r.value and r.short
             assert sm.esc(r.text[0]) in cards and (r.note is None or sm.esc(r.note[0]) in cards)
+
+
+def test_the_control_panel_skin_stays_on_the_simple_pages_and_survives_the_page():
+    from tickercase.ui import cockpit as ck
+    from tickercase.ui import simple as sm
+
+    assert sm.SKIN.count("<") == 2 and sm.CSS.count("<") == 2   # one angle bracket more and the page drops the sheet
+    assert "tcs-" not in sm.SKIN                                  # SKIN restyles Streamlit's widgets only; the markup's rules are in CSS
+    for zh in (True, False):
+        top = sm.bridge(zh)
+        assert top.count("tcs-lamp") == 4 and "tc-l-red" not in top   # three lamps in their holder; red is kept for warnings
+        assert 'aria-hidden="true"' in top and "TICKERCASE" in top
+    screen = sm.crt("x")
+    assert screen.count('class="tcs-screw"') == 4 and "tcs-bz" in screen
+    assert ".tcs-screw{" in sm.CSS and ".tcs-screw" not in ck.CSS   # the console's sheet has no such rule to fall back on
+    for name in ("tcs-lit", "tcs-breathe", "tcs-sheen", "tcs-stamp", "tcs-settle"):
+        assert f"@keyframes {name}{{" in sm.CSS and sm.CSS.count(name) >= 2   # every new movement is defined and used
+    source = open("app.py", encoding="utf-8").read()
+    assert source.count("st.html(sm.SKIN)") == 1 and source.index("if simple:") < source.index("st.html(sm.SKIN)") < source.index("elif not st.session_state[\"booted\"]")

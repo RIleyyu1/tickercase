@@ -3081,6 +3081,7 @@ def main() -> None:
         st.html(ck.AMBER_CSS)
     simple = st.session_state["ui"] == "simple"
     if simple:
+        st.html(sm.SKIN)  # the keys of the simple pages; the console keeps its own
         st.session_state["view"] = "new"  # history and setup are pages of the console
     elif not st.session_state["booted"] and get_service().settings.boot_screen:
         view_boot()

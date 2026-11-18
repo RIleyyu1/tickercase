@@ -42,6 +42,16 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## One machine (v0.22.0)
+
+The simple view was drawn again in Google Stitch: a base screen of the answer page and three directions (quiet instrument, control panel, printout; the screens are in `docs/design/stitch`). The control panel was chosen and written into the existing style sheet by hand. Stitch's markup, fonts and invented figures were not taken; only the look was.
+
+- **Bridge.** The name is a brass plate with two studs, and three lamps come on one after the other.
+- **Screen.** The bezel has four screws. The main number is larger (up to 136 px), the marker is a white needle with two arrowheads that settles after it slides, and each method's label is a small box.
+- **Reasons.** A card is a meter module: a stamped plate (for, against, neutral) that lands after the card, and a segmented gauge for its share of the index that fills in steps. The big-news card has an amber edge.
+- **Keys.** On the simple pages a key stands on a visible side and travels 4 px when pressed (`SKIN` in `ui/simple.py`, added by `app.py` on these pages only; the console keeps its keys).
+- Everything is CSS. A reader who asked the system for less motion gets none of it, and every element rests in its final state.
+
 ## Events in the main number (v0.21.0)
 
 Until v0.20 the events were shown beside the number. Now the scored events of the catalyst register move it, by a bounded amount.

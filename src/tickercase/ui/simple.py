@@ -7,6 +7,11 @@ drops onto the bar and flies to the marker, and the reasons are cards. Everythin
 each sentence that was small print is still in the page, under a ⓘ that opens in place. The console's style sheet
 switches every animation off for a reader who asked the system for less motion, and each element rests in its final
 state without its animation.
+
+Since v0.22.0 the view reads as one machine (the "control panel" direction drawn in Stitch): the name is a brass plate,
+three lamps come on one after the other, the screen sits in a bezel with screws, a reason card is a meter module with a
+stamped plate and a segmented gauge, and a key travels when it is pressed. ``SKIN`` holds the rules that restyle
+Streamlit's own widgets; app.py adds it on the simple pages only, so the console keeps its keys.
 """
 
 from __future__ import annotations
@@ -18,18 +23,28 @@ from .cockpit import L, esc
 
 CSS = """<style>
 @property --tcs-n{syntax:'\\3C integer>';inherits:false;initial-value:0}
-.tcs-top{display:flex;flex-direction:column;gap:2px}
-.tcs-wm{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:700;letter-spacing:.24em;color:#F1EBDC;text-shadow:0 2px 0 var(--ink)}
-.tcs-sub{font-family:'Noto Serif SC',serif;font-size:14px;font-weight:700;letter-spacing:.12em;color:#CFC4A6}
+.tcs-top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
+.tcs-plate{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:12px;padding:5px 14px 9px;background:#C49A4A;border:3px solid var(--ink);
+  box-shadow:inset 0 3px 0 #DDB86C,inset 0 -5px 0 #9A7634,3px 3px 0 #0C0B09}
+.tcs-plate i{flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:#4A3410;box-shadow:inset 0 -2px 0 #2A1D08}
+.tcs-plate::after{content:"";position:absolute;top:0;bottom:0;left:-70px;width:38px;background:rgba(255,255,255,.4);transform:skewX(-25deg);animation:tcs-sheen 1.1s ease-out .5s both}
+.tcs-wm{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;letter-spacing:.24em;padding-left:.24em;color:#241702;text-shadow:0 1px 0 rgba(255,255,255,.35)}
+.tcs-sub{font-family:'Noto Serif SC',serif;font-size:14px;font-weight:700;letter-spacing:.12em;color:#CFC4A6;padding-left:16px;border-left:2px solid #57524A}
+.tcs-lamps{display:inline-flex;align-items:center;gap:9px;padding:6px 10px;background:#141311;border:2px solid var(--ink);box-shadow:inset 0 2px 0 #050505}
+.tcs-lamp{width:16px;height:16px;border-width:2px;animation:tcs-lit .5s steps(1,end) both}
+.tcs-lamp.tc-l-amber{box-shadow:0 0 8px rgba(255,178,62,.6)}
+.tcs-lamp.tc-l-green{box-shadow:0 0 9px rgba(116,255,154,.7);animation:tcs-lit .5s steps(1,end) both,tcs-breathe 3.2s ease-in-out 2.4s infinite}
 .tcs-h1{font-family:'Noto Serif SC',Georgia,serif;font-size:clamp(26px,3vw,40px);line-height:1.3;font-weight:900;color:var(--ink);margin:4px 0 2px}
 .tcs-cur{display:inline-block;margin-left:4px;color:#A2401F;animation:tcs-blink 1s steps(1,end) infinite}
 .tcs-lead{font-family:'Noto Serif SC',Georgia,serif;font-size:18px;line-height:1.6;color:#3A3327;margin:0 0 10px}
 .tcs-h2{font-family:'Noto Serif SC',Georgia,serif;font-size:26px;font-weight:900;color:var(--ink);margin:0}
 .tcs-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .tcs-card{background:rgba(255,250,235,.28);border:2px solid var(--ink);padding:12px 14px;font-family:'Noto Serif SC',Georgia,serif;font-size:17px;line-height:1.5;color:var(--ink);
-  display:flex;gap:12px;align-items:center;box-shadow:4px 4px 0 var(--ink);animation:tcs-in .6s cubic-bezier(.2,.9,.3,1.3) both,tcs-float 6s ease-in-out 1s infinite;transition:translate .18s,box-shadow .18s}
-.tcs-card:hover{translate:-2px -4px;box-shadow:8px 9px 0 var(--ink)}
-.tcs-card i{flex:0 0 auto;font-style:normal;font-family:'IBM Plex Mono',monospace;font-size:34px;font-weight:700;line-height:1;color:#A2401F}
+  display:flex;gap:14px;align-items:center;box-shadow:inset 0 2px 0 rgba(255,255,255,.55),4px 4px 0 var(--ink);animation:tcs-in .6s cubic-bezier(.2,.9,.3,1.3) both,tcs-float 6s ease-in-out 1s infinite;transition:translate .18s,box-shadow .18s}
+.tcs-card:hover{translate:-2px -4px;box-shadow:inset 0 2px 0 rgba(255,255,255,.55),8px 9px 0 var(--ink)}
+.tcs-card i{flex:0 0 auto;font-style:normal;font-family:'IBM Plex Mono',monospace;font-size:24px;font-weight:700;line-height:1;color:#241702;
+  width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-sizing:border-box;background:#C49A4A;border:3px solid var(--ink);
+  box-shadow:inset 0 3px 0 #DDB86C,inset 0 -5px 0 #9A7634,2px 2px 0 #0C0B09}
 .tcs-card b{display:block;font-size:18px;font-weight:900}
 .tcs-card span{display:block;font-size:14px;color:#5C5340}
 .tcs-say{font-family:'Noto Serif SC',Georgia,serif;font-size:clamp(22px,2.3vw,30px);line-height:1.55;color:var(--scr-text)}
@@ -43,24 +58,32 @@ CSS = """<style>
 .tcs-bar{height:12px;background:var(--z2);border:1px solid var(--scr-line);margin-top:6px;overflow:hidden}
 .tcs-bar span{display:block;height:100%;background:repeating-linear-gradient(115deg,var(--ph) 0 10px,rgba(0,0,0,.28) 10px 14px);background-size:28px 100%;
   transition:width .3s steps(4,end);animation:tcs-stripes .7s linear infinite}
-.tcs-claim{font-size:17px;line-height:1.5;color:var(--dim)}
+.tcs-bz{position:relative;padding:20px;box-shadow:inset 0 3px 0 #26241F,inset 0 -4px 0 #0B0A09}
+.tcs-screw{position:absolute;width:12px;height:12px;border-radius:50%;background:#8E8672;border:2px solid var(--ink);box-sizing:border-box;box-shadow:inset -2px -2px 0 #5F5949}
+.tcs-screw::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:2px;background:var(--ink);transform:translate(-50%,-50%) rotate(var(--r,35deg))}
+.tcs-claim{font-size:17px;line-height:1.5;color:var(--dim);padding-bottom:10px;border-bottom:1px solid var(--scr-faint)}
+.tcs-claim::before{content:"\\25B8  ";color:var(--am)}
 .tcs-sweep{position:absolute;left:0;right:0;top:0;height:28%;z-index:1;pointer-events:none;opacity:0;
   background:linear-gradient(to bottom,transparent,rgba(160,255,190,.07) 60%,rgba(160,255,190,.13) 96%,transparent);animation:tcs-sweep 7s linear 1.2s infinite}
 .tcs-verdict{font-family:'Noto Serif SC',Georgia,serif;font-size:clamp(26px,2.8vw,36px);line-height:1.4;font-weight:900;color:var(--scr-text)}
 .tcs-verdict b{color:var(--ph)}
 .tcs-typed{display:inline-block}
 .tcs-big{display:inline-block;font-size:clamp(44px,6vw,76px);line-height:1.1;text-shadow:0 0 18px color-mix(in srgb,var(--ph) 55%,transparent);animation:tcs-glow 2.6s ease-in-out 2.8s infinite}
-.tcs-num{--tcs-n:var(--to);counter-reset:tcsn var(--tcs-n);animation:tcs-count 1.7s cubic-bezier(.15,.7,.2,1) .9s both}
+.tcs-num{--tcs-n:var(--to);counter-reset:tcsn var(--tcs-n);font-size:clamp(76px,10vw,136px);line-height:.95;animation:tcs-count 1.7s cubic-bezier(.15,.7,.2,1) .9s both}
 .tcs-num::after{content:counter(tcsn) "%"}
 .tcs-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.tcs-scale{position:relative;height:34px;background:var(--z2);border:1px solid var(--scr-line);margin:64px 0 6px}
-.tcs-scale .rng{position:absolute;top:-6px;bottom:-6px;width:10px;margin-left:-5px;background:var(--ph);box-shadow:0 0 14px var(--ph);z-index:3;
-  animation:tcs-slide 1.7s cubic-bezier(.15,.7,.2,1) .9s both}
+.tcs-scale{position:relative;height:26px;background:var(--z1);border:2px solid var(--scr-line);box-shadow:inset 0 3px 5px rgba(0,0,0,.8);margin:78px 0 12px}
+.tcs-scale .rng{position:absolute;top:-13px;bottom:-13px;width:6px;margin-left:-3px;background:color-mix(in srgb,var(--ph) 22%,white);
+  box-shadow:0 0 10px white,0 0 22px var(--ph);z-index:3;animation:tcs-slide 1.7s cubic-bezier(.15,.7,.2,1) .9s both,tcs-settle .5s ease-out 2.6s both}
+.tcs-scale .rng::before,.tcs-scale .rng::after{content:"";position:absolute;left:50%;margin-left:-6px;border:6px solid transparent}
+.tcs-scale .rng::before{bottom:100%;border-top-color:color-mix(in srgb,var(--ph) 22%,white);border-bottom-width:0}
+.tcs-scale .rng::after{top:100%;border-bottom-color:color-mix(in srgb,var(--ph) 22%,white);border-top-width:0}
 .tcs-scale .spr{position:absolute;top:0;bottom:0;background:var(--ph);opacity:.2;animation:tcs-fade .8s ease-out 1s both}
-.tcs-scale .half{position:absolute;left:50%;top:-8px;bottom:-8px;border-left:2px dashed var(--scr-line)}
+.tcs-scale .half{position:absolute;left:50%;top:-10px;bottom:-10px;border-left:2px dashed var(--scr-line)}
 .tcs-dot{position:absolute;top:50%;width:var(--s);height:var(--s);margin:calc(var(--s) / -2) 0 0 calc(var(--s) / -2);border-radius:50%;z-index:2;
-  border:2px solid var(--ph);background:#0A0D0A;animation:tcs-drop .55s cubic-bezier(.3,1.6,.5,1) both}
-.tcs-dot em{position:absolute;bottom:calc(100% + var(--up));left:50%;transform:translateX(-50%);white-space:nowrap;font-style:normal;font-size:15px;line-height:1;color:var(--scr-text)}
+  border:2px solid var(--ph);background:#0A0D0A;box-shadow:0 0 7px color-mix(in srgb,var(--ph) 70%,transparent);animation:tcs-drop .55s cubic-bezier(.3,1.6,.5,1) both}
+.tcs-dot em{position:absolute;bottom:calc(100% + var(--up));left:50%;transform:translateX(-50%);white-space:nowrap;font-style:normal;font-size:15px;line-height:1;color:var(--scr-text);
+  padding:3px 7px 4px;background:var(--z1);border:1px solid var(--scr-line)}
 .tcs-dot em::after{content:"";position:absolute;left:50%;top:100%;height:calc(var(--up) + 2px);border-left:1px solid var(--scr-line)}
 .tcs-dot.l em{left:0;transform:none}.tcs-dot.r em{left:auto;right:0;transform:none}
 .tcs-gho{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--ph);opacity:0;z-index:2;
@@ -69,7 +92,7 @@ CSS = """<style>
   animation:tcs-fade .5s ease-out 2.9s both,tcs-ring 2.2s ease-out 3.4s infinite}
 .tcs-ticks{display:flex;justify-content:space-between;font-size:15px;color:var(--dim)}
 .tcs-chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
-.tcs-chip{border:1px solid var(--scr-line);padding:6px 12px;font-size:17px;line-height:1.5;color:var(--scr-text);animation:tcs-in .5s ease-out both}
+.tcs-chip{border:1px solid var(--scr-line);background:var(--z1);padding:6px 12px;font-size:17px;line-height:1.5;color:var(--scr-text);animation:tcs-in .5s ease-out both}
 .tcs-chip[open]{flex-basis:100%}
 .tcs-chip summary,.tcs-rc summary{list-style:none;cursor:pointer}
 .tcs-chip summary::-webkit-details-marker,.tcs-rc summary::-webkit-details-marker{display:none}
@@ -83,34 +106,42 @@ CSS = """<style>
 .tcs-chip summary:hover u,.tcs-rc summary:hover u{opacity:1;scale:1.25}
 .tcs-chip p{margin:8px 0 2px;font-size:16px;line-height:1.6;color:var(--dim)}
 .st-key-u-b-cnf .tc-bezel,.st-key-u-c-ans .tc-bezel{margin-bottom:6px}
-.tcs-grp{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.1em;color:#6B4E22;margin:14px 0 8px}
-.tcs-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;align-items:start}
-.tcs-rc{position:relative;background:rgba(255,250,235,.4);border:2px solid var(--ink);box-shadow:5px 5px 0 var(--ink);padding:12px 14px 10px;
+.tcs-grp{display:flex;align-items:center;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;letter-spacing:.14em;color:var(--ink);margin:16px 0 10px}
+.tcs-grp::before{content:"";flex:0 0 auto;width:10px;height:10px;background:var(--ink)}
+.tcs-grp::after{content:"";flex:1 1 auto;border-bottom:2px solid rgba(21,19,15,.3)}
+.tcs-cards{margin-bottom:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;align-items:start}
+.tcs-rc{position:relative;background:rgba(255,250,235,.45);border:2px solid var(--ink);box-shadow:inset 0 2px 0 rgba(255,255,255,.7),5px 5px 0 var(--ink);padding:16px 14px 10px;
   font-family:'Noto Serif SC',Georgia,serif;color:var(--ink);animation:tcs-in .6s cubic-bezier(.2,.9,.3,1.3) both,tcs-float 6s ease-in-out 1.5s infinite;transition:translate .18s,box-shadow .18s}
-.tcs-rc:hover{translate:-2px -5px;box-shadow:9px 11px 0 var(--ink)}
-.tcs-rc::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:#6B5F44}
+.tcs-rc:hover{translate:-2px -5px;box-shadow:inset 0 2px 0 rgba(255,255,255,.7),9px 11px 0 var(--ink)}
+.tcs-rc::before{content:"";position:absolute;left:0;right:0;top:0;height:8px;background:#6B5F44;border-bottom:1px solid var(--ink)}
 .tcs-rc.p::before{background:#1F6B3A}.tcs-rc.m::before{background:#A2401F}
 .tcs-rc summary{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:baseline}
 .tcs-rc .ttl{font-size:17px;font-weight:900}
-.tcs-rc .tag{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;white-space:nowrap;color:#6B5F44}
-.tcs-rc.p .tag{color:#1F6B3A}.tcs-rc.m .tag{color:#A2401F}
+.tcs-rc .tag{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;white-space:nowrap;color:#5C5340;align-self:start;justify-self:end;padding:1px 7px 2px;
+  border:2px solid currentColor;background:rgba(92,83,64,.12);box-shadow:1px 1px 0 var(--ink);animation:tcs-stamp .32s cubic-bezier(.2,1.4,.4,1) both;animation-delay:calc(var(--d,0s) + .5s)}
+.tcs-rc.p .tag{color:#1F6B3A;background:rgba(31,107,58,.14)}.tcs-rc.m .tag{color:#A2401F;background:rgba(162,64,31,.14)}
 .tcs-rc .val{grid-column:1 / -1;font-family:'IBM Plex Mono',monospace;font-size:46px;font-weight:700;line-height:1.15;animation:tcs-pop .5s cubic-bezier(.3,1.7,.5,1) both;animation-delay:inherit}
 .tcs-rc.p .val{color:#1F6B3A}.tcs-rc.m .val{color:#A2401F}
 .tcs-rc .sh{grid-column:1 / -1;font-size:15px;line-height:1.45;color:#3A3327}
-.tcs-rc .wb{align-self:center;height:8px;margin-top:8px;border:1px solid var(--ink);background:rgba(0,0,0,.08)}
-.tcs-rc .wb span{display:block;height:100%;background:var(--ink);transform-origin:left;animation:tcs-grow .9s ease-out both;animation-delay:inherit}
-.tcs-rc .wl{margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;color:#6B4E22;white-space:nowrap}
+.tcs-rc .wb{align-self:center;height:14px;margin-top:10px;padding:2px;box-sizing:border-box;border:2px solid var(--ink);background:#24211A;box-shadow:inset 0 2px 0 #0B0A09}
+.tcs-rc .wb span{display:block;height:100%;background:repeating-linear-gradient(90deg,#FFB23E 0 6px,transparent 6px 8px);transform-origin:left;
+  animation:tcs-grow .8s steps(6,end) both;animation-delay:calc(var(--d,0s) + .3s)}
+.tcs-rc.p .wb span{background:repeating-linear-gradient(90deg,#74FF9A 0 6px,transparent 6px 8px)}
+.tcs-rc .wl{margin-top:10px;padding:0 6px 1px;border:1px solid var(--ink);background:rgba(0,0,0,.07);font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap}
 .tcs-rc .more{grid-column:1 / -1;justify-self:end;margin-top:4px;font-size:14px;font-weight:700;color:#6B4E22;opacity:1;border-bottom:1px dashed #6B4E22}
 .tcs-rc[open] .more{opacity:.45}
 .tcs-rc p{margin:8px 0 0;padding-top:8px;border-top:1px dashed #8D8163;font-size:14.5px;line-height:1.6;color:#3A3327}
 .tcs-rc p small{display:block;margin-top:6px;font-size:13.5px;color:#5C5340}
-.tcs-rc.sm{box-shadow:3px 3px 0 var(--ink);background:rgba(255,250,235,.22)}
+.tcs-rc.sm{box-shadow:inset 0 2px 0 rgba(255,255,255,.5),3px 3px 0 var(--ink);background:rgba(255,250,235,.22)}
+.tcs-rc.sm:hover{box-shadow:inset 0 2px 0 rgba(255,255,255,.5),7px 9px 0 var(--ink)}
 .tcs-evs{grid-template-columns:1fr;margin:0 0 6px}
-.tcs-rc.tcs-ev{background:rgba(255,222,150,.45)}.tcs-rc.tcs-ev::before{background:#C08A1E}
+.tcs-rc.tcs-ev{background:rgba(255,222,150,.45);border-left:10px solid #C08A1E;outline:2px solid var(--ink);outline-offset:-2px}.tcs-rc.tcs-ev::before{background:#C08A1E}
 .tcs-rc.tcs-ev .tag{color:#6B4E22}.tcs-rc.tcs-ev .val{font-size:38px;color:#7A2D14}
 .tcs-rc.tcs-ev a{color:#6B4E22}
 .tcs-rc.sm .val{font-size:32px}
-.tcs-warn{font-family:'Noto Serif SC',Georgia,serif;font-size:15px;line-height:1.6;background:rgba(255,246,214,.6);border:2px solid #A2401F;color:#7A2D14;padding:8px 12px}
+.tcs-warn{font-family:'Noto Serif SC',Georgia,serif;font-size:15px;line-height:1.6;background:rgba(255,246,214,.6);border:2px solid #A2401F;color:#7A2D14;padding:8px 12px;
+  display:flex;gap:10px;align-items:baseline;box-shadow:3px 3px 0 var(--ink)}
+.tcs-warn::before{content:"!";flex:0 0 auto;width:20px;height:20px;line-height:20px;text-align:center;background:#A2401F;color:#FFF6D6;font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700}
 .tcs-assume{font-family:'Noto Serif SC',Georgia,serif;font-size:16px;line-height:1.7;color:var(--ink);margin:0;padding-left:1.2em}
 .st-key-btn_s_ex0 button,.st-key-btn_s_ex1 button,.st-key-btn_s_ex2 button{animation:tcs-float 5s ease-in-out infinite;transition:translate .18s}
 .st-key-btn_s_ex1 button{animation-delay:-1.7s}.st-key-btn_s_ex2 button{animation-delay:-3.3s}
@@ -130,14 +161,39 @@ CSS = """<style>
 @keyframes tcs-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
 @keyframes tcs-grow{from{transform:scaleX(0)}}
 @keyframes tcs-nudge{0%{transform:translateX(0)}50%{transform:translateX(5px)}100%{transform:translateX(0)}}
+@keyframes tcs-lit{from{background:#3B352C;box-shadow:none}}
+@keyframes tcs-breathe{0%{box-shadow:0 0 9px rgba(116,255,154,.7)}50%{box-shadow:0 0 16px 2px rgba(116,255,154,.95)}100%{box-shadow:0 0 9px rgba(116,255,154,.7)}}
+@keyframes tcs-sheen{from{left:-70px}to{left:115%}}
+@keyframes tcs-stamp{from{opacity:0;transform:scale(1.9) rotate(-9deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes tcs-settle{0%{rotate:0deg}30%{rotate:5deg}65%{rotate:-2.5deg}100%{rotate:0deg}}
 @keyframes tcs-stripes{from{background-position:0 0}to{background-position:28px 0}}
 @media (max-width:900px){.tcs-three{grid-template-columns:1fr}}
 </style>"""
 
+# Rules for Streamlit's own widgets on the simple pages (app.py adds this sheet there only): a key stands on a visible
+# side and travels down when it is pressed. ``translate`` is used, not ``transform``, so the floating example keys still move.
+SKIN = """<style>
+button[data-testid^="stBaseButton"]{margin-bottom:7px;transition:translate .08s ease-out,box-shadow .08s ease-out,background-color .12s;
+  box-shadow:inset 0 3px 0 #ECE4CF,inset 0 -3px 0 #C2B696,0 5px 0 #8E8263,0 7px 0 #0C0B09,3px 7px 0 #0C0B09!important}
+button[data-testid="stBaseButton-primary"]{box-shadow:inset 0 3px 0 #DDB86C,inset 0 -3px 0 #B08A3C,0 5px 0 #7A5714,0 7px 0 #0C0B09,3px 7px 0 #0C0B09!important}
+button[data-testid^="stBaseButton"]:hover{translate:0 -1px;box-shadow:inset 0 3px 0 #ECE4CF,inset 0 -3px 0 #C2B696,0 6px 0 #8E8263,0 8px 0 #0C0B09,3px 8px 0 #0C0B09!important}
+button[data-testid="stBaseButton-primary"]:hover{box-shadow:inset 0 3px 0 #DDB86C,inset 0 -3px 0 #B08A3C,0 6px 0 #7A5714,0 8px 0 #0C0B09,3px 8px 0 #0C0B09!important}
+button[data-testid^="stBaseButton"]:active{transform:none;translate:0 4px;box-shadow:inset 0 3px 0 #ECE4CF,inset 0 -2px 0 #C2B696,0 1px 0 #8E8263,0 3px 0 #0C0B09,2px 3px 0 #0C0B09!important}
+button[data-testid="stBaseButton-primary"]:active{box-shadow:inset 0 3px 0 #DDB86C,inset 0 -2px 0 #B08A3C,0 1px 0 #7A5714,0 3px 0 #0C0B09,2px 3px 0 #0C0B09!important}
+button[data-testid^="stBaseButton"]:disabled{translate:none;box-shadow:inset 0 2px 0 #C9C1AD,0 2px 0 #9C9482,0 4px 0 #0C0B09,2px 4px 0 #0C0B09!important}
+.st-key-u-c-bridge button[data-testid^="stBaseButton"]{margin-bottom:0}
+[data-testid="stRadioOption"]{transition:translate .08s ease-out,background-color .12s}
+[data-testid="stRadioOption"]:active{translate:0 2px}
+</style>"""
+
 
 def bridge(zh: bool) -> str:
-    return (f'<div class="tcs-top"><span class="tcs-wm">TICKERCASE</span>'
-            f'<span class="tcs-sub">{esc(L(zh, "股票说法 · 可能性检查", "How likely is that stock claim?"))}</span></div>')
+    """The name as a brass plate, what the page is for, and three lamps that come on one after the other."""
+    lamps = "".join(f'<span class="tc-lamp tc-l-{kind} tcs-lamp" style="animation-delay:{0.25 + 0.3 * n:.2f}s"></span>'
+                    for n, kind in enumerate(("amber", "amber", "green")))
+    return (f'<div class="tcs-top"><span class="tcs-plate"><i></i><span class="tcs-wm">TICKERCASE</span><i></i></span>'
+            f'<span class="tcs-sub">{esc(L(zh, "股票说法 · 可能性检查", "How likely is that stock claim?"))}</span>'
+            f'<span class="tcs-lamps" aria-hidden="true">{lamps}</span></div>')
 
 
 def start_head(zh: bool) -> str:
@@ -161,7 +217,9 @@ def cards(zh: bool) -> str:
 def crt(inner: str, *, live: bool = False) -> str:
     """A screen. ``live``: it flickers on and a faint line keeps sweeping down it."""
     sweep = '<span class="tcs-sweep"></span>' if live else ""
-    return (f'<div class="tc-bezel"><div class="tc-crt{" tc-boot" if live else ""}"><span class="tc-noise"></span>{sweep}'
+    screws = "".join(f'<span class="tcs-screw" aria-hidden="true" style="{pos};--r:{r}deg"></span>'
+                     for pos, r in (("top:4px;left:4px", 40), ("top:4px;right:4px", 130), ("bottom:4px;left:4px", 115), ("bottom:4px;right:4px", 25)))
+    return (f'<div class="tc-bezel tcs-bz">{screws}<div class="tc-crt{" tc-boot" if live else ""}"><span class="tc-noise"></span>{sweep}'
             f'<div class="tc-crt-in tc-ph" style="gap:8px">{inner}</div></div></div>')
 
 
@@ -252,7 +310,7 @@ def _scale(zh: bool, h: Headline, parts: list[Part], calibrated: Optional[float]
     for n, p in enumerate(parts if len(parts) > 1 else []):
         x = 100 * p.value
         size = round(12 + 34 * p.weight)
-        up = 12 + 22 * (n % 2)             # neighbours on the bar keep their labels on two heights
+        up = 12 + 28 * (n % 2)             # neighbours on the bar keep their labels on two heights
         side = " l" if x < 12 else " r" if x > 88 else ""
         label = f"{p.name[1 if zh else 0]} {pct(p.value)}"
         dots += (f'<span class="tcs-dot{side}" style="left:{x:.1f}%;--s:{size}px;--up:{up}px;animation-delay:{1.0 + 0.22 * n:.2f}s"><em>{esc(label)}</em></span>'
@@ -295,7 +353,7 @@ def reasons(zh: bool, items: list[Reason], basis: str = "", context: str = "") -
             share = (f'<span class="wb"><span style="width:{round(r.weight * 100)}%"></span></span>'
                      f'<span class="wl">{L(zh, "占", "share")} {round(r.weight * 100)}%</span>')
         body = esc(r.text[i]) + (f"<small>{esc(r.note[i])}</small>" if r.note else "")
-        return (f'<details class="tcs-rc {cls}{" sm" if small else ""}" style="animation-delay:{0.25 + 0.18 * n:.2f}s,{1.5 + 0.8 * n:.1f}s">'
+        return (f'<details class="tcs-rc {cls}{" sm" if small else ""}" style="--d:{0.25 + 0.18 * n:.2f}s;animation-delay:{0.25 + 0.18 * n:.2f}s,{1.5 + 0.8 * n:.1f}s">'
                 f'<summary><span class="ttl">{esc(title)}</span><span class="tag">{esc(tag)}</span>'
                 + (f'<span class="val">{esc(r.value)}</span>' if r.value else "")
                 + (f'<span class="sh">{esc(r.short[i])}</span>' if r.short else "")
@@ -318,7 +376,7 @@ def events(zh: bool, items: list[EventCard]) -> str:
     out = ""
     for n, e in enumerate(items):
         links = " · ".join(f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(label)}</a>' for label, url in e.sources if url)
-        out += (f'<details class="tcs-rc tcs-ev" style="animation-delay:{0.1 + 0.15 * n:.2f}s,{1.2 + 0.8 * n:.1f}s"><summary>'
+        out += (f'<details class="tcs-rc tcs-ev" style="--d:{0.1 + 0.15 * n:.2f}s;animation-delay:{0.1 + 0.15 * n:.2f}s,{1.2 + 0.8 * n:.1f}s"><summary>'
                 f'<span class="ttl">{esc(e.title[i])}</span><span class="tag">{esc(e.tag[i])}</span>'
                 + (f'<span class="val">{esc(e.value)}</span>' if e.value else "")
                 + f'<span class="sh">{esc(e.short[i])}</span><u class="more">ⓘ {L(zh, "细节", "details")}</u></summary>'
