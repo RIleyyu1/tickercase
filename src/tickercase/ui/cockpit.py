@@ -554,7 +554,7 @@ def delta_block(result: CaseResult, zh: bool, *, notes: bool = True) -> str:
 
 KIND_NAMES = {"product": ("产品与项目", "product"), "regulatory": ("审批监管", "regulatory"), "contract": ("合同", "contract"),
               "financing": ("融资", "financing"), "deal": ("并购", "deal"), "operations": ("经营", "operations"), "legal": ("法律", "legal"),
-              "other": ("其他", "other")}
+              "leadership": ("管理层", "leadership"), "other": ("其他", "other")}
 STATUS_NAMES = {"upcoming": ("待发生", "upcoming"), "in_progress": ("进行中", "in progress"), "achieved": ("已实现", "achieved"),
                 "delayed": ("推迟", "delayed"), "cancelled": ("取消", "cancelled")}
 DIRECTION_NAMES = {"up": ("成功利好", "success lifts"), "down": ("成功利空", "success weighs"), "mixed": ("方向不定", "mixed")}

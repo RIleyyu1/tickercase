@@ -258,6 +258,12 @@ S = {
     "cat_use_help": ("把这个日期和期权定价的幅度填进下方情景推演。", "Fills this date and the option-priced move into the scenario below."),
     "cat_used": ("已填入下方情景推演：{name}，{day}。", "Filled into the scenario below: {name}, {day}."),
     "cat_reg": ("档案 · 已确认的催化剂", "Register · confirmed catalysts"),
+    "cat_alert": ("代码发现的重大事件：{day} {what}（8-K 第 5.02 项，{n} 条相关标题{move}）。档案{reg}，尚未收录。按下面的 SCAN 更新。",
+                  "Found by code: {day} {what} (8-K item 5.02, {n} matching headlines{move}). The register {reg} and does not hold it. Press SCAN below to update."),
+    "cat_alert_done": ("代码发现的重大事件：{day} {what}（8-K 第 5.02 项，{n} 条相关标题{move}）。档案已收录。",
+                       "Found by code: {day} {what} (8-K item 5.02, {n} matching headlines{move}). The register holds it."),
+    "cat_alert_weak": ("{day} 有一份 8-K 第 5.02 项公告（高管、董事或薪酬计划的变动；代码没有读正文，新闻标题里也没有对应报道）。",
+                       "An 8-K under item 5.02 was filed on {day} (a change of officers, directors or pay plans; the code did not read the text and no headline reports it)."),
     "cat_reg_none": ("这只股票的档案还是空的。按下面的 SCAN，让 Claude 根据 8-K 新闻稿和新闻标题提出催化剂，核对后由你确认。",
                      "This stock's register is empty. Press SCAN below: Claude proposes catalysts from 8-K press releases and headlines, code checks them, you confirm."),
     "cat_reg_note": ("档案按股票保存（data/catalysts），以后每次 RUN 都会读入并补算反应。反应 = 事件当天和次日的涨跌，以及扣除大盘和同类后的个股部分。",
@@ -2406,6 +2412,21 @@ def render_cat(result: CaseResult, key_suffix: str) -> None:
     html_block(ck.unit_head(t("u_cat"), ck.chip(t("cat_chip")), "u-cat"))
     settings = get_service().settings
     model_kw = dict(model=settings.narrative_model, effort=settings.narrative_effort)
+    for e in result.major_events:
+        if not e.strong:
+            st.caption(t("cat_alert_weak", day=e.filing_date))
+            continue
+        role = plain.ROLE_NAMES.get(e.role or "", ("top management", "高层"))
+        what = f"{role[1]} 变动" if z else f"change of {role[0]}"
+        move = ""
+        if e.reaction is not None:
+            move = (f"，两天内股价 {pct(e.reaction.stock, 1, signed=True)}" if z else f", stock {pct(e.reaction.stock, 1, signed=True)} over two days")
+        reg = ((f"上次更新于 {e.register_updated}" if z else f"was last updated on {e.register_updated}") if e.register_updated
+               else ("还是空的" if z else "is empty"))
+        if e.in_register:
+            st.info(t("cat_alert_done", day=e.day, what=what, n=e.headlines, move=move))
+        else:
+            st.warning(t("cat_alert", day=e.day, what=what, n=e.headlines, move=move, reg=reg))
     # known dates before the deadline
     html_block(ck.sub_head(t("cat_up")))
     rows = ck.upcoming_rows(result, z)
@@ -2969,6 +2990,7 @@ def view_simple_answer(result: CaseResult) -> None:
         html_block(sm.answer_screen(zh(), head, plain.claim_sentence(result), plain.answer_chips(result), plain.index_parts(result),
                                     result.oracle.calibrated if result.oracle is not None else None))
     with st.container(key="u-b-why"):
+        html_block(sm.events(zh(), plain.major_event_cards(result)))
         html_block(f'<h2 class="tcs-h2">{esc(t("s_reasons"))}</h2>' + sm.reasons(zh(), plain.reasons(result), t("s_basis"), t("s_context")))
         made = plain.assumptions(result)
         if made:

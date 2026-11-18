@@ -40,6 +40,7 @@ from .models import (
     CatalystProposal,
 )
 from .catalysts import fill_reactions
+from .major_events import leadership_events
 from .extract import extract_claim
 from .probability import probability_reference
 from .report import build_report
@@ -292,6 +293,10 @@ class CaseService:
         if register is not None and fit is not None:
             fill_reactions(register.catalysts, lambda day: reaction(fit, day), today=self.today())
             self.catalysts.save(register)
+        major = leadership_events(records, news.items if news else (), today=self.today(), register=register)
+        if fit is not None:
+            for event in major:
+                event.reaction = reaction(fit, event.day)
         oracle = build_oracle(claim, market=market, options=options, base_rate=base_rate, price_rate=price_rate,
                               risk_free=risk_free, today=self.today())
         change = None
@@ -361,6 +366,7 @@ class CaseService:
             news=news,
             earnings=earnings,
             catalysts=register,
+            major_events=major,
             data_steps=steps,
             provider_errors=errors,
             data_modes=data_modes,

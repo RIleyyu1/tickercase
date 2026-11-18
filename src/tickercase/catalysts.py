@@ -36,18 +36,18 @@ from pydantic import BaseModel, ValidationError
 from .models import Catalyst, CatalystEvent, CatalystProposal, CatalystRegister, CatalystSource, FilingRecord, NewsItem
 from .narrative import FALLBACK_MODELS, SCALES, USAGE_FIELDS, _matches, numbers_in, uses_effort  # noqa: F401
 
-PROMPT_VERSION = "1"
+PROMPT_VERSION = "2"  # 2: a change of the chief executive or another top leader is a catalyst (kind "leadership")
 MAX_THEMES = 5
 MAX_CATALYSTS = 6
 MAX_NEWS = 250
 PER_THEME = 45
-KINDS = ("product", "regulatory", "contract", "financing", "deal", "operations", "legal", "other")
+KINDS = ("product", "regulatory", "contract", "financing", "deal", "operations", "legal", "leadership", "other")
 STATUSES = ("upcoming", "in_progress", "achieved", "delayed", "cancelled")
 DIRECTIONS = ("up", "down", "mixed")
 EXPECTED_RE = re.compile(r"^(\d{4})(?:-(H[12]|Q[1-4]|\d{2})(?:-(\d{2}))?)?$")
 
 SCOUT_PROMPT = """You read headlines and sentences from a listed company's press releases.
-Name the catalysts the stock price depends on: specific products or programs, regulatory decisions, contracts, acquisitions, financings or legal matters whose outcome or timing moves the business.
+Name the catalysts the stock price depends on: specific products or programs, regulatory decisions, contracts, acquisitions, financings or legal matters whose outcome or timing moves the business, and a change of the chief executive or another top leader (a departure, a removal, an interim appointment, the search for a successor).
 Not catalysts: price moves, analyst ratings, index or fund flows, general market news.
 For each, give 1 to 3 search words that find news about it (for example a product or program name).
 At most {n}, most important first. Use only what the sources say."""
@@ -55,7 +55,7 @@ At most {n}, most important first. Use only what the sources say."""
 BUILD_PROMPT = """You keep the catalyst register of one listed company. Sources are numbered: N.. are news headlines (date, outlet), F.. are sentences from the company's 8-K press releases (date).
 Rules:
 - Use only the sources. No outside knowledge, and no dates or outcomes the sources do not state.
-- A catalyst is a specific product or program milestone, regulatory decision, contract, acquisition, financing or legal matter whose outcome or timing moves the business. Price moves, analyst ratings and general market news are not catalysts.
+- A catalyst is a specific product or program milestone, regulatory decision, contract, acquisition, financing or legal matter whose outcome or timing moves the business. A change of the chief executive or another top leader is a catalyst of kind "leadership": its events are the departure or removal, the interim appointment, each stated step of the search and the appointment of a successor; expected is the stated timing of the successor, if any. Price moves, analyst ratings and general market news are not catalysts.
 - For each catalyst give: a short name; kind; status; expected = the latest stated target timing as YYYY, YYYY-H1, YYYY-H2, YYYY-Q1 to YYYY-Q4, YYYY-MM or YYYY-MM-DD (empty if no source states one); direction = how success would move the price; one summary sentence; source_ids; 1 to 3 search_terms.
 - events = the dated history: each time a source reports a change (a schedule slip, a test result, a milestone reached, a deal signed or closed). date = the date of the source that first reports it. change = one short sentence on what changed. Cite the sources of each event.
 - Every number and date you write must appear in the sources you cite.

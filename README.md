@@ -42,6 +42,15 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## A change at the top is seen (v0.20.0)
+
+NVDA's chief executive left on 2026-11-12 and the page said nothing: the catalyst register is written by Claude only when the SCAN key is pressed, it was last updated in October, and its definition of a catalyst had no place for a change of leader.
+
+- **A kind of catalyst.** `leadership` joins the kinds, and both prompts name a change of the chief executive or another top leader (departure, removal, interim appointment, search, successor). Prompt version 2.
+- **Found by code on every run, at no cost** (`major_events.py`). A company reports such a change in an 8-K under item 5.02. A 5.02 filing of the last 45 days, with at least three headlines that name a top role next to a word of change, is a strong event; its day is the first report, and the stock's move over two days is measured as for any catalyst event. A 5.02 filing without such headlines is only listed on the event page (the item also covers directors and pay plans, and the code does not read the text).
+- **Said in both views.** The event page says what was found and whether the register holds it ("the register was last updated on 2026-10-28 and does not hold it; press SCAN"). The simple view shows a card above the reasons: the event, the move, and under "details" the sources and the sentence that this event does not change the number directly: the methods read prices, and the option prices and swings since then hold what the market thinks of it.
+- Limits: headlines of 30 days in English; the role comes from the headlines, not from the filing; only leadership changes are looked for.
+
 ## A simple view that moves (v0.19.0)
 
 The simple view was plain: a number, three paragraphs and a list. It now shows the same facts as a picture, and the small print opens on request.

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ..plain import Chip, Headline, Part, Reason, Restated, pct, rate
+from ..plain import Chip, EventCard, Headline, Part, Reason, Restated, pct, rate
 from .cockpit import L, esc
 
 CSS = """<style>
@@ -103,6 +103,10 @@ CSS = """<style>
 .tcs-rc p{margin:8px 0 0;padding-top:8px;border-top:1px dashed #8D8163;font-size:14.5px;line-height:1.6;color:#3A3327}
 .tcs-rc p small{display:block;margin-top:6px;font-size:13.5px;color:#5C5340}
 .tcs-rc.sm{box-shadow:3px 3px 0 var(--ink);background:rgba(255,250,235,.22)}
+.tcs-evs{grid-template-columns:1fr;margin:0 0 6px}
+.tcs-rc.tcs-ev{background:rgba(255,222,150,.45)}.tcs-rc.tcs-ev::before{background:#C08A1E}
+.tcs-rc.tcs-ev .tag{color:#6B4E22}.tcs-rc.tcs-ev .val{font-size:38px;color:#7A2D14}
+.tcs-rc.tcs-ev a{color:#6B4E22}
 .tcs-rc.sm .val{font-size:32px}
 .tcs-warn{font-family:'Noto Serif SC',Georgia,serif;font-size:15px;line-height:1.6;background:rgba(255,246,214,.6);border:2px solid #A2401F;color:#7A2D14;padding:8px 12px}
 .tcs-assume{font-family:'Noto Serif SC',Georgia,serif;font-size:16px;line-height:1.7;color:var(--ink);margin:0;padding-left:1.2em}
@@ -304,6 +308,20 @@ def reasons(zh: bool, items: list[Reason], basis: str = "", context: str = "") -
         out += ((f'<div class="tcs-grp">{esc(context)}</div>' if context else "")
                 + '<div class="tcs-cards">' + "".join(card(r, len(main) + n, True) for n, r in enumerate(rest)) + "</div>")
     return out
+
+
+def events(zh: bool, items: list[EventCard]) -> str:
+    """Major events of the last weeks, one amber card each; the sources and what it means for the number open under it."""
+    i = 1 if zh else 0
+    out = ""
+    for n, e in enumerate(items):
+        links = " · ".join(f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(label)}</a>' for label, url in e.sources if url)
+        out += (f'<details class="tcs-rc tcs-ev" style="animation-delay:{0.1 + 0.15 * n:.2f}s,{1.2 + 0.8 * n:.1f}s"><summary>'
+                f'<span class="ttl">{esc(e.title[i])}</span><span class="tag">{esc(L(zh, "不计入数字", "not in the number"))}</span>'
+                + (f'<span class="val">{esc(e.value)}</span>' if e.value else "")
+                + f'<span class="sh">{esc(e.short[i])}</span><u class="more">ⓘ {L(zh, "细节", "details")}</u></summary>'
+                f'<p>{esc(e.full[i])}' + (f"<small>{L(zh, '来源：', 'Sources: ')}{links}</small>" if links else "") + "</p></details>")
+    return f'<div class="tcs-cards tcs-evs">{out}</div>' if out else ""
 
 
 def assumptions(zh: bool, items: list[tuple[str, str]]) -> str:

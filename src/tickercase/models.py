@@ -909,7 +909,7 @@ class Catalyst(BaseModel):
     id: str
     name_en: str
     name_zh: str
-    kind: Literal["product", "regulatory", "contract", "financing", "deal", "operations", "legal", "other"] = "other"
+    kind: Literal["product", "regulatory", "contract", "financing", "deal", "operations", "legal", "leadership", "other"] = "other"
     status: Literal["upcoming", "in_progress", "achieved", "delayed", "cancelled"] = "upcoming"
     expected: Optional[str] = None  # as the sources give it: "2027", "2027-H1", "2027-Q2", "2027-03" or "2027-03-15"
     expected_day: Optional[date] = None  # a day for the scenario: the middle of that span
@@ -924,6 +924,22 @@ class Catalyst(BaseModel):
     problems: list[str] = Field(default_factory=list)  # what the check found; empty = every citation, date and number checks out
     proposed_by: Optional[str] = None
     confirmed_at: Optional[datetime] = None
+
+
+class MajorEvent(BaseModel):
+    """An event code found without Claude (v0.20.0): an 8-K item 5.02 filing and the headlines that report a change at the top."""
+
+    kind: Literal["leadership"] = "leadership"
+    day: date                      # the first day it was reported: the filing day, or a headline up to five days before it
+    filing_date: date
+    role: Optional[str] = None     # "CEO", "CFO", "chair", "founder", "president"; None when no headline names one
+    headlines: int = 0             # headlines that name a top role next to a word of change
+    samples: list[NewsItem] = Field(default_factory=list)
+    filing_url: str = ""
+    strong: bool = False           # enough headlines to say what the filing is about
+    reaction: Optional[Reaction] = None
+    in_register: bool = False      # the catalyst register already holds a leadership item around that day
+    register_updated: Optional[date] = None
 
 
 class CatalystRegister(BaseModel):
@@ -1049,6 +1065,7 @@ class CaseResult(BaseModel):
     news: Optional[NewsFeed] = None
     earnings: Optional[EarningsDate] = None
     catalysts: Optional[CatalystRegister] = None  # the stock's confirmed catalysts as this case saw them
+    major_events: list[MajorEvent] = Field(default_factory=list)  # found by code on this run (8-K item 5.02 with headlines)
     catalyst_proposal: Optional[CatalystProposal] = None
     data_steps: dict[str, str] = Field(default_factory=dict)  # step -> "ok" | "failed"
     narrative: Optional[Narrative] = None  # the latest narrative written, any language

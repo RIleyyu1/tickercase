@@ -20,7 +20,7 @@ from .oracle import MIN_INDEPENDENT_WINDOWS, independent_windows
 from .tiers import TIERS, tier
 
 Pair = tuple[str, str]
-__all__ = ["TIERS", "tier", "pct", "rate", "headline", "claim_sentence", "reasons", "other_condition", "why_a_range", "calibration_line", "index_parts", "answer_chips",
+__all__ = ["TIERS", "tier", "pct", "rate", "headline", "claim_sentence", "reasons", "other_condition", "why_a_range", "calibration_line", "index_parts", "answer_chips", "major_event_cards",
            "assumptions", "restate"]
 
 
@@ -238,6 +238,56 @@ def other_condition(result: CaseResult) -> Optional[Pair]:
         return None
     return (f"The number above counts any day the price gets there. Still being at or above the target on {o.target_date} is less likely: about {rng}.",
             f"上面的数字只要中途有一天到过就算。如果要求 {o.target_date} 那天收盘还在目标价以上，可能性更低：约 {rng}。")
+
+
+ROLE_NAMES = {"CEO": ("CEO", "CEO"), "CFO": ("CFO", "CFO"), "chair": ("board chair", "董事长"), "founder": ("founder", "创始人"),
+              "president": ("president", "总裁")}
+
+
+@dataclass(frozen=True)
+class EventCard:
+    """A major event of the last weeks, said beside the answer: it is not part of the number."""
+
+    title: Pair
+    value: str            # the stock's move around the day, or "" when it could not be measured
+    short: Pair
+    full: Pair
+    sources: tuple        # (label, url) pairs
+
+
+def major_event_cards(result: CaseResult) -> list[EventCard]:
+    """The strong events only: a change at the top that the headlines report, with the stock's move around the day."""
+    out: list[EventCard] = []
+    for e in result.major_events:
+        if not e.strong:
+            continue
+        role = ROLE_NAMES.get(e.role or "", ("top management", "高层"))
+        r = e.reaction
+        value = fmt.pct(r.stock, 0, signed=True) if r is not None else ""
+        moved = ("", "")
+        if r is not None:
+            own = (f"; {fmt.pct(r.own, 0, signed=True)} after taking out the market and similar stocks" if r.own is not None else "",
+                   f"；扣除大盘和同类股票后 {fmt.pct(r.own, 0, signed=True)}" if r.own is not None else "")
+            moved = (f" From the close before to the close of {r.end}, the stock moved {fmt.pct(r.stock, 0, signed=True)}{own[0]}.",
+                     f"从事发前一天收盘到 {r.end} 收盘，股价变动 {fmt.pct(r.stock, 0, signed=True)}{own[1]}。")
+        if e.in_register:
+            reg = (" It is in the event register of this stock.", "这件事已经在这只股票的事件表里。")
+        elif e.register_updated is not None:
+            reg = (f" The event register of this stock was last updated on {e.register_updated}, before this, and does not hold it yet.",
+                   f"这只股票的事件表上次更新是 {e.register_updated}，早于这件事，还没有收录它。")
+        else:
+            reg = ("", "")
+        full = (f"On {e.filing_date} the company filed a report of a change among its top officers (form 8-K, item 5.02), and {e.headlines} recent headlines "
+                f"report a change of the {role[0]}.{moved[0]} This event does not change the number above directly: the methods read prices, "
+                f"and the option prices and price swings since then already hold what the market thinks of it.{reg[0]}",
+                f"{e.filing_date} 公司向监管机构报告了高管变动（8-K 表第 5.02 项），近期有 {e.headlines} 条新闻标题报道 {role[1]} 变动。{moved[1]}"
+                f"这件事不会直接改变上面的数字：各算法只看价格，而此后的期权价格和股价波动已经包含了市场对它的看法。{reg[1]}")
+        short = (f"{e.day:%b} {e.day.day}: {e.headlines} headlines; stock move over two days",
+                 f"{e.day.month} 月 {e.day.day} 日 · {e.headlines} 条新闻 · 两天内股价变动") if r is not None else (
+                 f"{e.day:%b} {e.day.day}: {e.headlines} headlines", f"{e.day.month} 月 {e.day.day} 日 · {e.headlines} 条新闻")
+        sources = tuple([("SEC 8-K", e.filing_url)] + [(i.publisher or "news", i.url) for i in e.samples if i.url])
+        out.append(EventCard((f"Big news: change of {role[0]}", f"最近的大事：{role[1]} 变动"), value, short, full, sources))
+    return out
 
 
 SHORT_NAMES = {"M1": ("options", "期权"), "M2": ("swings", "波动"), "M4": ("own past", "自己的过去"), "M3": ("similar companies", "同类公司")}
