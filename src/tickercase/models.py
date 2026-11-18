@@ -675,6 +675,21 @@ class LadderRow(BaseModel):
     model_touch: Optional[float] = None
 
 
+class EventTiltPart(BaseModel):
+    """One scored event of the register and the points it adds to the main number (v0.21.0)."""
+
+    catalyst_id: str
+    name: "Text"
+    day: date
+    change: "Text"
+    effect: Literal["up", "down"]
+    strength: int
+    age_days: int
+    weight: float          # 0.5 ^ (age / 30 days), times 1.5 when the story is still open
+    open: bool
+    points: float          # signed, 0.012 = +1.2 percentage points, before the limit on the sum
+
+
 class OracleSummary(BaseModel):
     """Probability that the claim comes true, from several independent methods compared side by side."""
 
@@ -699,9 +714,20 @@ class OracleSummary(BaseModel):
     spread_low: Optional[float] = None                         # the lowest and the highest of the counted methods
     spread_high: Optional[float] = None
     calibrated: Optional[float] = None                         # how often the claim came true in the backtest when the index said this
+    # since v0.21.0 the scored events of the catalyst register move the index by a bounded amount: low == high == base + event_tilt
+    base: Optional[float] = None                               # the index of the methods, before the events
+    event_tilt: Optional[float] = None                         # what the events add, after the limits; None when no event is scored
+    event_raw: Optional[float] = None                          # the sum of the points before the limits
+    event_parts: list[EventTiltPart] = Field(default_factory=list)
+    event_note: Optional["Text"] = None
     spot: Optional[float] = None
     base_volatility: Optional[float] = None  # historical volatility, used by the scenario panel
     implied_volatility: Optional[float] = None
+
+    @property
+    def index(self) -> Optional[float]:
+        """The weighted index of the methods: the main number before events (cases stored before v0.21.0 hold it in ``low``)."""
+        return self.base if self.base is not None else self.low
 
 
 class EventMove(BaseModel):
@@ -766,6 +792,7 @@ class ShiftedRange(BaseModel):
     spot_to: float
     low: Optional[float] = None
     high: Optional[float] = None
+    base: Optional[float] = None  # since v0.21.0: the index at that price before the events; low and high hold it with the events
     methods: dict[str, float] = Field(default_factory=dict)  # method id -> probability under the claim's condition
 
 
@@ -901,6 +928,9 @@ class CatalystEvent(BaseModel):
     source_ids: list[str] = Field(default_factory=list)
     sources: list[CatalystSource] = Field(default_factory=list)  # copied, so the register keeps them after the proposal is gone
     reaction: Optional[Reaction] = None
+    # since v0.21.0 Claude scores each event; code turns the scores into points of the main number (event_tilt.py)
+    effect: Literal["up", "down", "none"] = "none"  # does this news make a higher share price more or less likely
+    strength: Optional[int] = None  # 0 not important, 1 minor, 2 material, 3 changes the outlook; None = written before v0.21.0
 
 
 class Catalyst(BaseModel):
@@ -965,6 +995,7 @@ class CatalystProposal(BaseModel):
     error: Optional[str] = None
     decided_at: Optional[datetime] = None
     accepted: list[str] = Field(default_factory=list)
+    dropped: list[list[str]] = Field(default_factory=list)  # v0.21.0: [id, name_en, name_zh, finding] of what the checks kept out
 
 
 class Fact(BaseModel):

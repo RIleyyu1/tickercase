@@ -247,7 +247,23 @@ S = {
     "r_time_cols": (("时间", "要看什么", "说明"), ("When", "What", "Note")),
     "r_none": ("这份报告没有分层内容（由旧版本生成）。", "This report has no layers (made by an older version)."),
     # catalyst register
-    "cat_chip": ("Claude 提议 · 代码核对 · 你确认", "Claude proposes · code checks · you confirm"),
+    "cat_chip": ("Claude 挑选评分 · 代码核对并换算", "Claude picks and scores · code checks and converts"),
+    "cat_update": ("更新事件", "UPDATE events"),
+    "cat_update_note": ("读新闻和公告，挑出重要的事并评分，核对出处后自动写入事件表，主数字随之调整。调用两次 Claude，按用量计费。",
+                        "Reads the news and filings, picks and scores what matters, checks the sources, writes what passes into the register, and the main number follows. Two Claude calls, billed by usage."),
+    "cat_done": ("上次更新 {t}：收录 {n} 项{drop}。", "Last update {t}: {n} items written{drop}."),
+    "cat_done_drop": ("，核对未通过而没有写入 {m} 处", ", {m} findings kept out by the checks"),
+    "cat_dropped": ("核对未通过、没有写入的内容（{m}）", "Kept out by the checks ({m})"),
+    "cat_take": ("收录通过核对的提议", "Write what passes the checks"),
+    "cat_take_note": ("这份提议是旧版本留下的，还没有处理。", "This proposal was left by an older version and is still waiting."),
+    "cat_full": ("完整事件表和时间线（{n} 项）", "The full register and timelines ({n} items)"),
+    "cat_tilt_how": ("事件怎样进入主数字：Claude 给每件事一个方向（利好或利空）和强度（1 到 3），不给概率。代码按固定规则换算：点数 = 方向 × 强度 × 1 个百分点 × 0.5^(天数/30)，"
+                     "事情还没结束且不晚于截止日的再乘 1.5；同一个催化剂只取点数最大的一件事，再取其中最大的 5 件，合计不超过 ±5 个百分点，也不超过指数到 0% 或 100% 距离的一半。超过 120 天的事不计。"
+                     "这一部分没有回测：没有可以重放的历史新闻库。回测对照的是调整前的指数。",
+                     "How events enter the main number: Claude gives each event a direction (up or down) and a strength (1 to 3), never a probability. Code converts by a fixed rule: "
+                     "points = direction × strength × 1 point × 0.5^(days/30), times 1.5 when the story is still open and not dated after the deadline; one catalyst counts once, by its largest event, and only the 5 largest count, "
+                     "their sum is at most ±5 points and never more than half of the way from the index to 0% or 100%. Events older than 120 days are left out. "
+                     "This part has no backtest: there is no archive of past news to replay. The backtest line refers to the index before events."),
     "cat_up": ("截止日前已知的日期", "Known dates before the deadline"),
     "target_not_above": ("目标价 {t} 不高于参考价 {r}：观点今天已经成立，或者其实是看跌。下面的概率仍按这个目标价计算。",
                          "The target {t} is not above the reference price {r}: the claim is already met today, or it is about a fall. The probability below is still computed for this target."),
@@ -258,14 +274,14 @@ S = {
     "cat_use_help": ("把这个日期和期权定价的幅度填进下方情景推演。", "Fills this date and the option-priced move into the scenario below."),
     "cat_used": ("已填入下方情景推演：{name}，{day}。", "Filled into the scenario below: {name}, {day}."),
     "cat_reg": ("档案 · 已确认的催化剂", "Register · confirmed catalysts"),
-    "cat_alert": ("代码发现的重大事件：{day} {what}（8-K 第 5.02 项，{n} 条相关标题{move}）。档案{reg}，尚未收录。按下面的 SCAN 更新。",
-                  "Found by code: {day} {what} (8-K item 5.02, {n} matching headlines{move}). The register {reg} and does not hold it. Press SCAN below to update."),
+    "cat_alert": ("代码发现的重大事件：{day} {what}（8-K 第 5.02 项，{n} 条相关标题{move}）。档案{reg}，尚未收录。按下面的「更新事件」。",
+                  "Found by code: {day} {what} (8-K item 5.02, {n} matching headlines{move}). The register {reg} and does not hold it. Press UPDATE below."),
     "cat_alert_done": ("代码发现的重大事件：{day} {what}（8-K 第 5.02 项，{n} 条相关标题{move}）。档案已收录。",
                        "Found by code: {day} {what} (8-K item 5.02, {n} matching headlines{move}). The register holds it."),
     "cat_alert_weak": ("{day} 有一份 8-K 第 5.02 项公告（高管、董事或薪酬计划的变动；代码没有读正文，新闻标题里也没有对应报道）。",
                        "An 8-K under item 5.02 was filed on {day} (a change of officers, directors or pay plans; the code did not read the text and no headline reports it)."),
-    "cat_reg_none": ("这只股票的档案还是空的。按下面的 SCAN，让 Claude 根据 8-K 新闻稿和新闻标题提出催化剂，核对后由你确认。",
-                     "This stock's register is empty. Press SCAN below: Claude proposes catalysts from 8-K press releases and headlines, code checks them, you confirm."),
+    "cat_reg_none": ("这只股票的事件表还是空的。按「更新事件」，Claude 会根据 8-K 新闻稿和新闻标题写出催化剂和事件，通过核对的自动写入。",
+                     "This stock's register is empty. Press UPDATE: Claude writes catalysts and events from 8-K press releases and headlines, and what passes the checks is written in."),
     "cat_reg_note": ("档案按股票保存（data/catalysts），以后每次 RUN 都会读入并补算反应。反应 = 事件当天和次日的涨跌，以及扣除大盘和同类后的个股部分。",
                      "The register is kept per stock (data/catalysts); every later RUN reads it and measures new reactions. Reaction = the move on the event day and the next, and the part the market and the peers do not explain."),
     "cat_manage": ("管理档案", "Manage the register"),
@@ -1163,6 +1179,12 @@ def _discard_proposal(key_suffix: str) -> None:
         get_service().confirm_catalysts(result, [])
 
 
+def _auto_confirm(key_suffix: str) -> None:
+    result = _case_of(key_suffix)
+    if result is not None:
+        get_service().auto_confirm(result)
+
+
 def _remove_catalyst(key_suffix: str, catalyst_id: str) -> None:
     result = _case_of(key_suffix)
     if result is not None:
@@ -1943,7 +1965,7 @@ def tab_levels(result: CaseResult) -> None:
         rows.append((f"{m.id} {tr(m.name)}", pct_p(m.probability) if m.status == "ok" else "—", pct_p(m.touch_probability) if m.status == "ok" else "—",
                      tr(m.measures), t("m_yes") if used else (t("m_no") if m.status == "ok" else "—")))
     html_block(table(S["m_cols"][i], rows, nums=(1, 2), on=2 if touch else 1))
-    st.caption(tr(o.agreement))
+    st.caption(tr(o.agreement) + ((" " if not zh() else "") + tr(o.event_note) if o.event_note else ""))
     st.markdown(f"**{t('method_detail')}**")
     for m in o.methods:
         p = m.touch_probability if touch else m.probability
@@ -2412,6 +2434,7 @@ def render_cat(result: CaseResult, key_suffix: str) -> None:
     html_block(ck.unit_head(t("u_cat"), ck.chip(t("cat_chip")), "u-cat"))
     settings = get_service().settings
     model_kw = dict(model=settings.narrative_model, effort=settings.narrative_effort)
+    html_block(ck.tilt_block(result, z))  # what the events do to the main number, first
     for e in result.major_events:
         if not e.strong:
             st.caption(t("cat_alert_weak", day=e.filing_date))
@@ -2427,6 +2450,38 @@ def render_cat(result: CaseResult, key_suffix: str) -> None:
             st.info(t("cat_alert_done", day=e.day, what=what, n=e.headlines, move=move))
         else:
             st.warning(t("cat_alert", day=e.day, what=what, n=e.headlines, move=move, reg=reg))
+    # one key: read, pick, score, check, write
+    prop = result.catalyst_proposal
+    if prop is not None and prop.status != "ok":
+        st.warning(t("cat_failed") + (prop.error or prop.status))
+    elif prop is not None and prop.decided_at is not None:
+        cost = estimate_cost(prop.model, prop.usage)
+        st.caption(t("cat_done", t=f"{prop.decided_at:%Y-%m-%d %H:%M} UTC", n=len(prop.accepted),
+                     drop=t("cat_done_drop", m=len(prop.dropped)) if prop.dropped else "")
+                   + (" " + t("ai_usage", inp=prop.usage.get("input_tokens", 0), out=prop.usage.get("output_tokens", 0), cost=cost) if cost is not None else ""))
+        if prop.dropped:
+            with st.expander(t("cat_dropped", m=len(prop.dropped))):
+                for pid, name_en, name_zh, finding in prop.dropped:
+                    st.caption(f"{pid} · {name_zh if z and name_zh else name_en} · {ck.problem_text(finding, z)}")
+    no_key = not settings.anthropic_api_key
+    if no_key:
+        st.caption(t("ai_missing"))
+    if prop is not None and prop.status == "ok" and prop.decided_at is None:  # left by a version before v0.21.0
+        st.caption(t("cat_take_note"))
+        st.button(t("cat_take"), key=f"cat_take_{k}", type="primary", on_click=_auto_confirm, args=(k,))
+    else:
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            pressed = st.button(t("cat_update"), key=f"cat_scan_{k}", type="primary", disabled=no_key, help=t("cat_scan_help", **model_kw))
+            st.caption(t("cat_update_note"))
+        if pressed:
+            steps = S["cat_step"]
+            with st.status(t("cat_running"), expanded=True) as box:
+                def note(step: str) -> None:
+                    name, _, term = step.partition(":")
+                    label = (("检索：" if z else "searching: ") + term) if name == "search" else steps.get(name, (name, name))[0 if z else 1]
+                    box.write("· " + label)
+                get_service().update_catalysts(result, mode=_case_mode(result), progress=note)
+            st.rerun()
     # known dates before the deadline
     html_block(ck.sub_head(t("cat_up")))
     rows = ck.upcoming_rows(result, z)
@@ -2441,53 +2496,17 @@ def render_cat(result: CaseResult, key_suffix: str) -> None:
     used = st.session_state.get(f"cat_msg_{k}")
     if used:
         st.success(t("cat_used", name=used[0], day=used[1]))
-    # the confirmed register
-    html_block(ck.sub_head(t("cat_reg")))
+    # the full register, folded
     reg = result.catalysts
     if reg is None or not reg.catalysts:
         st.caption(t("cat_reg_none"))
     else:
-        html_block('<div class="tc-cats">' + "".join(ck.catalyst_card(c, z) for c in reg.catalysts) + "</div>")
-        with st.expander(t("cat_manage")):
+        with st.expander(t("cat_full", n=len(reg.catalysts))):
+            html_block('<div class="tc-cats">' + "".join(ck.catalyst_card(c, z) for c in reg.catalysts) + "</div>")
             for c in reg.catalysts:
                 st.button(t("cat_remove", id=c.id) + f" · {c.name_zh if z and c.name_zh else c.name_en}", key=f"cat_rm_{k}_{c.id}",
                           on_click=_remove_catalyst, args=(k, c.id))
-    # the proposal
-    prop = result.catalyst_proposal
-    if prop is not None and prop.status == "ok" and prop.decided_at is None:
-        html_block(ck.sub_head(t("cat_prop")))
-        cost = estimate_cost(prop.model, prop.usage)
-        st.caption(t("cat_prop_meta", n=len(prop.catalysts), src=len(prop.sources), themes=", ".join(prop.themes) or "—", model=prop.model)
-                   + (" · " + t("ai_usage", inp=prop.usage.get("input_tokens", 0), out=prop.usage.get("output_tokens", 0), cost=cost) if cost is not None else ""))
-        st.caption(t("cat_rule"))
-        for c in prop.catalysts:
-            st.session_state.setdefault(f"cat_acc_{k}_{c.id}", not c.problems)
-            st.checkbox(t("cat_accept", id=c.id), key=f"cat_acc_{k}_{c.id}")
-            html_block(ck.catalyst_card(c, z, proposed=True))
-        if prop.error:
-            st.caption("⚠ " + prop.error)
-        b = st.columns([2, 2, 3])
-        b[0].button(t("cat_confirm"), key=f"cat_confirm_{k}", type="primary", on_click=_confirm_catalysts, args=(k,), width="stretch")
-        b[1].button(t("cat_discard"), key=f"cat_discard_{k}", on_click=_discard_proposal, args=(k,), width="stretch")
-    else:
-        if prop is not None and prop.status != "ok":
-            st.warning(t("cat_failed") + (prop.error or prop.status))
-        elif prop is not None and prop.decided_at is not None:
-            st.caption(t("cat_decided", t=f"{prop.decided_at:%Y-%m-%d %H:%M} UTC", n=len(prop.accepted)))
-        no_key = not settings.anthropic_api_key
-        if no_key:
-            st.caption(t("ai_missing"))
-        label = t("cat_scan") if prop is None else t("cat_rescan")
-        if st.button(label, key=f"cat_scan_{k}", type="primary" if prop is None else "secondary", disabled=no_key, help=t("cat_scan_help", **model_kw)):
-            steps = S["cat_step"]
-            with st.status(t("cat_running"), expanded=True) as box:
-                def note(step: str) -> None:
-                    name, _, term = step.partition(":")
-                    label = (("检索：" if z else "searching: ") + term) if name == "search" else steps.get(name, (name, name))[0 if z else 1]
-                    box.write("· " + label)
-                get_service().propose_catalysts(result, mode=_case_mode(result), progress=note)
-            st.rerun()
-    info(t("cat_reg_note"), t("cat_scan_help", **model_kw))
+    info(t("cat_tilt_how"), t("cat_reg_note"), t("cat_scan_help", **model_kw))
     with st.expander(t("cat_heads")):
         html_block(ck.headlines_html(result.news, z))
 
@@ -2565,7 +2584,7 @@ def page_answer(result: CaseResult, key_suffix: str, anim: bool) -> None:
             st.info(t("prob_none"))
         else:
             html_block(ck.prb_screen(result, z, anim))
-            info(tr(result.oracle.agreement))
+            info(tr(result.oracle.agreement), tr(result.oracle.event_note) if result.oracle.event_note else "")
     with st.container(key="u-c-kln"):
         render_kline(result)
 

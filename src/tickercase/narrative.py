@@ -119,6 +119,10 @@ def build_facts(r: CaseResult) -> list[Fact]:
         f.add("probability range low", "概率区间下限", o.low, "probability 0-1", "TickerCase cross-check of methods")
         f.add("probability range high", "概率区间上限", o.high, "probability 0-1", "TickerCase cross-check of methods")
         f.add("probability tier", "概率等级", o.tier_label.en, source="TickerCase")
+        if o.base is not None and o.event_tilt is not None:
+            f.add("index of the methods before events", "事件调整前的方法指数", o.base, "probability 0-1", "TickerCase weighted index")
+            f.add("event adjustment of the index", "事件对指数的调整", round(o.event_tilt, 4), "probability 0-1 (0.01 = one point)",
+                  "scored events of the catalyst register, fixed rule, limit 0.05, no backtest")
         f.add("risk-free rate", "无风险利率", o.risk_free_rate, "rate 0-1", "10-year Treasury yield (^TNX)")
         for m in o.methods:
             if m.status != "ok":

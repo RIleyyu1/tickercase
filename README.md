@@ -42,6 +42,18 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## Events in the main number (v0.21.0)
+
+Until v0.20 the events were shown beside the number. Now the scored events of the catalyst register move it, by a bounded amount.
+
+- **Claude picks and scores, code converts.** For each event Claude gives a direction (up or down for the share price) and a strength (1 minor, 2 material, 3 changes the outlook). It gives no probability. Code checks the sources as before and converts by one fixed rule (`src/tickercase/event_tilt.py`): points = direction × strength × 1 point × 0.5^(days/30), times 1.5 when the story is still open and not dated after the deadline.
+- **Limits.** One catalyst counts once, by its largest event. Only the five largest count. Their sum is at most ±5 points and never more than half of the way from the index to 0 % or 100 %. Events older than 120 days are left out.
+- **Both numbers stay on the page.** The weighted index of the methods is kept (`OracleSummary.base`); the main number is the index plus the events ("index 46.7% → main number 43.7%"). The backtest line refers to the index. The event part has no backtest: there is no archive of past news to replay.
+- **One key on the event page.** UPDATE reads the news and filings, makes the two Claude calls, and writes what passes the checks into the register; a finding about one event leaves out that event, a finding about the catalyst leaves out the catalyst, and both are listed. The model is told what the free detector of v0.20 found, so a change at the top is not left out. The full register and its timelines are folded under one line; a catalyst can be removed there, and the number follows.
+- **Simple view.** A chip "Recent events 47% → 44%" beside the answer; the big-news card says "in the number" once the register holds the event.
+
+A register written before v0.21.0 carries no scores: its events count for nothing until UPDATE is pressed.
+
 ## A change at the top is seen (v0.20.0)
 
 NVDA's chief executive left on 2026-11-12 and the page said nothing: the catalyst register is written by Claude only when the SCAN key is pressed, it was last updated in October, and its definition of a catalyst had no place for a change of leader.

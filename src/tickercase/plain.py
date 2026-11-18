@@ -16,6 +16,7 @@ from typing import Optional
 
 from . import fmt
 from .models import CaseResult, ClaimDraft
+from .event_tilt import points_text
 from .oracle import MIN_INDEPENDENT_WINDOWS, independent_windows
 from .tiers import TIERS, tier
 
@@ -253,6 +254,7 @@ class EventCard:
     short: Pair
     full: Pair
     sources: tuple        # (label, url) pairs
+    tag: Pair = ("not in the number", "不计入数字")
 
 
 def major_event_cards(result: CaseResult) -> list[EventCard]:
@@ -286,7 +288,20 @@ def major_event_cards(result: CaseResult) -> list[EventCard]:
                  f"{e.day.month} 月 {e.day.day} 日 · {e.headlines} 条新闻 · 两天内股价变动") if r is not None else (
                  f"{e.day:%b} {e.day.day}: {e.headlines} headlines", f"{e.day.month} 月 {e.day.day} 日 · {e.headlines} 条新闻")
         sources = tuple([("SEC 8-K", e.filing_url)] + [(i.publisher or "news", i.url) for i in e.samples if i.url])
-        out.append(EventCard((f"Big news: change of {role[0]}", f"最近的大事：{role[1]} 变动"), value, short, full, sources))
+        o = getattr(result, "oracle", None)
+        tag = ("not in the number", "不计入数字")
+        if e.in_register and o is not None and o.event_tilt is not None:   # the register holds it and its events are scored
+            pts = points_text(o.event_tilt)
+            tag = ("in the number", "已计入数字")
+            full = (f"On {e.filing_date} the company filed a report of a change among its top officers (form 8-K, item 5.02), and {e.headlines} recent headlines "
+                    f"report a change of the {role[0]}.{moved[0]} It is in the event list of this stock, and the recent events together move the number above by "
+                    f"{pts} points (at most 5 either way).",
+                    f"{e.filing_date} 公司向监管机构报告了高管变动（8-K 表第 5.02 项），近期有 {e.headlines} 条新闻标题报道 {role[1]} 变动。{moved[1]}"
+                    f"这件事已经在这只股票的事件表里，近期事件合计把上面的数字调整了 {pts} 个百分点（最多上下 5 个）。")
+        else:
+            full = (full[0] + " To let it count, open the events page of the expert view and press UPDATE.",
+                    full[1] + "要让它计入，到专家视图的事件页按「更新事件」。")
+        out.append(EventCard((f"Big news: change of {role[0]}", f"最近的大事：{role[1]} 变动"), value, short, full, sources, tag))
     return out
 
 
@@ -326,6 +341,15 @@ def answer_chips(result: CaseResult) -> list[Chip]:
     out: list[Chip] = []
     o = result.oracle
     line = calibration_line(result)
+    if o is not None and o.event_tilt is not None and o.base is not None and o.event_parts:
+        top = max(o.event_parts, key=lambda p: abs(p.points))
+        pts = points_text(o.event_tilt)
+        out.append(Chip("events", ("Recent events", "近期事件"), (f"{pct(o.base)} → {pct(o.low)}", f"{pct(o.base)} → {pct(o.low)}"),
+                        (f"The methods alone give {pct(o.base)}. {len(o.event_parts)} recent event{'' if len(o.event_parts) == 1 else 's'} from the news "
+                         f"move it by {pts} points (at most 5 either way). The largest: {top.name.en} ({points_text(top.points)}). "
+                         "An AI model picked and scored the events; the points follow a fixed rule. This part has not been checked against the past.",
+                         f"几种算法本身给出 {pct(o.base)}。新闻里的 {len(o.event_parts)} 件近期事件把它调整了 {pts} 个百分点（最多上下 5 个）。"
+                         f"影响最大的是：{top.name.zh}（{points_text(top.points)}）。事件由 AI 模型挑选和评分，点数按固定规则换算；这一部分没有和过去对照过。")))
     if line is not None:
         out.append(Chip("past", ("In the past it really happened", "过去实际发生"), (f"about {pct(o.calibrated)}", f"约 {pct(o.calibrated)}"), line))
     other = other_condition(result)
@@ -364,9 +388,9 @@ def calibration_line(result: CaseResult) -> Optional[Pair]:
     o = result.oracle
     if o is None or o.calibrated is None or o.low is None:
         return None
-    return (f"Checked against the past: when this index said {pct(o.low)}, the claim came true about {pct(o.calibrated)} of the time "
+    return (f"Checked against the past: when this index said {pct(o.index)}, the claim came true about {pct(o.calibrated)} of the time "
             "(large US companies that still trade, 2006 to 2025; companies that failed are missing, so this is on the high side).",
-            f"和过去对照：这个指数说 {pct(o.low)} 的时候，实际发生了约 {pct(o.calibrated)}"
+            f"和过去对照：这个指数说 {pct(o.index)} 的时候，实际发生了约 {pct(o.calibrated)}"
             "（2006 到 2025 年、至今仍在交易的美国大公司；倒闭的公司不在其中，所以这个数偏高）。")
 
 

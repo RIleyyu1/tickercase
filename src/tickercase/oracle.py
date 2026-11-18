@@ -12,11 +12,10 @@ M4 history    share of past windows of the same length in which this stock rose 
               as much as needed. Windows overlap heavily, so it is used in the range only when
               the history covers at least 4 non-overlapping windows; otherwise it is context.
 
-The headline is one number, a weighted index of the methods (v0.18.0): 40 % option prices (M1), 40 % the stock's own
-volatility (M2), 15 % the stock's own history (M4) and 5 % the peer base rate (M3). The two market-based methods ask
-the same question of independent data and carry the index; the history and the peer rate are a small part of it, not
-left out, because the backtest (docs/method-backtest.md) found the history only a little high and the volatility method
-low. A method that cannot be computed, or does not apply (M3 for a touch; M4 with fewer than four separate periods),
+The headline starts from one number, a weighted index of the methods (v0.18.1): 35 % option prices (M1), 30 % the
+stock's own volatility (M2), 30 % the stock's own history (M4) and 5 % the peer base rate (M3); the shares follow the
+backtest part of the way (docs/method-backtest.md). Since v0.21.0 the scored events of the catalyst register then move
+that index by a bounded amount (event_tilt.py); ``base`` keeps the index. A method that cannot be computed, or does not apply (M3 for a touch; M4 with fewer than four separate periods),
 drops out and the other weights are scaled up. ``low`` and ``high`` both hold the index; ``spread_low`` and
 ``spread_high`` hold the lowest and highest method. Until v0.16 the headline was that spread itself, which a single
 stock's exceptional history could make twice as wide (NVDA: 35%-75%).

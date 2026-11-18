@@ -301,6 +301,10 @@ def prb_screen(result: CaseResult, zh: bool, anim: bool) -> str:
     if used:
         share = lambda m: (f"×{round(o.weights[m.id] * 100)}%" if o.weights.get(m.id) else "")  # noqa: E731
         lines.append(("", L(zh, "加权计入　", "Weighted　") + " · ".join(f"{m.id} {num_small(p)}{share(m)}" for m, p in used)))
+    if o.event_tilt is not None and o.base is not None:
+        from ..event_tilt import points_text
+        lines.append(("tc-am", L(zh, f"事件调整　指数 {o.base * 100:.1f}% → {o.low * 100:.1f}%（{points_text(o.event_tilt)} 个百分点 · {len(o.event_parts)} 件事 · 见 ④）",
+                                 f"Events　index {o.base * 100:.1f}% → {o.low * 100:.1f}% ({points_text(o.event_tilt)} points · {len(o.event_parts)} events · see ④)")))
     if ref:
         lines.append(("tc-dim", L(zh, "仅作参考　", "Context only　") + " · ".join(f"{m.id} {num_small(p)}" for m, p in ref)))
     _, side_detail = other_side(result, zh)
@@ -560,6 +564,52 @@ STATUS_NAMES = {"upcoming": ("待发生", "upcoming"), "in_progress": ("进行�
 DIRECTION_NAMES = {"up": ("成功利好", "success lifts"), "down": ("成功利空", "success weighs"), "mixed": ("方向不定", "mixed")}
 
 
+def score_text(e, zh: bool) -> str:
+    """The score Claude gave an event: direction and strength, or that it carries none."""
+    if e.strength is None:
+        return L(zh, "未评分", "not scored")
+    if not e.strength or e.effect == "none":
+        return L(zh, "不计分", "no weight")
+    mark = ("▲" if e.effect == "up" else "▼") * int(e.strength)
+    return f"{mark} " + L(zh, f"{'利好' if e.effect == 'up' else '利空'} · 强度 {e.strength}", f"{'up' if e.effect == 'up' else 'down'} · strength {e.strength}")
+
+
+def tilt_block(result: CaseResult, zh: bool) -> str:
+    """What the events do to the main number: the index, the adjustment, and one row per counted event with its points."""
+    from ..event_tilt import CAP, points_text, unscored
+
+    o = result.oracle
+    if o is None or o.low is None or o.basis != "index":
+        return ""
+    base = o.index
+    title = L(zh, "EVT · 事件对主数字的影响", "EVT · what the events do to the main number")
+    if not o.event_parts:
+        n = unscored(result.catalysts, today=result.created_at.date())
+        why = (L(zh, f"事件表里有 {n} 件近 120 天的事还没有评分（旧版本写入）。按「更新事件」后新的事件才会计入。",
+                 f"{n} events of the last 120 days in the register carry no score (written by an older version). Press UPDATE and new events will count.") if n
+               else L(zh, "事件表里没有近 120 天内评过分的事件，主数字等于各方法的指数。",
+                      "The register holds no scored event of the last 120 days; the main number is the index of the methods."))
+        return (f'<div class="tc-rd tc-ph tc-dstrip"><span class="tc-dim tc-small">{esc(title)}</span>'
+                f'<span class="tc-line">{esc(L(zh, "指数", "index"))} {base * 100:.1f}% → {esc(L(zh, "主数字", "main number"))} {o.low * 100:.1f}% '
+                f'<span class="tc-am">(0)</span></span><span class="tc-dim tc-small">{esc(why)}</span></div>')
+    scale = max(abs(p.points) for p in o.event_parts)
+    rows = ""
+    for p in o.event_parts:
+        mark = ("▲" if p.effect == "up" else "▼") * p.strength
+        still = L(zh, " · 未结束 ×1.5", " · still open ×1.5") if p.open else ""
+        detail = (f"{p.day:%m-%d} · {tr(p.name, zh)}{L(zh, '：', ': ')}{tr(p.change, zh)} "
+                  + L(zh, f"（{p.catalyst_id} · {p.age_days} 天前{still}）", f"({p.catalyst_id} · {p.age_days} days ago{still})"))
+        rows += (f'<div class="tc-split"><span>{mark}</span><span class="tc-vt tc-sv">{p.points * 100:+.1f}</span>{dbar(p.points, scale)}'
+                 f'<span class="tc-dim tc-small">{esc(detail)}</span></div>')
+    cut = ""
+    if o.event_raw is not None and abs(o.event_raw - o.event_tilt) > 1e-9:
+        cut = L(zh, f" · 合计 {points_text(o.event_raw)}，按上限截断", f" · the sum is {points_text(o.event_raw)}, cut at the limit")
+    moved = L(zh, f"({points_text(o.event_tilt)} 个百分点 · 上限 ±{CAP * 100:.0f}{cut})", f"({points_text(o.event_tilt)} points · limit ±{CAP * 100:.0f}{cut})")
+    return (f'<div class="tc-rd tc-ph tc-dstrip"><span class="tc-dim tc-small">{esc(title)}</span>'
+            f'<span class="tc-line">{esc(L(zh, "指数", "index"))} {base * 100:.1f}% → {esc(L(zh, "主数字", "main number"))} {o.low * 100:.1f}% '
+            f'<span class="tc-am">{esc(moved)}</span></span><div class="tc-splits">{rows}</div></div>')
+
+
 def reaction_text(r, zh: bool) -> str:
     if r is None:
         return L(zh, "反应：待观察", "reaction: not yet")
@@ -618,7 +668,7 @@ def catalyst_card(c, zh: bool, *, proposed: bool = False) -> str:
     events = "".join(
         f'<div class="tc-catev"><span class="tc-catday">{e.day}</span><div class="tc-col" style="gap:2px;min-width:0">'
         f'<span>{esc(e.change_zh if zh and e.change_zh else e.change_en)}</span>'
-        f'<span class="tc-catsub">{esc(reaction_text(e.reaction, zh))} · {_source_links(e.sources, zh)}</span></div></div>' for e in c.events)
+        f'<span class="tc-catsub">{esc(score_text(e, zh))} · {esc(reaction_text(e.reaction, zh))} · {_source_links(e.sources, zh)}</span></div></div>' for e in c.events)
     problems = "".join(f'<div class="tc-catwarn">⚠ {esc(problem_text(x, zh))}</div>' for x in c.problems)
     ok = "" if c.problems else f'<div class="tc-catok">{esc(L(zh, "核对通过：引用、日期和数字都能在来源里找到", "checks pass: citations, dates and numbers are in the sources"))}</div>'
     return (f'<div class="tc-cat{" tc-catprop" if proposed else ""}">{head}{meta}<p class="tc-catsum">{esc(summary)}</p>'

@@ -16,11 +16,12 @@ Who does what:
   are listed next to the catalyst.
 - Code measures the market reaction to each event (``structure.reaction``: the event day and the next, with the
   part the market and the peers do not explain).
-- The user accepts or rejects each proposal. Accepted ones go into the stock's register, which later runs reuse
-  and update; rejected names are not proposed again.
+- Since v0.21.0 one key does it all: what passes the checks goes into the stock's register (``prune``), what does not
+  is left out and listed. The user can take a catalyst out of the register afterwards.
+- Claude also scores each event (effect, strength). Code turns the scores of recent events into a bounded
+  adjustment of the main number (``event_tilt``). Claude gives no probability.
 
-The probability range is unchanged. A dated catalyst feeds the event scenario: its date, and the move the option
-market prices around that date.
+A dated catalyst also feeds the event scenario: its date, and the move the option market prices around that date.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ from pydantic import BaseModel, ValidationError
 from .models import Catalyst, CatalystEvent, CatalystProposal, CatalystRegister, CatalystSource, FilingRecord, NewsItem
 from .narrative import FALLBACK_MODELS, SCALES, USAGE_FIELDS, _matches, numbers_in, uses_effort  # noqa: F401
 
-PROMPT_VERSION = "2"  # 2: a change of the chief executive or another top leader is a catalyst (kind "leadership")
+PROMPT_VERSION = "3"  # 2: a change of the top leader is a catalyst (kind "leadership"); 3: each event carries effect and strength
 MAX_THEMES = 5
 MAX_CATALYSTS = 6
 MAX_NEWS = 250
@@ -44,6 +45,7 @@ PER_THEME = 45
 KINDS = ("product", "regulatory", "contract", "financing", "deal", "operations", "legal", "leadership", "other")
 STATUSES = ("upcoming", "in_progress", "achieved", "delayed", "cancelled")
 DIRECTIONS = ("up", "down", "mixed")
+EFFECTS = ("up", "down", "none")
 EXPECTED_RE = re.compile(r"^(\d{4})(?:-(H[12]|Q[1-4]|\d{2})(?:-(\d{2}))?)?$")
 
 SCOUT_PROMPT = """You read headlines and sentences from a listed company's press releases.
@@ -58,6 +60,7 @@ Rules:
 - A catalyst is a specific product or program milestone, regulatory decision, contract, acquisition, financing or legal matter whose outcome or timing moves the business. A change of the chief executive or another top leader is a catalyst of kind "leadership": its events are the departure or removal, the interim appointment, each stated step of the search and the appointment of a successor; expected is the stated timing of the successor, if any. Price moves, analyst ratings and general market news are not catalysts.
 - For each catalyst give: a short name; kind; status; expected = the latest stated target timing as YYYY, YYYY-H1, YYYY-H2, YYYY-Q1 to YYYY-Q4, YYYY-MM or YYYY-MM-DD (empty if no source states one); direction = how success would move the price; one summary sentence; source_ids; 1 to 3 search_terms.
 - events = the dated history: each time a source reports a change (a schedule slip, a test result, a milestone reached, a deal signed or closed). date = the date of the source that first reports it. change = one short sentence on what changed. Cite the sources of each event.
+- Score each event. effect = whether this news makes a higher share price more likely ("up"), less likely ("down") or neither ("none"); judge it from what the source reports about the business, not from how the price moved. strength = "0" routine or not important, "1" minor, "2" material to the business, "3" changes the outlook of the whole company (rare). Most events are "0" or "1". You give no probability and no price target.
 - Every number and date you write must appear in the sources you cite.
 - A catalyst already in the confirmed register: return it only if the sources show something new, with updates set to its id and only the new events. Leave updates empty for new catalysts. Do not propose names the user rejected.
 - Write name_en, summary_en and change_en in English, and name_zh, summary_zh and change_zh in Simplified Chinese.
@@ -147,6 +150,8 @@ class _Event(BaseModel):
     change_en: str
     change_zh: str
     source_ids: list[str]
+    effect: str = "none"
+    strength: str = "0"
 
 
 class _Catalyst(BaseModel):
@@ -179,7 +184,9 @@ CATALYSTS_SCHEMA = _obj({"catalysts": {"type": "array", "items": _obj({
     "updates": STR, "name_en": STR, "name_zh": STR, "kind": {"type": "string", "enum": list(KINDS)},
     "status": {"type": "string", "enum": list(STATUSES)}, "expected": STR, "direction": {"type": "string", "enum": list(DIRECTIONS)},
     "summary_en": STR, "summary_zh": STR, "source_ids": STRS, "search_terms": STRS,
-    "events": {"type": "array", "items": _obj({"date": STR, "change_en": STR, "change_zh": STR, "source_ids": STRS})}})}})
+    "events": {"type": "array", "items": _obj({"date": STR, "change_en": STR, "change_zh": STR, "source_ids": STRS,
+                                               "effect": {"type": "string", "enum": list(EFFECTS)},
+                                               "strength": {"type": "string", "enum": ["0", "1", "2", "3"]}})}})}})
 
 
 class CallResult(BaseModel):
@@ -220,10 +227,20 @@ def add_usage(a: dict[str, int], b: dict[str, int]) -> dict[str, int]:
     return {k: a.get(k, 0) + b.get(k, 0) for k in set(a) | set(b)}
 
 
+def found_text(events: Iterable[Any]) -> str:
+    """What the free detector found and the register does not hold, said to the model so that it is not left out (v0.21.0)."""
+    lines = [f"- an 8-K under item 5.02 filed on {e.filing_date} and {e.headlines} headlines since {e.day} that report a change of the "
+             f"{e.role or 'top management'}" for e in events if e.strong and not e.in_register]
+    if not lines:
+        return ""
+    return ("\nFound by code in the filings and headlines, and not in the register yet:\n" + "\n".join(lines)
+            + "\nIf the sources below report it, it must be among the catalysts (kind \"leadership\"), before less important ones.\n")
+
+
 def scout(client: Any, sources: Sequence[CatalystSource], *, company: str, ticker: str, register: Optional[CatalystRegister],
-          model: str, effort: str) -> tuple[list[str], CallResult]:
+          model: str, effort: str, found: str = "") -> tuple[list[str], CallResult]:
     """First call: the main themes and their search words."""
-    user = (f"Company: {company} ({ticker}).\n{register_text(register)}\n\nSources (JSON, one per line):\n{sources_text(sources)}\n\n"
+    user = (f"Company: {company} ({ticker}).\n{register_text(register)}\n{found}\nSources (JSON, one per line):\n{sources_text(sources)}\n\n"
             "Name the catalysts and their search words.")
     res = call(client, model=model, effort=effort, system=SCOUT_PROMPT.format(n=MAX_THEMES), user=user, schema=THEMES_SCHEMA)
     if res.status != "ok":
@@ -241,9 +258,9 @@ def scout(client: Any, sources: Sequence[CatalystSource], *, company: str, ticke
 
 
 def build(client: Any, sources: Sequence[CatalystSource], *, company: str, ticker: str, register: Optional[CatalystRegister],
-          model: str, effort: str) -> tuple[list[Catalyst], CallResult]:
+          model: str, effort: str, found: str = "") -> tuple[list[Catalyst], CallResult]:
     """Second call: the catalysts and their dated events, each citing sources."""
-    user = (f"Company: {company} ({ticker}).\n{register_text(register)}\n\nSources (JSON, one per line):\n{sources_text(sources)}\n\n"
+    user = (f"Company: {company} ({ticker}).\n{register_text(register)}\n{found}\nSources (JSON, one per line):\n{sources_text(sources)}\n\n"
             "Write the catalyst register entries.")
     res = call(client, model=model, effort=effort, system=BUILD_PROMPT.format(n=MAX_CATALYSTS), user=user, schema=CATALYSTS_SCHEMA)
     if res.status != "ok":
@@ -261,8 +278,11 @@ def build(client: Any, sources: Sequence[CatalystSource], *, company: str, ticke
                 day = date.fromisoformat(e.date.strip()[:10])
             except ValueError:
                 continue  # an event without a usable date is dropped; the check below reports it through the count
+            strength = int(e.strength) if e.strength.strip() in ("0", "1", "2", "3") else 0
+            effect = e.effect if e.effect in EFFECTS else "none"
             events.append(CatalystEvent(day=day, change_en=e.change_en.strip(), change_zh=e.change_zh.strip(), source_ids=e.source_ids,
-                                        sources=[by_id[x] for x in e.source_ids if x in by_id]))
+                                        sources=[by_id[x] for x in e.source_ids if x in by_id],
+                                        effect=effect if strength else "none", strength=strength if effect != "none" else 0))
         dropped = len(c.events) - len(events)
         cat = Catalyst(id=f"P{i:02d}", name_en=c.name_en.strip(), name_zh=c.name_zh.strip(), kind=c.kind if c.kind in KINDS else "other",
                        status=c.status if c.status in STATUSES else "upcoming", expected=c.expected.strip() or None,
@@ -378,15 +398,42 @@ def _dedupe_sources(sources: Iterable[CatalystSource]) -> list[CatalystSource]:
     return out
 
 
+_EVENT_FINDING = re.compile(r"event (\d{4}-\d{2}-\d{2}): ")
+_DATE_FINDING = re.compile(r"\d+ event\(s\) without a valid date were dropped")
+
+
+def prune(catalysts: Sequence[Catalyst]) -> tuple[list[Catalyst], list[list[str]]]:
+    """The automatic decision (v0.21.0): what passes the checks is kept, what does not is left out and listed.
+
+    A finding about one event takes out that event only. A finding about the catalyst itself (its sources, its timing,
+    a number in its summary) takes out the catalyst. Returns the catalysts to accept and [id, name_en, name_zh, finding] rows.
+    """
+    kept: list[Catalyst] = []
+    dropped: list[list[str]] = []
+    for c in catalysts:
+        bad_days = {m.group(1) for p in c.problems if (m := _EVENT_FINDING.match(p))}
+        own = [p for p in c.problems if not _EVENT_FINDING.match(p) and not _DATE_FINDING.fullmatch(p)]
+        for p in c.problems:
+            dropped.append([c.id, c.name_en, c.name_zh, p])
+        if own:
+            continue
+        events = [e for e in c.events if e.day.isoformat() not in bad_days]
+        if not events and (c.updates or bad_days):
+            continue  # an update with nothing new that holds up, or a catalyst whose every event failed
+        kept.append(c.model_copy(update={"events": events, "problems": []}))
+    return kept, dropped
+
+
 def merge(register: Optional[CatalystRegister], proposal: CatalystProposal, accepted: Sequence[str], *, ticker: str, company: Optional[str],
-          now: datetime) -> CatalystRegister:
-    """Accepted proposals join the register (new ones get the next C.. id; updates add their new events); rejected new names are remembered."""
+          now: datetime, remember: bool = True) -> CatalystRegister:
+    """Accepted proposals join the register (new ones get the next C.. id; updates add their new events); rejected new names are
+    remembered when the user turned them down (``remember``), not when a check kept them out."""
     reg = register.model_copy(deep=True) if register is not None else CatalystRegister(ticker=ticker, company=company, updated_at=now)
     by_id = {c.id: c for c in reg.catalysts}
     next_n = max([int(c.id[1:]) for c in reg.catalysts if c.id[1:].isdigit()] + [0]) + 1
     for p in proposal.catalysts:
         if p.id not in accepted:
-            if not p.updates and p.name_en not in reg.rejected:
+            if remember and not p.updates and p.name_en not in reg.rejected:
                 reg.rejected.append(p.name_en)
             continue
         target = by_id.get(p.updates or "")

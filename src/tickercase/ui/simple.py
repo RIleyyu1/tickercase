@@ -77,6 +77,8 @@ CSS = """<style>
 .tcs-chip summary b{color:var(--ph);font-size:20px}
 .tcs-chip.past summary b,.tcs-chip.past .k::before{color:var(--am)}
 .tcs-chip.past .k::before{content:"◇ "}
+.tcs-chip.events summary b,.tcs-chip.events .k::before{color:var(--am)}
+.tcs-chip.events .k::before{content:"± "}
 .tcs-chip summary u,.tcs-rc summary u{text-decoration:none;opacity:.7;transition:opacity .15s,scale .15s}
 .tcs-chip summary:hover u,.tcs-rc summary:hover u{opacity:1;scale:1.25}
 .tcs-chip p{margin:8px 0 2px;font-size:16px;line-height:1.6;color:var(--dim)}
@@ -317,7 +319,7 @@ def events(zh: bool, items: list[EventCard]) -> str:
     for n, e in enumerate(items):
         links = " · ".join(f'<a href="{esc(url)}" target="_blank" rel="noopener">{esc(label)}</a>' for label, url in e.sources if url)
         out += (f'<details class="tcs-rc tcs-ev" style="animation-delay:{0.1 + 0.15 * n:.2f}s,{1.2 + 0.8 * n:.1f}s"><summary>'
-                f'<span class="ttl">{esc(e.title[i])}</span><span class="tag">{esc(L(zh, "不计入数字", "not in the number"))}</span>'
+                f'<span class="ttl">{esc(e.title[i])}</span><span class="tag">{esc(e.tag[i])}</span>'
                 + (f'<span class="val">{esc(e.value)}</span>' if e.value else "")
                 + f'<span class="sh">{esc(e.short[i])}</span><u class="more">ⓘ {L(zh, "细节", "details")}</u></summary>'
                 f'<p>{esc(e.full[i])}' + (f"<small>{L(zh, '来源：', 'Sources: ')}{links}</small>" if links else "") + "</p></details>")
