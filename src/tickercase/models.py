@@ -255,6 +255,11 @@ class ReportedFacts(BaseModel):
     revenue: list[MetricPoint] = Field(default_factory=list)
     net_income: list[MetricPoint] = Field(default_factory=list)
     shares_outstanding: list[MetricPoint] = Field(default_factory=list)
+    # since v0.23.0, for the question "how much of what it earns is left for the owners"; empty in cases stored before
+    operating_cash_flow: list[MetricPoint] = Field(default_factory=list)
+    capital_expenditure: list[MetricPoint] = Field(default_factory=list)
+    research_development: list[MetricPoint] = Field(default_factory=list)
+    share_based_compensation: list[MetricPoint] = Field(default_factory=list)
     source_url: str
     retrieved_at: datetime
     source_captured_at: Optional[datetime] = None
@@ -581,6 +586,10 @@ class PriceBaseRate(_Sourced):
     best_return: Optional[DecimalStr] = None
     history_start: date
     touch_hits: Optional[int] = None  # windows whose highest month-end close reached the target
+    # since v0.23.0, for the three outcomes: windows that ended below their start, and those of them in which no
+    # month-end close reached the target either
+    down_windows: Optional[int] = None
+    down_untouched: Optional[int] = None
 
 
 class BenchmarkReturn(BaseModel):

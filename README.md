@@ -42,6 +42,19 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## One path: what the number means, and why (v0.23.0)
+
+The goal of the project grew: a reader should leave knowing what the probability means and what the claim rests on, in place of "I like this sector". The audience is every retail investor, so the page for novices stays the only way in.
+
+- **One path.** The switch between a simple and an expert view is gone. Everyone opens on one sentence and one answer; the pages of the console are the full evidence behind a row of cards (the key "Full evidence"), and one key leads back to the answer.
+- **What the number means** (`outcomes.py`). Under the answer, one bar divided by three outcomes that add up to 100 %: the claim comes true; it does not, and the price ends at or above today's; it does not, and the price ends below today's. Each price method splits its own result three ways (closed forms for the two lognormal methods, counted windows for the stock's own past) and the splits are joined with the weights of the main number. A path that reached the target and fell back below today's price belongs to the first outcome.
+- **Three questions**, each a row of cards with one number and one line:
+  1. *What does today's price already count on?* Today's multiple of yearly revenue (or profit), the growth the target needs at that multiple, how often companies of this size grew that fast, and how fast this one grew.
+  2. *How much of what it earns is left for its owners?* Profit per 100 dollars sold, free cash flow, what goes to research and equipment, and the change in the number of shares over a year. All from the company's annual reports to the SEC (four more XBRL series are read: operating cash flow, capital spending, research and development, share-based pay). A card is left out when the company did not report the figure.
+  3. *How was the number worked out?* The method cards the page had before.
+- Limits: the outcomes are a model output under the assumptions of the methods, without dividends or taxes, and a case stored before this version shows no bar (its history holds no down windows). The cards of question 2 describe one fiscal year. The fundamentals page of the console does not show the cash-flow figures yet; the card's details hold the amounts and the fiscal year.
+- Later versions: who the company competes with, the few numbers that drive its business, a self-check of which of these the reader can answer, and a one-page statement of the reader's own reasons.
+
 ## One machine (v0.22.0)
 
 The simple view was drawn again in Google Stitch: a base screen of the answer page and three directions (quiet instrument, control panel, printout; the screens are in `docs/design/stitch`). The control panel was chosen and written into the existing style sheet by hand. Stitch's markup, fonts and invented figures were not taken; only the look was.

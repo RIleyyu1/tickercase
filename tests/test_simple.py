@@ -140,10 +140,17 @@ def test_one_sentence_one_confirmation_one_answer(simple_env):
     answer = page_text(at)
     assert plain.headline(result).word[0] in answer
     assert "not advice to buy or sell" in answer
-    assert {"btn_s_detail", "btn_s_again"} <= keys(at)
-    # the detailed report is the console's seven pages
-    click(at, "btn_s_detail")
-    assert at.session_state["ui"] == "expert" and "nav_methods" in keys(at)
+    assert {"btn_s_ev_price", "btn_s_ev_money", "btn_s_ev_number", "btn_s_again"} <= keys(at)
+    assert not [r for r in at.radio if r.key == "ui"]          # one path: no switch between two views
+    assert "Three questions" in answer and "How much of what it earns" in answer
+    # a row of cards opens the page of the console that holds its evidence, and one key leads back
+    click(at, "btn_s_ev_number")
+    assert at.session_state["ui"] == "expert" and at.session_state["rpage"] == "methods" and "nav_methods" in keys(at)
+    assert not [r for r in at.radio if r.key == "ui"]
+    click(at, "btn_to_simple")
+    assert at.session_state["ui"] == "simple" and "btn_s_ev_price" in keys(at)
+    click(at, "btn_s_ev_money")
+    assert at.session_state["rpage"] == "fund"
 
 
 def test_a_sentence_without_a_stock_stays_on_the_start_page_and_says_why(simple_env):
@@ -407,3 +414,156 @@ def test_the_control_panel_skin_stays_on_the_simple_pages_and_survives_the_page(
         assert f"@keyframes {name}{{" in sm.CSS and sm.CSS.count(name) >= 2   # every new movement is defined and used
     source = open("app.py", encoding="utf-8").read()
     assert source.count("st.html(sm.SKIN)") == 1 and source.index("if simple:") < source.index("st.html(sm.SKIN)") < source.index("elif not st.session_state[\"booted\"]")
+
+
+# ------------------------------------------------------------------ v0.23.0: what the number means, two more questions
+
+
+def test_the_lognormal_split_adds_up_and_a_path_that_reached_the_target_stays_reached():
+    from tickercase import outcomes
+    from tickercase.oracle import p_end_above, p_touch
+
+    for touch in (True, False):
+        for vol, years, rate in ((0.5149, 3.0, 0.0507), (0.2, 1.0, 0.0), (0.9, 5.0, 0.03)):
+            reach, between, below = outcomes.lognormal_split(150.96, 300.0, vol, years, rate, touch)
+            assert abs(reach + between + below - 1) < 1e-9 and min(reach, between, below) >= 0
+            down = 1 - p_end_above(150.96, 150.96, vol, years, rate)
+            if touch:
+                assert reach == p_touch(150.96, 300.0, vol, years, rate) and below < down   # some paths reached it and fell back
+            else:
+                assert reach == p_end_above(150.96, 300.0, vol, years, rate) and below == down
+
+
+def test_the_reflection_formula_agrees_with_a_simulation():
+    import math
+    import random
+    from tickercase import outcomes
+
+    rng = random.Random(7)
+    spot, target, vol, years, rate, steps, paths = 100.0, 160.0, 0.5, 2.0, 0.04, 500, 4000
+    dt = years / steps
+    drift, sd = (rate - vol * vol / 2) * dt, vol * math.sqrt(dt)
+    b = math.log(target / spot)
+    reach = below = 0
+    for _ in range(paths):
+        x = top = 0.0
+        for _ in range(steps):
+            x += drift + sd * rng.gauss(0, 1)
+            top = max(top, x)
+        if top >= b:
+            reach += 1
+        elif x < 0:
+            below += 1
+    r, _, z = outcomes.lognormal_split(spot, target, vol, years, rate, True)
+    # a path watched at 500 moments misses some highs, so the simulated share of reached paths is a little low
+    assert abs(reach / paths - r) < 0.04 and abs(below / paths - z) < 0.04
+
+
+def test_down_windows_are_counted_beside_the_hits():
+    from datetime import date
+    from decimal import Decimal
+    from tickercase.providers.market import price_down_windows, price_touch_hits
+
+    closes = [(date(2020, 1 + i, 1), p) for i, p in enumerate([100, 80, 220, 90, 95, 70, 60])]
+    # windows of 2 months, a rise of 100 % needed: starts 100, 80, 220, 90, 95
+    assert price_touch_hits(closes, 2, Decimal("1")) == 2                  # 100 -> 220 and 80 -> 220
+    assert price_down_windows(closes, 2, Decimal("1")) == (3, 3)            # 220 -> 95, 90 -> 70, 95 -> 60; none of them reached
+    assert price_down_windows(closes, 3, Decimal("1")) == (3, 2)            # 100 -> 90 reached 220 on the way
+    assert price_down_windows(closes[:2], 2, Decimal("1")) == (0, 0)
+
+
+def test_the_three_outcomes_add_up_to_100_and_start_from_the_main_number(tmp_path):
+    from tickercase import outcomes, plain
+    from tickercase.ui import simple as sm
+
+    seen = 0
+    for c in cases_of(tmp_path):
+        three = outcomes.three(c)
+        said = plain.outcomes(c)
+        if three is None:
+            assert said is None
+            continue
+        assert abs(three.reach + three.between + three.below - 1) < 1e-9 and three.reach == c.oracle.low
+        assert "M3" not in three.methods and set(three.methods) <= set(c.oracle.weights)
+        if said is None:
+            continue
+        seen += 1
+        lead, items, how = said
+        assert [x.key for x in items] == ["reach", "between", "below"] and sum(x.share for x in items) == 100
+        assert items[0].share == round(c.oracle.low * 100)
+        for zh in (True, False):
+            html = sm.outcomes(zh, lead, items, how)
+            assert html.count('class="tcs-leg"') == 1 and all(f"{x.share}%" in html for x in items)
+    assert seen >= 1
+    # a method of the index that cannot be split (a case stored before v0.23.0 holds no down windows; an input is missing):
+    # the card is left out, never worked out from part of the index
+    whole = next(c for c in cases_of(tmp_path) if outcomes.three(c) is not None)
+    for mid in outcomes.three(whole).methods:
+        if mid == "M4":
+            broken = whole.model_copy(update={"price_base_rate": whole.price_base_rate.model_copy(update={"down_windows": None, "down_untouched": None})})
+        else:
+            methods = [m.model_copy(update={"inputs": {}}) if m.id == mid else m for m in whole.oracle.methods]
+            broken = whole.model_copy(update={"oracle": whole.oracle.model_copy(update={"methods": methods})})
+        assert outcomes.three(broken) is None and plain.outcomes(broken) is None
+
+
+def test_the_cards_of_the_two_questions_come_from_the_companys_own_reports(tmp_path):
+    from decimal import Decimal
+    from tickercase import plain
+    from tickercase.models import MetricPoint
+    from tickercase.ui import simple as sm
+
+    c = cases_of(tmp_path)[0]
+    facts = c.reported_facts
+    rev = facts.revenue[-1]
+
+    def point(value, concept):
+        return MetricPoint(period_start=rev.period_start, period_end=rev.period_end, value=Decimal(value), unit="USD", concept=concept, form="10-K",
+                           accession="0000000000-26-000001", filed=rev.filed)
+
+    sales = float(rev.value)
+    full = c.model_copy(update={"reported_facts": facts.model_copy(update={
+        "operating_cash_flow": [point(str(round(sales * 0.4)), "NetCashProvidedByUsedInOperatingActivities")],
+        "capital_expenditure": [point(str(round(sales * 0.1)), "PaymentsToAcquirePropertyPlantAndEquipment")],
+        "research_development": [point(str(round(sales * 0.15)), "ResearchAndDevelopmentExpense")]})})
+    titles = [r.title[0] for r in plain.money_cards(full)]
+    assert "Cash left over" in titles and "What it spends to stay ahead" in titles and "Of every $100 it sells" in titles
+    cash = next(r for r in plain.money_cards(full) if r.title[0] == "Cash left over")
+    assert "30%" in cash.short[0]                                           # 40 % in, 10 % spent on equipment
+    spend = next(r for r in plain.money_cards(full) if r.title[0] == "What it spends to stay ahead")
+    assert spend.value == "25%"
+    # without the cash-flow figures the cards that need them are left out; nothing is made up
+    assert "Cash left over" not in [r.title[0] for r in plain.money_cards(c)]
+    for r in plain.money_cards(full) + plain.price_cards(full):
+        assert r.sign in "+-0" and r.title and r.value and r.short and r.text[0] and r.text[1]
+        if r.tag is not None:                                               # a fact: a plate of its own, never "for" or "against"
+            html = sm.reasons(False, [r])
+            assert "· " + r.tag[0] in html and "+ For" not in html and "Against" not in html
+    price = plain.price_cards(full)
+    assert price[0].title[0] == "The price today" and price[0].value[0].endswith("×") and price[0].value[1].endswith("倍")
+    # every reason of the page before is still on it, in one of the two rows
+    old = {r.title for r in plain.reasons(c)}
+    assert old == {r.title for r in plain.number_cards(c)} | {r.title for r in plain.price_cards(c) if r.tag is None}
+
+
+def test_the_sec_provider_reads_cash_flow_capital_spending_and_research():
+    import inspect
+    from datetime import datetime, timezone
+    from tickercase.http_client import FetchedJson
+    from tickercase.models import DataMode
+    from tickercase.providers.sec_facts import SecCompanyFactsProvider
+
+    def rows(value):
+        return {"units": {"USD": [{"start": "2025-01-01", "end": "2025-12-31", "val": value, "form": "10-K", "filed": "2026-02-01", "accn": "0000000000-26-000001", "fy": 2025, "fp": "FY"},
+                                  {"start": "2025-10-01", "end": "2025-12-31", "val": 1, "form": "10-K", "filed": "2026-02-01", "accn": "0000000000-26-000001"}]}}
+
+    payload = {"entityName": "Example Corp", "facts": {"us-gaap": {
+        "Revenues": rows(1000), "NetIncomeLoss": rows(200), "NetCashProvidedByUsedInOperatingActivities": rows(300),
+        "PaymentsToAcquireProductiveAssets": rows(50), "ResearchAndDevelopmentExpense": rows(120), "ShareBasedCompensation": rows(30)}, "dei": {}}}
+    kw = {"url": "https://data.sec.gov/api/xbrl/companyfacts/CIK0000000001.json", "payload": payload, "retrieved_at": datetime(2026, 3, 1, tzinfo=timezone.utc),
+          "source_captured_at": None, "data_mode": list(DataMode)[0]}
+    fetched = FetchedJson(**{k: v for k, v in kw.items() if k in inspect.signature(FetchedJson).parameters})
+    facts = SecCompanyFactsProvider(client=None, resolver=object()).parse("EXM", "0000000001", "Example Corp", fetched)
+    assert [float(p.value) for p in facts.operating_cash_flow] == [300] and [float(p.value) for p in facts.capital_expenditure] == [50]
+    assert [float(p.value) for p in facts.research_development] == [120] and [float(p.value) for p in facts.share_based_compensation] == [30]
+    assert facts.capital_expenditure[0].concept == "PaymentsToAcquireProductiveAssets"     # the second concept, when the first is not reported

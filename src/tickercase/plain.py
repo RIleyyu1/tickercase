@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
 
-from . import fmt
+from . import fmt, outcomes as outcomes_model
 from .models import CaseResult, ClaimDraft
 from .event_tilt import points_text
 from .oracle import MIN_INDEPENDENT_WINDOWS, independent_windows
@@ -22,7 +22,7 @@ from .tiers import TIERS, tier
 
 Pair = tuple[str, str]
 __all__ = ["TIERS", "tier", "pct", "rate", "headline", "claim_sentence", "reasons", "other_condition", "why_a_range", "calibration_line", "index_parts", "answer_chips", "major_event_cards",
-           "assumptions", "restate"]
+           "assumptions", "restate", "outcomes", "number_cards", "price_cards", "money_cards"]
 
 
 def pct(p: float) -> str:
@@ -105,8 +105,9 @@ class Reason:
     counted: bool = False         # part of the main number (True) or shown for context (False)
     weight: Optional[float] = None  # its share of the main number, 0.42 = 42 %
     title: Optional[Pair] = None    # the card of this reason in the simple view: two or three words,
-    value: Optional[str] = None     # the one number of the reason, written large,
+    value: Optional[object] = None  # the one number of the reason, written large (a pair when the two languages write it differently),
     short: Optional[Pair] = None    # and one short line; the full sentence and the note open under the card
+    tag: Optional[Pair] = None      # the plate of the card when it is a fact and not a reason for or against ("today", "needs")
 
 
 def _sign(p: float) -> str:
@@ -299,8 +300,8 @@ def major_event_cards(result: CaseResult) -> list[EventCard]:
                     f"{e.filing_date} 公司向监管机构报告了高管变动（8-K 表第 5.02 项），近期有 {e.headlines} 条新闻标题报道 {role[1]} 变动。{moved[1]}"
                     f"这件事已经在这只股票的事件表里，近期事件合计把上面的数字调整了 {pts} 个百分点（最多上下 5 个）。")
         else:
-            full = (full[0] + " To let it count, open the events page of the expert view and press UPDATE.",
-                    full[1] + "要让它计入，到专家视图的事件页按「更新事件」。")
+            full = (full[0] + " To let it count, press \"Full evidence\", open the events page and press UPDATE.",
+                    full[1] + "要让它计入，点「看完整依据」，到事件页按「更新事件」。")
         out.append(EventCard((f"Big news: change of {role[0]}", f"最近的大事：{role[1]} 变动"), value, short, full, sources, tag))
     return out
 
@@ -463,3 +464,204 @@ def restate(draft: ClaimDraft, *, company: Optional[str], deadline: Optional[str
     return Restated(ticker=(draft.ticker or "").strip().upper(), company=company, target=str(draft.target_price or "").strip(),
                     currency=(draft.currency or "USD").strip() or "USD", deadline=deadline, touch=(draft.price_condition or "end") == "touch",
                     reference=str(draft.reference_price or "").strip() or None, needed=needed)
+
+
+# ------------------------------------------------------------------ v0.23.0: what the number means, and two more questions
+
+
+@dataclass(frozen=True)
+class Outcome:
+    key: str        # "reach", "between", "below"
+    share: int      # whole percent; the three add up to 100
+    title: Pair
+    text: Pair
+
+
+def outcomes(result: CaseResult) -> Optional[tuple[Pair, list[Outcome], Pair]]:
+    """(the sentence above the bar, the three outcomes, how they were worked out), or None when there is nothing to show."""
+    o = result.oracle
+    three = outcomes_model.three(result)
+    if three is None or not 0.01 <= three.reach <= 0.99:
+        return None
+    c = result.confirmed_claim.values
+    price = format(c.target_price.normalize(), "f")
+    spot = f"{o.spot:g}" if o.spot else format(c.reference_price.normalize(), "f")
+    a = round(three.reach * 100)
+    z = min(round(three.below * 100), 100 - a)
+    m = 100 - a - z
+    lead = (f"If you buy today and hold until {o.target_date}, by the same methods the three outcomes are:",
+            f"如果今天买入并拿到 {o.target_date}，按同样的算法，三种结局的可能性是：")
+    if three.touch:
+        first = Outcome("reach", a, (f"It gets to {price} {c.currency} on the way", f"中途到过 {price} {c.currency}"),
+                        ("The claim comes true. After that the price can still fall back.", "也就是这句话成真。到过之后还可能再跌回来。"))
+        never = ("It never got there", "中途没到过")
+    else:
+        first = Outcome("reach", a, (f"It closes at {price} {c.currency} or higher on the last day", f"到期那天收盘不低于 {price} {c.currency}"),
+                        ("The claim comes true.", "也就是这句话成真。"))
+        never = ("It closes below the target", "收盘低于目标价")
+    items = [first,
+             Outcome("between", m, (f"Short of {price}, but above today's price", f"没到 {price}，但高于今天的价格"),
+                     (f"{never[0]}, and on the last day the price is at or above today's {spot}.", f"{never[1]}，期末不低于今天的 {spot}。")),
+             Outcome("below", z, ("Below today's price on the last day", "期末低于今天的价格"),
+                     (f"{never[0]}, and the holding ends at a loss.", f"{never[1]}，最后还亏了。"))]
+    names = "、".join(SHORT_NAMES[x][1] for x in three.methods)
+    names_en = ", ".join(SHORT_NAMES[x][0] for x in three.methods)
+    how = (f"The three add up to 100%. Each price method ({names_en}) splits its own result three ways and the splits are joined with the weights of the main number. "
+           "Dividends and taxes are left out, and the past and today's option prices do not promise what comes next.",
+           f"三个数加起来是 100%。每种看价格的算法（{names}）各自把结果分成三份，再按主数字的权重合在一起。没有算分红和税；过去的表现和今天的期权价格都不保证以后。")
+    return lead, items, how
+
+
+def number_cards(result: CaseResult) -> list[Reason]:
+    """The reasons that say how the main number was worked out: the methods, and what is counted in it."""
+    return [r for r in reasons(result) if r.counted or r.page != "fund"]
+
+
+def money(x) -> Pair:
+    """An amount in US dollars in the words of each language ('$215.9B', '2159 亿美元')."""
+    v = float(x)
+    sign, a = ("-" if v < 0 else ""), abs(v)
+    if a >= 1e12:
+        en, zh = f"{a / 1e12:.2f}T", f"{a / 1e12:.2f} 万亿"
+    elif a >= 1e9:
+        en, zh = f"{a / 1e9:.1f}B", (f"{a / 1e8:.0f} 亿" if a >= 1e10 else f"{a / 1e8:.1f} 亿")
+    elif a >= 1e6:
+        en, zh = f"{a / 1e6:.0f}M", (f"{a / 1e8:.1f} 亿" if a >= 1e8 else f"{a / 1e4:.0f} 万")
+    else:
+        en, zh = f"{a:,.0f}", f"{a:,.0f} "
+    return (f"{sign}${en}", f"{sign}{zh}美元")
+
+
+def _fact(tag: Pair, title: Pair, value: str, short: Pair, text: Pair, note: Optional[Pair] = None) -> Reason:
+    return Reason("0", text, "fund", note, False, None, title, value, short, tag)
+
+
+def _at(series, end):
+    return next((p for p in series if p.period_end == end), None)
+
+
+def price_cards(result: CaseResult) -> list[Reason]:
+    """Question 1, what the price already counts on: today's multiple, the growth the target needs, and how often such
+    growth happened (the two business reasons the page already had)."""
+    out: list[Reason] = []
+    cc, facts, o = result.confirmed_claim, result.reported_facts, result.oracle
+    if cc is None:
+        return out
+    c = cc.values
+    sales = c.valuation_method.metric_name == "annual_revenue"
+    metric = ("revenue", "收入") if sales else ("profit", "利润")
+    series = (facts.revenue if sales else facts.net_income) if facts is not None else []
+    base = series[-1] if series else None
+    spot = o.spot if (o is not None and o.spot) else float(c.reference_price)
+    shares = facts.shares_outstanding[-1] if (facts is not None and facts.shares_outstanding) else None
+    if base is not None and shares is not None and float(base.value) > 0:
+        cap = spot * float(shares.value)
+        mult = cap / float(base.value)
+        cap_t, val_t = money(cap), money(base.value)
+        out.append(_fact(
+            ("today", "现状"), ("The price today", "今天的价格"), (f"{mult:.1f}×", f"{mult:.1f} 倍"),
+            (f"the market pays ${mult:.1f} for each $1 of yearly {metric[0]}", f"市场为它每 1 美元的年{metric[1]}付 {mult:.1f} 美元"),
+            (f"At {spot:g} a share the market values the whole company at about {cap_t[0]}. Its {metric[0]} in the fiscal year ending {base.period_end} "
+             f"was {val_t[0]}, so the market pays about {mult:.1f} dollars for each dollar of yearly {metric[0]}.",
+             f"按每股 {spot:g} 计算，市场给整家公司的估价约 {cap_t[1]}。截至 {base.period_end} 的财年，公司的{metric[1]}是 {val_t[1]}，"
+             f"也就是每 1 美元的年{metric[1]}，市场付了约 {mult:.1f} 美元。"),
+            (f"The share count is the one on the cover of the latest filing ({shares.form}, filed {shares.filed}). The higher this number, the more growth the price already counts on.",
+             f"股数取自最近一份申报文件的封面（{shares.form}，{shares.filed} 提交）。这个倍数越高，价格里已经算进去的增长就越多。")))
+    need = next((x for x in result.calculations if x.name.startswith("required_annual_") and x.status == "ok" and x.value is not None), None)
+    growth = next((x for x in result.calculations if x.name == "required_metric_cagr" and x.status == "ok" and x.value is not None), None)
+    if need is not None and growth is not None and base is not None and float(growth.value) > 0:
+        price = format(c.target_price.normalize(), "f")
+        a, b = money(base.value), money(need.value)
+        mult_assumed = format(c.valuation_multiple.normalize(), "f")
+        out.append(_fact(
+            ("needs", "需要"), (f"To be worth {price}", f"要值 {price} {c.currency}"), f"{fmt.pct(float(growth.value), 0, signed=True)}",
+            (f"a year: yearly {metric[0]} from {a[0]} to {b[0]}, if it is valued as today", f"每年：年{metric[1]}要从 {a[1]} 涨到 {b[1]}（假设估值倍数不变）"),
+            (f"For a price of {price} to rest on the business, at {mult_assumed} dollars of market value for each dollar of yearly {metric[0]}, the company would have to "
+             f"bring in {b[0]} a year by the deadline. It brought in {a[0]} in the fiscal year ending {base.period_end}. That is growth of about {rate(growth.value)} a year.",
+             f"股价 {price} 要有业绩支撑，按每 1 美元年{metric[1]}对应 {mult_assumed} 美元市值计算，公司到期时每年的{metric[1]}要达到 {b[1]}。"
+             f"截至 {base.period_end} 的财年是 {a[1]}。这相当于每年增长约 {rate(growth.value)}。"),
+            ("If investors pay a higher multiple by then, less growth is needed; with a lower multiple, more.",
+             "如果到时候市场愿意付更高的倍数，需要的增长就少一些；倍数变低，需要的就更多。")))
+    return out + [r for r in reasons(result) if not (r.counted or r.page != "fund")]
+
+
+def money_cards(result: CaseResult) -> list[Reason]:
+    """Question 2, how much of what the company earns is left for its owners: profit per 100 of sales, free cash flow,
+    what it spends to stay ahead, and whether the number of shares grows. Every figure is the company's own, from its
+    annual reports to the SEC; a card is left out when the company did not report the figure."""
+    out: list[Reason] = []
+    facts = result.reported_facts
+    if facts is None or not facts.revenue:
+        return out
+    rev = facts.revenue[-1]
+    end, sales = rev.period_end, float(rev.value)
+    if sales <= 0:
+        return out
+    year = (f"the fiscal year ending {end}", f"截至 {end} 的财年")
+    tag_m = ("reported", "财报")
+    ni = _at(facts.net_income, end)
+    if ni is not None:
+        per = float(ni.value) / sales * 100
+        a, b = money(ni.value), money(rev.value)
+        if per >= 0:
+            out.append(_fact(tag_m, ("Of every $100 it sells", "每卖出 100 美元"), (f"${per:.0f}", f"{per:.0f} 美元"),
+                             ("is left as profit", "留下的利润"),
+                             (f"In {year[0]} the company sold {b[0]} and kept {a[0]} as profit: about {per:.0f} dollars of every 100.",
+                              f"{year[1]}，公司卖出 {b[1]}，留下 {a[1]} 的利润：每 100 美元里约 {per:.0f} 美元。"),
+                             ("Profit follows accounting rules; the cash that came in can be more or less (see the next card).",
+                              "利润按会计规则计算，实际收到的现金可能更多或更少（见下一张卡片）。")))
+        else:
+            out.append(_fact(tag_m, ("Of every $100 it sells", "每卖出 100 美元"), (f"-${-per:.0f}", f"-{-per:.0f} 美元"),
+                             ("it loses this much", "亏掉这么多"),
+                             (f"In {year[0]} the company sold {b[0]} and lost {money(-float(ni.value))[0]}: about {-per:.0f} dollars for every 100 it sold.",
+                              f"{year[1]}，公司卖出 {b[1]}，亏损 {money(-float(ni.value))[1]}：每卖出 100 美元约亏 {-per:.0f} 美元。"),
+                             ("A company that loses money has to pay for itself with its cash, new debt or new shares.",
+                              "亏损的公司要靠手里的现金、借债或发新股来维持。")))
+    ocf, capex = _at(facts.operating_cash_flow, end), _at(facts.capital_expenditure, end)
+    if ocf is not None and capex is not None:
+        fcf = float(ocf.value) - float(capex.value)
+        a, b, c3 = money(fcf), money(ocf.value), money(capex.value)
+        out.append(_fact(tag_m, ("Cash left over", "真正剩下的现金"), a,
+                         (f"free cash flow: {fmt.pct(fcf / sales, 0)} of what it sold", f"自由现金流：相当于收入的 {fmt.pct(fcf / sales, 0)}"),
+                         (f"In {year[0]} the business brought in {b[0]} in cash and spent {c3[0]} on buildings and equipment. What is left, {a[0]}, is its free cash flow: "
+                          "the cash it can return to its owners, keep, or use to pay debt.",
+                          f"{year[1]}，公司的经营带来 {b[1]} 的现金，其中 {c3[1]} 花在厂房和设备上。剩下的 {a[1]} 就是自由现金流：可以还给股东、留在账上，或者还债。"),
+                         ("One year can be unusual; a company that is building fast shows little free cash for a while.",
+                          "单独一年可能不典型；正在大举扩张的公司，一段时间内自由现金流会很少。")))
+    rd = _at(facts.research_development, end)
+    if rd is not None or capex is not None:
+        spent = (float(rd.value) if rd is not None else 0.0) + (float(capex.value) if capex is not None else 0.0)
+        parts_en = " and ".join(x for x in (f"{money(rd.value)[0]} on research and development" if rd is not None else "",
+                                            f"{money(capex.value)[0]} on buildings and equipment" if capex is not None else "") if x)
+        parts_zh = "，".join(x for x in (f"研发 {money(rd.value)[1]}" if rd is not None else "", f"厂房和设备 {money(capex.value)[1]}" if capex is not None else "") if x)
+        out.append(_fact(tag_m, ("What it spends to stay ahead", "为了保持领先花掉的"), fmt.pct(spent / sales, 0),
+                         ("of what it sold goes to research and equipment" if rd is not None else "of what it sold goes to buildings and equipment",
+                          "的收入花在研发和设备上" if rd is not None else "的收入花在厂房和设备上"),
+                         (f"In {year[0]} the company spent {parts_en}: together {fmt.pct(spent / sales, 0)} of what it sold.",
+                          f"{year[1]}，公司的投入是：{parts_zh}，合计相当于收入的 {fmt.pct(spent / sales, 0)}。"),
+                         ("A business that has to keep spending this much to hold its place leaves less for its owners than its sales suggest.",
+                          "一门生意如果必须一直这样投入才能守住位置，留给股东的就比收入看上去的少。")))
+    pts = facts.shares_outstanding
+    if len(pts) >= 2:
+        last = pts[-1]
+        before = [p for p in pts[:-1] if 300 <= (last.period_end - p.period_end).days <= 430]
+        if before and float(last.value) > 0:
+            prev = min(before, key=lambda p: abs((last.period_end - p.period_end).days - 365))
+            change = float(last.value) / float(prev.value) - 1
+            if abs(change) <= 0.5:   # a larger change is a share split, which the cover-page counts do not adjust for
+                sbc = _at(facts.share_based_compensation, end)
+                paid = ((f" It paid its staff {money(sbc.value)[0]} in shares in {year[0]} ({fmt.pct(float(sbc.value) / sales, 0)} of what it sold).",
+                         f"{year[1]}它用股票给员工发了 {money(sbc.value)[1]} 的报酬（相当于收入的 {fmt.pct(float(sbc.value) / sales, 0)}）。") if sbc is not None else ("", ""))
+                if change < -0.0005:
+                    short = ("fewer shares than a year ago: each share owns a little more", "股数比一年前少：每一股占的份额变大了")
+                elif change > 0.0005:
+                    short = ("more shares than a year ago: each share owns a little less", "股数比一年前多：每一股占的份额变小了")
+                else:
+                    short = ("about as many shares as a year ago", "股数和一年前差不多")
+                out.append(_fact(tag_m, ("The number of shares", "股票的数量"), fmt.pct(change, 1, signed=True), short,
+                                 (f"The company reported {float(last.value) / 1e6:,.0f} million shares on {last.period_end} and {float(prev.value) / 1e6:,.0f} million on {prev.period_end}." + paid[0],
+                                  f"公司在 {last.period_end} 报告的股数是 {float(last.value) / 1e8:.2f} 亿股，{prev.period_end} 是 {float(prev.value) / 1e8:.2f} 亿股。" + paid[1]),
+                                 ("When a company issues new shares, each old share owns a smaller part of it; when it buys shares back, a larger part.",
+                                  "公司发新股时，原来每一股占的份额会变小；回购股票时，份额会变大。")))
+    return out
+

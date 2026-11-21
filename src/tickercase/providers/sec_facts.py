@@ -37,6 +37,11 @@ REVENUE_CONCEPTS = (
     "SalesRevenueNet",
 )
 NET_INCOME_CONCEPTS = ("NetIncomeLoss", "ProfitLoss")
+# since v0.23.0: what the business brings in as cash and what it spends to keep going (each list in the order tried)
+OPERATING_CASH_FLOW_CONCEPTS = ("NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations")
+CAPITAL_EXPENDITURE_CONCEPTS = ("PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets")
+RESEARCH_DEVELOPMENT_CONCEPTS = ("ResearchAndDevelopmentExpense", "ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost")
+SHARE_BASED_COMPENSATION_CONCEPTS = ("ShareBasedCompensation", "AllocatedShareBasedCompensationExpense")
 ANNUAL_FORMS = ("10-K", "10-K/A")
 SHARE_FORMS = ("10-K", "10-K/A", "10-Q", "10-Q/A")
 ANNUAL_MIN_DAYS = 330
@@ -173,6 +178,10 @@ class SecCompanyFactsProvider(Provider):
         return ReportedFacts(
             provider_id=self.provider_id, ticker=ticker.strip().upper(), cik=cik, company_name=name,
             revenue=revenue, net_income=net_income, shares_outstanding=shares,
+            operating_cash_flow=annual_series(gaap, OPERATING_CASH_FLOW_CONCEPTS),
+            capital_expenditure=annual_series(gaap, CAPITAL_EXPENDITURE_CONCEPTS),
+            research_development=annual_series(gaap, RESEARCH_DEVELOPMENT_CONCEPTS),
+            share_based_compensation=annual_series(gaap, SHARE_BASED_COMPENSATION_CONCEPTS),
             source_url=url, retrieved_at=fetched.retrieved_at, source_captured_at=fetched.source_captured_at,
             data_mode=fetched.data_mode, notes=notes,
         )

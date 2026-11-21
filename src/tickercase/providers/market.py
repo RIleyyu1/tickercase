@@ -280,3 +280,19 @@ def price_touch_hits(closes: list[tuple[date, float]], months: int, required_ret
         return 0
     need = 1 + float(required_return)
     return sum(1 for i in range(len(closes) - months) if max(c for _, c in closes[i + 1: i + months + 1]) / closes[i][1] >= need)
+
+
+def price_down_windows(closes: list[tuple[date, float]], months: int, required_return: Decimal) -> tuple[int, int]:
+    """(windows that ended below their start, those of them in which no month-end close reached the required rise)."""
+    if months < 1 or len(closes) <= months:
+        return 0, 0
+    need = 1 + float(required_return)
+    down = untouched = 0
+    for i in range(len(closes) - months):
+        start = closes[i][1]
+        path = [c for _, c in closes[i + 1: i + months + 1]]
+        if path[-1] < start:
+            down += 1
+            if max(path) / start < need:
+                untouched += 1
+    return down, untouched

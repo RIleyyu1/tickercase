@@ -55,7 +55,7 @@ S = {
     "s_yes": ("对，开始分析", "Yes, start"),
     "s_edit": ("改一下", "Change it"),
     "s_edit_done": ("收起", "Hide"),
-    "s_more": ("更多假设（专家）", "More assumptions (expert)"),
+    "s_more": ("更多假设", "More assumptions"),
     "s_back": ("◀ 换一句话", "◀ Another sentence"),
     "s_missing": ("还缺{what}，请在下面填上。", "Still needed: {what}. Please fill it in below."),
     "s_m_target": ("目标价（涨到多少）", "the price it should reach"),
@@ -63,8 +63,8 @@ S = {
     "s_basis": ("主数字由这些算法加权得出", "The main number is a weighted average of these"),
     "s_context": ("其他参考", "Also worth knowing"),
     "s_m_horizon": ("期限（几年）", "the time (in years)"),
-    "s_no_data": ("这只股票的财务数据暂时取不到，简单模式算不了。可以换一只股票，或点“更多假设（专家）”手动填写。",
-                  "The financial figures of this stock could not be fetched, so the simple view cannot work it out. Try another stock, or press “More assumptions (expert)” to fill them in."),
+    "s_no_data": ("这只股票的财务数据暂时取不到，简单模式算不了。可以换一只股票，或点“更多假设”手动填写。",
+                  "The financial figures of this stock could not be fetched, so the simple view cannot work it out. Try another stock, or press “More assumptions” to fill them in."),
     "s_defaults": ("公司、价格、期限和“怎样才算”都可以改：点“改一下”。其余的假设先用默认值，答案页会列出来。",
                    "The company, the price, the date and what counts can be changed: press “Change it”. Other assumptions use default values, which the answer page lists."),
     "s_need_text": ("先写一句话，或点一个例句。", "Write a sentence first, or press one of the examples."),
@@ -73,7 +73,16 @@ S = {
     "s_down": ("这句话说的是下跌（“{w}”）。这里目前只能检查“涨到”或“不低于”某个价格的说法，例如“特斯拉明年年底到 500 美元”。",
                "This sentence is about a fall (“{w}”). For now only claims that a price is reached or held can be checked, for example “Tesla will reach $500 by the end of next year”."),
     "s_reasons": ("主要理由", "Main reasons"),
-    "s_detail": ("看详细依据（7 页报告）→", "See the detailed report (7 pages) →"),
+    "s_mean_h": ("这个数字对你意味着什么", "What this number means for you"),
+    "s_why_h": ("想知道为什么？三个问题", "Want to know why? Three questions"),
+    "s_why_lead": ("每张卡片是一个数字和一句话。想看算法和原始数据，点「看完整依据」。", "Each card is one number and one line. For the method and the raw data, press \"Full evidence\"."),
+    "s_q_price": ("现在的价格已经算进了什么？", "What does today's price already count on?"),
+    "s_q_money": ("它赚的钱有多少留给股东？", "How much of what it earns is left for its owners?"),
+    "s_q_number": ("{p} 是怎么算出来的？", "How was {p} worked out?"),
+    "s_q_none": ("这次没有取到回答这个问题的数据。", "The data for this question could not be fetched this time."),
+    "s_evidence": ("看完整依据 →", "Full evidence →"),
+    "s_to_answer": ("◀ 回到答案", "◀ Back to the answer"),
+    "s_to_answer_help": ("回到一页的答案：数字、三种结局和三个问题。", "Back to the one-page answer: the number, the three outcomes and the three questions."),
     "s_again": ("换一句话", "Another sentence"),
     "s_assume": ("我们替你做了 {n} 个假设", "We made {n} assumptions for you"),
     "s_not_advice": ("这是根据公开数据算出的可能性，不是买卖建议。数据截至 {d}。", "This is a likelihood worked out from public data, not advice to buy or sell. Data as of {d}."),
@@ -1307,8 +1316,7 @@ def bridge_unit(*, result_page: bool, warn: int) -> None:
         with right, st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small"):
             if result_page:
                 st.button(t("back_new"), key="btn_new", on_click=_new_claim, help=t("back_new_help"))
-            st.radio(t("ui"), options=["simple", "expert"], key="ui", horizontal=True, label_visibility="collapsed", on_change=_ui_changed,
-                     format_func=labels({"simple": S["ui_simple"], "expert": S["ui_expert"]}))
+            st.button(t("s_to_answer"), key="btn_to_simple", on_click=_to_simple, help=t("s_to_answer_help"))
             st.radio(t("view"), options=["new", "history", "sys"], key="view", horizontal=True, label_visibility="collapsed",
                      format_func=labels({"new": S["view_new"], "history": S["view_history"], "sys": S["view_sys"]}))
             st.radio(t("tube"), options=["grn", "amb"], format_func=lambda x: "GRN" if x == "grn" else "AMB", key="tube", horizontal=True,
@@ -2805,12 +2813,13 @@ SIMPLE_EXAMPLES = (("英伟达三年内会涨到 300 美元", "NVDA will hit $30
                    ("苹果两年内翻倍", "Apple doubles within 2 years"))
 
 
-def _ui_changed() -> None:
+def _to_simple() -> None:
+    """From a page of evidence back to the one path (since v0.23.0 there is no switch between two views)."""
+    st.session_state["ui"] = "simple"
     st.session_state["booted"] = True  # the start-up screen is for a session that opens on the console
-    if st.session_state["ui"] == "simple":
-        st.session_state["view"] = "new"
-        if st.session_state["page"] == "run" and not st.session_state["run_pending"]:
-            st.session_state["page"] = "check"
+    st.session_state["view"] = "new"
+    if st.session_state["page"] == "run" and not st.session_state["run_pending"]:
+        st.session_state["page"] = "check"
 
 
 def _simple_read() -> None:
@@ -2867,11 +2876,9 @@ def _to_expert(page: str, rpage: Optional[str] = None) -> None:
 
 def simple_bridge() -> None:
     with st.container(key="u-c-bridge"):
-        left, right = st.columns([3, 2], vertical_alignment="center")
+        left, right = st.columns([4, 1], vertical_alignment="center")
         left.markdown(sm.bridge(zh()), unsafe_allow_html=True)
         with right, st.container(horizontal=True, horizontal_alignment="right", vertical_alignment="center", gap="small"):
-            st.radio(t("ui"), options=["simple", "expert"], key="ui", horizontal=True, label_visibility="collapsed", on_change=_ui_changed,
-                     format_func=labels({"simple": S["ui_simple"], "expert": S["ui_expert"]}))
             st.radio(t("language"), options=["zh", "en"], format_func=lambda x: "中" if x == "zh" else "EN", key="lang", horizontal=True,
                      label_visibility="collapsed")
 
@@ -3008,9 +3015,23 @@ def view_simple_answer(result: CaseResult) -> None:
     with st.container(key="u-c-ans"):
         html_block(sm.answer_screen(zh(), head, plain.claim_sentence(result), plain.answer_chips(result), plain.index_parts(result),
                                     result.oracle.calibrated if result.oracle is not None else None))
+    means = plain.outcomes(result)
+    if means is not None:
+        with st.container(key="u-b-mean"):
+            html_block(f'<h2 class="tcs-h2">{esc(t("s_mean_h"))}</h2>' + sm.outcomes(zh(), *means))
     with st.container(key="u-b-why"):
         html_block(sm.events(zh(), plain.major_event_cards(result)))
-        html_block(f'<h2 class="tcs-h2">{esc(t("s_reasons"))}</h2>' + sm.reasons(zh(), plain.reasons(result), t("s_basis"), t("s_context")))
+        html_block(f'<h2 class="tcs-h2">{esc(t("s_why_h"))}</h2><p class="tcs-lead" style="margin:6px 0 0">{esc(t("s_why_lead"))}</p>')
+        number = head.range_text[1 if zh() else 0].replace("about ", "").replace("大约 ", "").replace("roughly ", "")
+        rows = (("price", t("s_q_price"), plain.price_cards(result), "fund"), ("money", t("s_q_money"), plain.money_cards(result), "fund"),
+                ("number", t("s_q_number", p=number), plain.number_cards(result), "methods"))
+        for n, (name, title, cards, page) in enumerate(rows, start=1):
+            with st.container(key=f"s-q-{name}"):
+                with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+                    html_block(sm.question(n, title))
+                    st.space("stretch")
+                    st.button(t("s_evidence"), key=f"btn_s_ev_{name}", on_click=_to_expert, args=("result", page))
+                html_block(sm.reasons(zh(), cards) if cards else sm.none_yet(t("s_q_none")))
         made = plain.assumptions(result)
         if made:
             with st.expander(t("s_assume", n=len(made))):
@@ -3021,13 +3042,12 @@ def view_simple_answer(result: CaseResult) -> None:
         if "synthetic" in result.data_modes.values():
             st.caption(t("s_synthetic"))
         with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-            st.button(t("s_detail"), key="btn_s_detail", type="primary", on_click=_to_expert, args=("result", "answer"))
-            st.button(t("s_again"), key="btn_s_again", on_click=_new_claim)
+            st.button(t("s_again"), key="btn_s_again", type="primary", on_click=_new_claim)
         as_of = result.market.last_date if result.market is not None else result.created_at.date()  # the day of the latest price used
         html_block(sm.warn(t("s_not_advice", d=f"{as_of:%Y-%m-%d}")))
     footer_unit()
     _sync_url()
-    st.html(ck.page_css([("u-c-ans", 4), ("u-b-why", 5)]))
+    st.html(ck.page_css([("u-c-ans", 4), ("u-b-mean", 5), ("u-b-why", 6 if means is not None else 5)]))
 
 
 def view_simple(result: Optional[CaseResult], current: bool) -> None:

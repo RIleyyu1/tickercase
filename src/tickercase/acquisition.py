@@ -64,7 +64,7 @@ from .models import (
 from .providers.base import ProviderError
 from .providers.calendar import EarningsCalendarProvider
 from .providers.insiders import InsiderProvider
-from .providers.market import CHART_URL, MONTHLY_URL, YahooChartProvider, monthly_closes, price_base_rate, price_touch_hits, yahoo_symbol
+from .providers.market import CHART_URL, MONTHLY_URL, YahooChartProvider, monthly_closes, price_base_rate, price_down_windows, price_touch_hits, yahoo_symbol
 from .providers.news import NewsProvider, company_query_name
 from .providers.options import YahooOptionsProvider
 from .providers.sec import SecFilingProvider, SecFilingQuery
@@ -349,11 +349,12 @@ def fetch_price_base_rate(fetcher: JsonFetcher, claim, months: int, spot: Decima
     required = claim.target_price / spot - 1
     windows, hits, med, best = price_base_rate(closes, months, required)
     touch_hits = price_touch_hits(closes, months, required) if months >= 2 else None
+    down, down_untouched = price_down_windows(closes, months, required) if windows else (None, None)
     return PriceBaseRate(
         symbol=yahoo_symbol(claim.ticker), window_months=months, windows=windows, hits=hits, rate=hits / windows if windows else None,
         required_return=required.quantize(Decimal("0.0001")), median_return=Decimal(str(round(med, 4))) if med is not None else None,
         best_return=Decimal(str(round(best, 4))) if best is not None else None, history_start=closes[0][0] if closes else date.today(),
-        touch_hits=touch_hits,
+        touch_hits=touch_hits, down_windows=down, down_untouched=down_untouched if months >= 2 else None,
         source_url=url, retrieved_at=fetched.retrieved_at, source_captured_at=fetched.source_captured_at, data_mode=fetched.data_mode)
 
 

@@ -12,13 +12,16 @@ Since v0.22.0 the view reads as one machine (the "control panel" direction drawn
 three lamps come on one after the other, the screen sits in a bezel with screws, a reason card is a meter module with a
 stamped plate and a segmented gauge, and a key travels when it is pressed. ``SKIN`` holds the rules that restyle
 Streamlit's own widgets; app.py adds it on the simple pages only, so the console keeps its keys.
+
+Since v0.23.0 the answer page says what the number means (a bar of three outcomes that add up to 100 %) and asks three
+questions, each with a row of cards; the pages of the console are the full evidence behind a row.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from ..plain import Chip, EventCard, Headline, Part, Reason, Restated, pct, rate
+from ..plain import Chip, EventCard, Headline, Outcome, Part, Reason, Restated, pct, rate
 from .cockpit import L, esc
 
 CSS = """<style>
@@ -139,6 +142,33 @@ CSS = """<style>
 .tcs-rc.tcs-ev .tag{color:#6B4E22}.tcs-rc.tcs-ev .val{font-size:38px;color:#7A2D14}
 .tcs-rc.tcs-ev a{color:#6B4E22}
 .tcs-rc.sm .val{font-size:32px}
+.tcs-out{display:flex;height:66px;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);margin:12px 0 14px;overflow:hidden;background:#24211A}
+.tcs-out span{display:flex;align-items:center;justify-content:center;min-width:0;font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:700;color:var(--ink);
+  border-right:3px solid var(--ink);box-sizing:border-box;transform-origin:left;animation:tcs-grow .7s cubic-bezier(.2,.8,.2,1) both}
+.tcs-out span:last-child{border-right:0}
+.tcs-out .reach,.tcs-leg .reach i{background:#74C98A}.tcs-out .between,.tcs-leg .between i{background:#D8CEB2}.tcs-out .below,.tcs-leg .below i{background:#D98A6C}
+.tcs-out .thin{font-size:0}
+.tcs-leg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start;font-family:'Noto Serif SC',Georgia,serif;color:var(--ink)}
+.tcs-leg div{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:center;animation:tcs-in .5s ease-out both}
+.tcs-leg i{width:16px;height:16px;border:2px solid var(--ink);box-sizing:border-box}
+.tcs-leg b{font-size:17px;font-weight:900;line-height:1.35}
+.tcs-leg b u{text-decoration:none;font-family:'IBM Plex Mono',monospace;margin-right:8px}
+.tcs-leg span{grid-column:2;font-size:15px;line-height:1.5;color:#3A3327}
+.tcs-how{margin-top:12px;font-family:'Noto Serif SC',Georgia,serif;color:var(--ink)}
+.tcs-how summary{list-style:none;cursor:pointer;display:inline-flex;gap:8px;align-items:baseline;font-size:14px;font-weight:700;color:#6B4E22;border-bottom:1px dashed #6B4E22}
+.tcs-how summary::-webkit-details-marker{display:none}
+.tcs-how p{margin:8px 0 0;font-size:14.5px;line-height:1.6;color:#3A3327}
+.tcs-q{display:flex;align-items:center;gap:12px;margin:6px 0 0}
+.tcs-q i{flex:0 0 auto;font-style:normal;font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;box-sizing:border-box;background:#C49A4A;border:3px solid var(--ink);box-shadow:inset 0 3px 0 #DDB86C,inset 0 -4px 0 #9A7634,2px 2px 0 #0C0B09;color:#241702}
+.tcs-q h3{font-family:'Noto Serif SC',Georgia,serif;font-size:22px;line-height:1.3;font-weight:900;margin:0;padding:0;color:var(--ink)}
+.tcs-none{font-family:'Noto Serif SC',Georgia,serif;font-size:15px;line-height:1.6;color:#5C5340;margin:0}
+[class*="st-key-s-q-"]{gap:10px;margin-top:18px}
+[class*="st-key-s-q-"] .tcs-cards{align-items:stretch}
+.st-key-u-b-why [data-testid="stExpander"]{margin-top:14px}
+[class*="st-key-s-q-"] .tcs-cards{margin-bottom:0}
+[class*="st-key-btn_s_ev_"] button{min-height:36px;padding:2px 12px 6px!important;font-size:13px}
+@media (max-width:900px){.tcs-leg{grid-template-columns:1fr}}
 .tcs-warn{font-family:'Noto Serif SC',Georgia,serif;font-size:15px;line-height:1.6;background:rgba(255,246,214,.6);border:2px solid #A2401F;color:#7A2D14;padding:8px 12px;
   display:flex;gap:10px;align-items:baseline;box-shadow:3px 3px 0 var(--ink)}
 .tcs-warn::before{content:"!";flex:0 0 auto;width:20px;height:20px;line-height:20px;text-align:center;background:#A2401F;color:#FFF6D6;font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700}
@@ -337,6 +367,28 @@ def answer_screen(zh: bool, h: Headline, claim: tuple[str, str], chips: Optional
                + (f'<div class="tcs-chips">{chip_html}</div>' if chip_html else ""), live=True)
 
 
+def outcomes(zh: bool, lead: tuple[str, str], items: list[Outcome], how: tuple[str, str]) -> str:
+    """What the number means: one bar divided by the three outcomes, their words under it, how it was worked out under ⓘ.
+    A part too narrow for its figure keeps the figure in the list under the bar only."""
+    i = 1 if zh else 0
+    bar = "".join(f'<span class="{x.key}{" thin" if x.share < 7 else ""}" style="width:{x.share}%;animation-delay:{0.15 + 0.25 * n:.2f}s">{x.share}%</span>'
+                  for n, x in enumerate(items) if x.share > 0)
+    leg = "".join(f'<div class="{x.key}" style="animation-delay:{0.3 + 0.25 * n:.2f}s"><i></i><b><u>{x.share}%</u>{esc(x.title[i])}</b><span>{esc(x.text[i])}</span></div>'
+                  for n, x in enumerate(items))
+    said = L(zh, "三种结局：", "Three outcomes: ") + L(zh, "，", ", ").join(f"{x.title[i]} {x.share}%" for x in items)
+    return (f'<p class="tcs-lead" style="margin:6px 0 0">{esc(lead[i])}</p><div class="tcs-out" role="img" aria-label="{esc(said)}">{bar}</div>'
+            f'<div class="tcs-leg">{leg}</div>'
+            f'<details class="tcs-how"><summary>ⓘ {esc(L(zh, "这三个数是怎么来的", "How these three were worked out"))}</summary><p>{esc(how[i])}</p></details>')
+
+
+def question(n: int, title: str) -> str:
+    return f'<div class="tcs-q"><i>{n}</i><h3>{esc(title)}</h3></div>'
+
+
+def none_yet(text: str) -> str:
+    return f'<p class="tcs-none">{esc(text)}</p>'
+
+
 def reasons(zh: bool, items: list[Reason], basis: str = "", context: str = "") -> str:
     """The reasons as cards in two groups: what the main number rests on, then the numbers shown for context.
     A card shows a title, one number and one line; the full sentence and the limit of the number open under ⓘ."""
@@ -347,6 +399,8 @@ def reasons(zh: bool, items: list[Reason], basis: str = "", context: str = "") -
 
     def card(r: Reason, n: int, small: bool) -> str:
         tag, cls = word[r.sign]
+        if r.tag is not None:           # a fact about the company, not a reason for or against the claim
+            tag, cls = "· " + r.tag[i], "n"
         title = r.title[i] if r.title else tag
         share = ""
         if r.weight:
@@ -355,7 +409,7 @@ def reasons(zh: bool, items: list[Reason], basis: str = "", context: str = "") -
         body = esc(r.text[i]) + (f"<small>{esc(r.note[i])}</small>" if r.note else "")
         return (f'<details class="tcs-rc {cls}{" sm" if small else ""}" style="--d:{0.25 + 0.18 * n:.2f}s;animation-delay:{0.25 + 0.18 * n:.2f}s,{1.5 + 0.8 * n:.1f}s">'
                 f'<summary><span class="ttl">{esc(title)}</span><span class="tag">{esc(tag)}</span>'
-                + (f'<span class="val">{esc(r.value)}</span>' if r.value else "")
+                + (f'<span class="val">{esc(r.value if isinstance(r.value, str) else r.value[i])}</span>' if r.value else "")
                 + (f'<span class="sh">{esc(r.short[i])}</span>' if r.short else "")
                 + f'{share}<u class="more">ⓘ {L(zh, "细节", "details")}</u></summary><p>{body}</p></details>')
 
