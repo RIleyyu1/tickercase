@@ -42,6 +42,23 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## Two lanes: the SEC and the market sources are asked side by side (v0.24.0)
+
+A trade study (Lab Manual Chapter 11) settled how A2 asks its sources. Three alternatives were measured with 10 live runs each on 2026-11-21:
+
+| Alternative | RUN to the report, mean | Range |
+|---|---|---|
+| AL.1 Sequential (the product until now) | 27.3 s | 26.7 to 28.3 s |
+| AL.2 Parallel by source | 19.6 s | 18.6 to 25.7 s |
+| AL.3 Parallel, half the spacing to the market source | 16.7 s | 15.0 to 24.9 s |
+
+AL.2 was selected by a swing weight matrix over five criteria (time, standing with the market source, completion when a source is down, the same record on replay, life cycle cost) and is the default. The decision, the criteria, the measures, the sources checked and what the other two would have required are in `docs/decisions/0001-acquisition-mode.md`; the judgments and figures are in `docs/decisions/0001-inputs.json` and `python scripts/trade_study.py` recomputes every table.
+
+- `TICKERCASE_ACQUISITION=sequential` brings the old order back. Both modes must write the same case (`tests/test_acquisition_mode.py`).
+- Each source keeps its own fetcher and its own request spacing, so no source is asked faster than before.
+- A failure in one lane is counted against that lane's step only, and the page is told of progress from the calling thread only.
+- Not done: `scripts/timing_report.py` adds the waits of the two lanes together, so its "own work" figure is wrong for a parallel run; A4 still sends its 14 follow-up requests after A2.
+
 ## One path: what the number means, and why (v0.23.0)
 
 The goal of the project grew: a reader should leave knowing what the probability means and what the claim rests on, in place of "I like this sector". The audience is every retail investor, so the page for novices stays the only way in.

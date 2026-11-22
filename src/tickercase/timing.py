@@ -59,14 +59,13 @@ class Timeline:
         self.started_at = datetime.now(timezone.utc)
         self.t0 = time.perf_counter()
         self.spans: list[dict[str, Any]] = []
-        self.depth = 0
 
     def now(self) -> float:
         return time.perf_counter() - self.t0
 
-    def add(self, participant: str, stage: str, start: float, end: float, **detail: Any) -> None:
+    def add(self, participant: str, stage: str, start: float, end: float, depth: int = 1, **detail: Any) -> None:
         self.spans.append({"participant": participant, "stage": stage, "start": round(start, 6), "end": round(end, 6),
-                           "depth": self.depth + 1, **detail})
+                           "depth": depth, **detail})
 
     def write(self) -> Path:
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -79,6 +78,9 @@ class Timeline:
 
 
 _active: ContextVar[Optional[Timeline]] = ContextVar("tickercase_timeline", default=None)
+# the nesting level is kept per context, so two lanes of A2 that run side by side (each in a copy of the caller's
+# context) nest their own spans and do not disturb each other's
+_depth: ContextVar[int] = ContextVar("tickercase_timeline_depth", default=0)
 
 
 def active() -> Optional[Timeline]:
@@ -117,12 +119,13 @@ def span(participant: str, stage: str, **detail: Any) -> Iterator[None]:
         yield
         return
     start = timeline.now()
-    timeline.depth += 1
+    level = _depth.get()
+    token = _depth.set(level + 1)
     try:
         yield
     finally:
-        timeline.depth -= 1
-        timeline.add(participant, stage, start, timeline.now(), **detail)
+        _depth.reset(token)
+        timeline.add(participant, stage, start, timeline.now(), level + 1, **detail)
 
 
 def note(key: str, value: Any) -> None:

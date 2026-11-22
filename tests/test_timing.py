@@ -47,8 +47,16 @@ def test_one_case_writes_one_timeline_with_every_subsystem(tmp_path, monkeypatch
     # A2 holds its four sub-functions in order, each performed by its component
     a2 = next(s for s in top if s["participant"] == "C.2")
     inside = [s for s in spans if s["depth"] == 2 and a2["start"] <= s["start"] and s["end"] <= a2["end"]]
-    assert [s["participant"] for s in inside] == ["C.2.1", "C.2.2", "C.2.3", "C.2.4"]
-    assert [s["stage"][:4] for s in inside] == ["A2.1", "A2.2", "A2.3", "A2.4"]
+    # since v0.24.0 the first two run side by side (docs/decisions/0001-acquisition-mode.md): one span of C.2 holds both lanes
+    assert [s["participant"] for s in inside] == ["C.2", "C.2.3", "C.2.4"]
+    both = inside[0]
+    lanes = sorted((s for s in spans if s["depth"] == 3 and s["participant"] in ("C.2.1", "C.2.2")), key=lambda s: s["participant"])
+    assert [s["stage"][:4] for s in lanes] == ["A2.1", "A2.2"]
+    assert all(both["start"] <= s["start"] and s["end"] <= both["end"] + 1e-6 for s in lanes)
+    assert [s["stage"][:4] for s in inside[1:]] == ["A2.3", "A2.4"]
+    # a guarded step of a lane nests inside its own lane, never inside the other
+    for step in (s for s in spans if s["stage"].startswith("guarded step") and s["depth"] == 4):
+        assert sum(1 for lane in lanes if lane["start"] <= step["start"] and step["end"] <= lane["end"] + 1e-6) >= 1
     # replayed snapshots are read by the snapshot store, not asked from an outside service
     assert any(s["stage"] == "snapshot read" and s["participant"] == "C.2.4" for s in spans)
     assert not any(s["stage"] == "request" for s in spans)

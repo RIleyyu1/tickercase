@@ -1,0 +1,196 @@
+{
+ "decision": "How A2 Acquire Dated Evidence (C.2) asks its sources",
+ "status_of_judgments": "The importance levels and the hours below are proposals awaiting the team's confirmation (2026-11-21). The raw figures of EC.1 to EC.4 are measured or read from the product.",
+ "alternatives": [
+  {
+   "id": "AL.1",
+   "name": "Sequential acquisition",
+   "setting": "TICKERCASE_ACQUISITION=sequential",
+   "timing_folder": "ch11_a_sequential",
+   "model": "SC.1"
+  },
+  {
+   "id": "AL.2",
+   "name": "Parallel acquisition by source",
+   "setting": "TICKERCASE_ACQUISITION=parallel",
+   "timing_folder": "ch11_b_parallel",
+   "model": "SC.2"
+  },
+  {
+   "id": "AL.3",
+   "name": "Parallel acquisition with half the market request spacing",
+   "setting": "TICKERCASE_ACQUISITION=parallel, TICKERCASE_MARKET_MIN_INTERVAL_SECONDS=0.25",
+   "timing_folder": "ch11_c_parallel_fast",
+   "model": "SC.2 with the shorter spacing (no scenario of its own)"
+  }
+ ],
+ "importance_levels": {
+  "critical": "the product fails its purpose without it",
+  "important": "the product is clearly worse without it",
+  "useful": "good to have"
+ },
+ "variation_levels": {
+  "large": "the alternatives differ by a large part of the acceptable range",
+  "medium": "they differ, and no alternative leaves the acceptable range",
+  "small": "they are equal or nearly equal"
+ },
+ "swing_matrix": {
+  "large": {
+   "critical": 100,
+   "important": 60,
+   "useful": 30
+  },
+  "medium": {
+   "critical": 75,
+   "important": 45,
+   "useful": 20
+  },
+  "small": {
+   "critical": 50,
+   "important": 25,
+   "useful": 10
+  }
+ },
+ "criteria": [
+  {
+   "id": "EC.1",
+   "name": "Time to the answer",
+   "metric": "mean time from RUN pressed to the report ready, live sources",
+   "unit": "s",
+   "worst": 30,
+   "best": 10,
+   "importance": "critical",
+   "variation": "large",
+   "traces": [
+    "NFR.1",
+    "MOS.1",
+    "N6",
+    "CR.2.0.1"
+   ],
+   "raw": {
+    "AL.1": 27.3,
+    "AL.2": 19.6,
+    "AL.3": 16.7
+   },
+   "source": "Measured: 10 live runs of each alternative on 2026-11-21 (data/timings/ch11_*, scripts/measure_runs.py). Worst level = the limit of NFR.1; best level = an assumption (a wait a first-time reader accepts without a progress page)."
+  },
+  {
+   "id": "EC.2",
+   "name": "Standing with the market data source",
+   "metric": "peak request rate to the source that publishes no limit",
+   "unit": "requests/s",
+   "worst": 10,
+   "best": 2,
+   "importance": "critical",
+   "variation": "medium",
+   "traces": [
+    "NFR.3",
+    "MOS.3",
+    "N10",
+    "TR.1"
+   ],
+   "raw": {
+    "AL.1": 2,
+    "AL.2": 2,
+    "AL.3": 4
+   },
+   "source": "Read from the product: one request each 0.5 s (settings.market_min_interval_seconds) is 2 a second; 0.25 s is 4 a second. Best level = the rate the product has run at since October with no throttled response in 50 measured runs. Worst level = an assumption: Yahoo publishes no rate, and its terms restrict automated access (legal.yahoo.com terms, section 2(d), read 2026-11-21); 10 a second is the SEC's stated maximum, taken as the outer bound."
+  },
+  {
+   "id": "EC.3",
+   "name": "Completion when a source is down",
+   "metric": "share of the other source's steps that still end ok when one source refuses every request",
+   "unit": "%",
+   "worst": 0,
+   "best": 100,
+   "importance": "important",
+   "variation": "small",
+   "traces": [
+    "NFR.2",
+    "MOS.2",
+    "SS.2.5",
+    "CR.2.5.1"
+   ],
+   "raw": {
+    "AL.1": 100,
+    "AL.2": 100,
+    "AL.3": 100
+   },
+   "source": "Measured by test: tests/test_acquisition_mode.py::test_a_source_that_is_down_costs_only_its_own_steps, both modes, each source down in turn. AL.3 runs the code of AL.2."
+  },
+  {
+   "id": "EC.4",
+   "name": "Same record on replay",
+   "metric": "share of a replayed case's fields equal to the sequential record, clock times apart",
+   "unit": "%",
+   "worst": 0,
+   "best": 100,
+   "importance": "important",
+   "variation": "small",
+   "traces": [
+    "NFR.9",
+    "MOS.9",
+    "SR.1.6.4"
+   ],
+   "raw": {
+    "AL.1": 100,
+    "AL.2": 100,
+    "AL.3": 100
+   },
+   "source": "Measured by test: tests/test_acquisition_mode.py::test_both_modes_write_the_same_case and ::test_the_evidence_query_reads_the_same_in_both_modes."
+  },
+  {
+   "id": "EC.5",
+   "name": "Life cycle cost",
+   "metric": "team hours to build and keep for two years",
+   "unit": "h",
+   "worst": 40,
+   "best": 0,
+   "importance": "important",
+   "variation": "medium",
+   "traces": [
+    "N9",
+    "NFR.8",
+    "CR.2.0.2"
+   ],
+   "raw": {
+    "AL.1": 0,
+    "AL.2": 12,
+    "AL.3": 20
+   },
+   "source": "Assumption (hours, see life_cycle_cost). No alternative adds a paid source or a paid request (CR.2.0.2)."
+  }
+ ],
+ "cost_criterion": "EC.5",
+ "life_cycle_cost": {
+  "years": 2,
+  "rate_usd_per_hour": 50,
+  "budget_hours": 40,
+  "hours": {
+   "AL.1": {
+    "build": 0,
+    "upkeep_per_year": 0
+   },
+   "AL.2": {
+    "build": 8,
+    "upkeep_per_year": 2
+   },
+   "AL.3": {
+    "build": 8,
+    "upkeep_per_year": 6
+   }
+  },
+  "paid_services_usd_per_year": {
+   "AL.1": 0,
+   "AL.2": 0,
+   "AL.3": 0
+  },
+  "assumptions": [
+   "Hours are extra hours over the sequential product; the upkeep both share is left out.",
+   "Build: writing, reviewing and testing the two lanes (124 lines added, 25 removed in three files, and 11 tests).",
+   "Upkeep of AL.2: keeping the lane code and its tests working as steps are added.",
+   "Upkeep of AL.3: the same, and watching for throttled responses and retuning the spacing when the source changes its behaviour.",
+   "Rate: 50 USD an hour, a stand-in for a graduate engineer's time. Budget: 40 hours, what the team can still give this term."
+  ]
+ }
+}

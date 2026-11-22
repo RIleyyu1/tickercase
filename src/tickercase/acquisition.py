@@ -31,6 +31,10 @@ Each source fails on its own and is reported as a source error record; no other 
 
 from __future__ import annotations
 
+import queue
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -163,12 +167,12 @@ def mode_of(present: bool, modes: set[str], data_mode_setting: str) -> str:
 class _QueryLog:
     """A fetcher that writes every requested URL to the Evidence Query (O IO.6) before it asks the source."""
 
-    def __init__(self, fetcher: JsonFetcher, log: list[str]):
+    def __init__(self, fetcher: JsonFetcher, log: Callable[[str], None]):
         self._fetcher = fetcher
         self._log = log
 
     def get_json(self, url: str):
-        self._log.append(url)
+        self._log(url)
         return self._fetcher.get_json(url)
 
     def __getattr__(self, name: str):
@@ -182,15 +186,33 @@ class SourceGateway:
         self._open = source_evidence
         self.data_mode_setting = data_mode_setting
         self.provider_access_terms = provider_access_terms
-        self.evidence_query: list[str] = []
+        self.evidence_query: list[str] = []          # O IO.6; it keeps growing while later steps ask their sources
+        self._lanes: list[int] = []                  # the lane of each entry of the Evidence Query
+        self._lane = threading.local()
+        self._lock = threading.RLock()
         self._fetchers: dict[str, _QueryLog] = {}
         self._guarded: dict[str, Optional[JsonFetcher]] = {}
 
+    def lane(self, number: int) -> None:
+        """Name the lane of the calling thread. The Evidence Query lists lane 1 before lane 2, whichever asked first,
+        so the record of a run reads the same in both acquisition modes."""
+        self._lane.number = number
+
+    def _note(self, url: str) -> None:
+        lane = getattr(self._lane, "number", 99)
+        with self._lock:
+            at = len(self._lanes)
+            while at > 0 and self._lanes[at - 1] > lane:
+                at -= 1
+            self._lanes.insert(at, lane)
+            self.evidence_query.insert(at, url)
+
     def __call__(self, source: str) -> JsonFetcher:
-        if source not in self._fetchers:
-            fetcher = self._open(self.data_mode_setting, self.provider_access_terms, source)
-            self._fetchers[source] = _QueryLog(fetcher, self.evidence_query)
-        return self._fetchers[source]
+        with self._lock:
+            if source not in self._fetchers:
+                fetcher = self._open(self.data_mode_setting, self.provider_access_terms, source)
+                self._fetchers[source] = _QueryLog(fetcher, self._note)
+            return self._fetchers[source]
 
     def guarded(self, source: str, provider_id: str, guard: "SourceGuard") -> Optional[JsonFetcher]:
         """The fetcher of a source, or None when it cannot be opened; the failure is recorded once."""
@@ -229,23 +251,55 @@ class SourceGuard:
         self.source_error_records: list[ProviderErrorRecord] = []
         self.steps: dict[str, str] = {}
         self._progress = progress or (lambda step, state: None)
+        self._lock = threading.Lock()
+        self._failed: dict[str, list[ProviderErrorRecord]] = {}   # the failures of each named step, its own only
+        self._lane = threading.local()
+        self._lane_of: dict[int, int] = {}                        # id of a failure record -> the lane that met it
+
+    def lane(self, number: int) -> None:
+        self._lane.number = number
+
+    def in_lane_order(self) -> None:
+        """Put the failures of lane 1 before those of lane 2, whichever met its failure first, so the record of a run
+        reads the same in both acquisition modes. The list object stays the same one."""
+        with self._lock:
+            self.source_error_records[:] = sorted(self.source_error_records, key=lambda r: self._lane_of.get(id(r), 99))
 
     def call(self, provider_id: str, call: Callable[[], T]) -> Optional[T]:
-        return isolate(provider_id, self.data_mode_setting, self.source_error_records, call)
+        value, _ = self._isolated(provider_id, call)
+        return value
+
+    def _isolated(self, provider_id: str, call: Callable[[], T]) -> tuple[Optional[T], list[ProviderErrorRecord]]:
+        """One request and the failures of this request alone. Two lanes may run at once: a failure in the other lane
+        must not be counted against this step, so each call collects its own and adds them to the record under a lock."""
+        own: list[ProviderErrorRecord] = []
+        value = isolate(provider_id, self.data_mode_setting, own, call)
+        if own:
+            with self._lock:
+                for record in own:
+                    self._lane_of[id(record)] = getattr(self._lane, "number", 99)
+                self.source_error_records.extend(own)
+        return value, own
 
     def step(self, name: str, provider_id: str, call: Callable[[], T]) -> Optional[T]:
         """A named request: reported to the page as running, then ok or failed."""
         self._progress(name, "running")
-        before = len(self.source_error_records)
         with timing.span("C.2.5", f"guarded step {name}", provider=provider_id):
-            value = self.call(provider_id, call)
-        self.steps[name] = "ok" if value is not None and len(self.source_error_records) == before else "failed"
+            value, own = self._isolated(provider_id, call)
+        self._failed[name] = own
+        self.steps[name] = "ok" if value is not None and not own else "failed"
         self._progress(name, self.steps[name])
         return value
 
+    def failures(self, name: str) -> list[ProviderErrorRecord]:
+        """The failures recorded by one named step."""
+        return list(self._failed.get(name, []))
+
     def settle(self, name: str) -> None:
-        """Take back the last failure of a step that turned out to be an answer (an empty calendar is not an outage)."""
-        self.source_error_records.pop()
+        """Take back the failure of a step that turned out to be an answer (an empty calendar is not an outage)."""
+        with self._lock:
+            for record in self._failed.pop(name, []):
+                self.source_error_records[:] = [r for r in self.source_error_records if r is not record]
         self.steps[name] = "ok"
         self._progress(name, "ok")
 
@@ -400,7 +454,7 @@ def request_market_and_option_data(confirmed_claim: ConfirmedClaim, sources: Sou
         out.benchmarks = guard.step("benchmarks", MARKET_PROVIDER_ID, lambda: fetch_benchmarks(market, months))
     out.earnings = guard.step("earnings_date", EarningsCalendarProvider.provider_id, lambda: EarningsCalendarProvider(
         sources("options")).next_earnings(claim.ticker, today=today))
-    errors = guard.source_error_records
+    errors = guard.failures("earnings_date")
     if out.earnings is None and errors and errors[-1].code == "no_earnings_date":
         # the calendar answered, it just has no date yet: a note, not a failed source (CR.2.3.2)
         guard.settle("earnings_date")
@@ -492,12 +546,50 @@ def acquire_dated_evidence(
     now = now or utcnow()
     today = today or now.date()
     sources = SourceGateway(source_evidence, data_mode_setting, provider_access_terms)
-    guard = SourceGuard(data_mode_setting, progress)                                                       # A2.5
     notes: list[tuple[str, str]] = []
-    with timing.span("C.2.1", "A2.1 Request Filings and Reported Facts"):
-        filing_records = request_filings_and_reported_facts(confirmed_claim, sources, guard, today=today)      # A2.1
-    with timing.span("C.2.2", "A2.2 Request Market and Option Data"):
-        market_records = request_market_and_option_data(confirmed_claim, sources, guard, today=today, notes=notes)  # A2.2
+
+    def a21(guard: SourceGuard) -> FilingRecords:
+        sources.lane(1)
+        guard.lane(1)
+        with timing.span("C.2.1", "A2.1 Request Filings and Reported Facts"):
+            return request_filings_and_reported_facts(confirmed_claim, sources, guard, today=today)            # A2.1
+
+    def a22(guard: SourceGuard) -> MarketRecords:
+        sources.lane(2)
+        guard.lane(2)
+        with timing.span("C.2.2", "A2.2 Request Market and Option Data"):
+            return request_market_and_option_data(confirmed_claim, sources, guard, today=today, notes=notes)   # A2.2
+
+    if getattr(provider_access_terms, "acquisition_mode", "sequential") == "parallel":
+        # The SEC lane and the market lane ask different hosts through different fetchers, so each keeps the request
+        # spacing its source asks for. The page is told of every step from this thread: the lanes only queue the news.
+        told: "queue.Queue[tuple[str, str]]" = queue.Queue()
+        guard = SourceGuard(data_mode_setting, lambda step, state: told.put((step, state)))                 # A2.5
+        report = progress or (lambda step, state: None)
+
+        def drain(wait: float = 0.0) -> None:
+            try:
+                while True:
+                    report(*told.get(timeout=wait) if wait else told.get_nowait())
+                    wait = 0.0
+            except queue.Empty:
+                return
+
+        with timing.span("C.2", "A2.1 and A2.2 side by side"):
+            with ThreadPoolExecutor(max_workers=2, thread_name_prefix="tc-a2") as lanes:
+                first = lanes.submit(copy_context().run, a21, guard)
+                second = lanes.submit(copy_context().run, a22, guard)
+                while not (first.done() and second.done()):
+                    drain(0.05)
+            drain()
+            filing_records, market_records = first.result(), second.result()
+        guard.in_lane_order()
+        guard._progress = report            # A2.3 and everything after it run on this thread again
+    else:
+        guard = SourceGuard(data_mode_setting, progress)                                                    # A2.5
+        filing_records = a21(guard)
+        market_records = a22(guard)
+    sources.lane(3)
     with timing.span("C.2.3", "A2.3 Request Context Signals"):
         context_records = request_context_signals(confirmed_claim, sources, guard,                             # A2.3
                                                   company=company_name(filing_records, confirmed_claim.values.ticker), now=now)
