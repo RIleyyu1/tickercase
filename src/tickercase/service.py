@@ -38,6 +38,7 @@ from .models import (
     ReferenceSnapshot,
     ReferenceSuggestion,
     CatalystProposal,
+    StaleSource,
 )
 from .catalysts import fill_reactions
 from .major_events import leadership_events
@@ -343,6 +344,13 @@ class CaseService:
             warn("synthetic example data is used for public sources in this run, not real SEC or market data",
                  "本次公开数据使用合成示例数据，不是真实的 SEC 或市场数据")
 
+        stale = self._stale_sources(sources.stale)
+        for s in stale:     # the fallback of risk R.2: the reader is told which source was away and how old its answers are
+            warn(f"{s.source} did not answer during this run. {s.answers} of its answers come from the copy fetched on "
+                 f"{s.captured_at:%Y-%m-%d %H:%M} UTC ({s.age_hours:g} hours before this run); prices may have moved since.",
+                 f"{s.source} 这次没有应答。它的 {s.answers} 项数据来自 {s.captured_at:%Y-%m-%d %H:%M} UTC 取到的副本"
+                 f"（比这次运行早 {s.age_hours:g} 小时），此后价格可能已经变化。")
+
         result = CaseResult(
             status=CaseStatus.EVALUATED_WITH_PROVIDER_ERRORS if errors else CaseStatus.EVALUATED,
             confirmed_claim=confirmed,
@@ -375,12 +383,22 @@ class CaseService:
             provider_errors=errors,
             data_modes=data_modes,
             mixed_sources=bool(records or facts or market),
+            stale_sources=stale,
             analysis_status="deterministic_rules",
             **base,
         )
         result = self._finish(result)
         present.__exit__(None, None, None)
         return result
+
+    def _stale_sources(self, used: list) -> list[StaleSource]:
+        """The fallback answers of one run, by source (risk R.2): how many, and how old the oldest was."""
+        by: dict[str, list[datetime]] = {}
+        for url, captured in used:
+            by.setdefault(timing.external_participant(url), []).append(captured)
+        now = self.now()
+        return [StaleSource(source=name, answers=len(times), captured_at=min(times),
+                            age_hours=round(max(0.0, (now - min(times)).total_seconds() / 3600), 1)) for name, times in sorted(by.items())]
 
     _price_base_rate = staticmethod(fetch_price_base_rate)
     _benchmarks = staticmethod(fetch_benchmarks)

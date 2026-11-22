@@ -41,6 +41,7 @@ from .models import DataMode
 SNAPSHOT_SCHEMA = "tickercase.snapshot/1"
 ORIGIN_LIVE = "live_recorded"
 ORIGIN_SYNTHETIC = "synthetic_fixture"
+ORIGIN_LAST_GOOD = "last_good_fallback"   # a live response kept from an earlier request, served because the source did not answer
 
 
 def utcnow() -> datetime:
@@ -431,3 +432,71 @@ class FakeHttpClient:
         if isinstance(value, FetchError):
             raise value
         return FetchedJson(url=url, payload=value, retrieved_at=self.now(), data_mode=self.data_mode)
+
+
+# ---------------------------------------------------------------- fallback for a source that does not answer (R.2)
+
+# failures that say the request itself is wrong, not that the source is away: a stored copy must not hide them
+NOT_AN_OUTAGE = ("missing_user_agent", "invalid_url")
+
+
+class LastGoodHttpClient:
+    """A live client that keeps the last good answer to every URL and serves it, dated, when the source does not answer.
+
+    The fallback for risk R.2 of docs/risks.md (the market data source changes, slows or blocks). It contains the
+    failure, it does not prevent it: the outage still happens and the reader is told.
+
+    - A good answer is stored, so the next outage has something to fall back on. A failed write is ignored: the answer
+      in hand is still returned.
+    - When the live request fails, the stored answer to the same URL is returned with ``source_captured_at`` set to the
+      time it was fetched and ``snapshot_origin`` set to ``ORIGIN_LAST_GOOD``, and the use is added to ``used``.
+    - The guardrail of the fallback: a stored answer older than ``max_age_seconds`` is refused and the failure is raised
+      as before, with the age said in the message. A price from last month must never pass for today's.
+    - A failure of the request itself (no User-Agent, a URL that is not https) is raised as it is.
+    """
+
+    def __init__(self, live: JsonFetcher, directory: Union[str, Path], *, max_age_seconds: float, now: Callable[[], datetime] = utcnow):
+        self.live = live
+        self.directory = Path(directory)
+        self.max_age_seconds = max_age_seconds
+        self.now = now
+        self.used: list[tuple[str, datetime]] = []
+        self._reader = ReplayHttpClient(self.directory, now=now)
+
+    def get_json(self, url: str) -> FetchedJson:
+        try:
+            fetched = self.live.get_json(url)
+        except FetchError as exc:
+            if exc.code in NOT_AN_OUTAGE:
+                raise
+            stored = self._stored(url)
+            if stored is None:
+                raise
+            age = (self.now() - stored.source_captured_at).total_seconds()
+            if age > self.max_age_seconds or age < -300:
+                raise FetchError(
+                    exc.code, f"{exc.message}; the stored answer of {stored.source_captured_at:%Y-%m-%d %H:%M} UTC is "
+                              f"{age / 3600:.0f} hours old, over the limit of {self.max_age_seconds / 3600:.0f}, and was not used",
+                    url=url, http_status=exc.http_status, retry_after_seconds=exc.retry_after_seconds, data_mode=exc.data_mode) from exc
+            self.used.append((url, stored.source_captured_at))
+            timing.count("fallback_answers")
+            return stored
+        try:
+            write_snapshot(self.directory, url, fetched.payload, captured_at=fetched.retrieved_at)
+        except (OSError, TypeError, ValueError):
+            pass
+        return fetched
+
+    def _stored(self, url: str) -> Optional[FetchedJson]:
+        try:
+            stored = self._reader._read(url)
+        except FetchError:
+            return None
+        if stored.source_captured_at is None:
+            return None
+        captured = stored.source_captured_at if stored.source_captured_at.tzinfo else stored.source_captured_at.replace(tzinfo=timezone.utc)
+        return FetchedJson(url=url, payload=stored.payload, retrieved_at=self.now(), data_mode=DataMode.LIVE,
+                           source_captured_at=captured, snapshot_origin=ORIGIN_LAST_GOOD)
+
+    def __getattr__(self, name: str):
+        return getattr(self.live, name)

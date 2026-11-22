@@ -3013,6 +3013,9 @@ def view_simple_answer(result: CaseResult) -> None:
     simple_bridge()
     head = plain.headline(result)
     with st.container(key="u-c-ans"):
+        old_data = plain.stale_note(result)
+        if old_data is not None:      # the fallback of risk R.2: the reader sees it before the number
+            html_block(sm.warn(old_data[1 if zh() else 0]))
         html_block(sm.answer_screen(zh(), head, plain.claim_sentence(result), plain.answer_chips(result), plain.index_parts(result),
                                     result.oracle.calibrated if result.oracle is not None else None))
     means = plain.outcomes(result)

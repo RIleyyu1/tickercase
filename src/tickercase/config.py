@@ -75,6 +75,9 @@ class Settings:
     # how A2 asks its sources (docs/decisions/0001-acquisition-mode.md): "parallel" (selected) asks the SEC and the market
     # sources side by side, each with its own request spacing; "sequential" asks one source after the other
     acquisition_mode: str = "parallel"
+    # the fallback of risk R.2 (docs/risks.md): when the market source does not answer, the last good answer to the same
+    # request is used if it is no older than this many hours, and the case says so; 0 switches the fallback off
+    fallback_max_age_hours: float = 72.0
 
 
 ACQUISITION_MODES = ("sequential", "parallel")
@@ -120,4 +123,5 @@ def load_settings(env: Optional[Mapping[str, str]] = None, dotenv_path: Optional
         narrative_effort=effort,
         boot_screen=(merged.get("TICKERCASE_BOOT_SCREEN") or "1").strip().lower() not in ("0", "false", "no", "off"),
         acquisition_mode=_acquisition_mode(merged.get("TICKERCASE_ACQUISITION")),
+        fallback_max_age_hours=max(0.0, float(merged.get("TICKERCASE_FALLBACK_HOURS", "72") or 0)),
     )

@@ -37,6 +37,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from decimal import Decimal
 from typing import Callable, Optional, TypeVar
 
@@ -45,7 +46,7 @@ from pydantic import BaseModel, Field
 from . import timing
 from .calculations import deadline_from
 from .config import SEC_MODES, Settings
-from .http_client import FetchError, JsonFetcher, LiveHttpClient, RecordingHttpClient, ReplayHttpClient, utcnow
+from .http_client import ORIGIN_LAST_GOOD, FetchError, JsonFetcher, LastGoodHttpClient, LiveHttpClient, RecordingHttpClient, ReplayHttpClient, utcnow
 from .models import (
     BaseRate,
     BenchmarkReturn,
@@ -111,7 +112,7 @@ def build_fetcher(mode: str, settings: Settings, source: str = "sec") -> JsonFet
         return ReplayHttpClient(settings.snapshot_dir)
     if source == "options":
         authed = YahooAuthedClient(timeout_seconds=max(settings.timeout_seconds, 15.0))
-        return RecordingHttpClient(authed, settings.snapshot_dir) if mode == "record" else authed
+        return RecordingHttpClient(authed, settings.snapshot_dir) if mode == "record" else _with_fallback(authed, settings)
     if source == "web":
         live = LiveHttpClient(
             user_agent=BROWSER_UA, require_contact_email=False, service_name="CNN",
@@ -147,7 +148,15 @@ def build_fetcher(mode: str, settings: Settings, source: str = "sec") -> JsonFet
         )
     if mode == "record":
         return RecordingHttpClient(live, settings.snapshot_dir)
-    return live
+    return _with_fallback(live, settings) if source == "market" else live
+
+
+def _with_fallback(live: JsonFetcher, settings: Settings) -> JsonFetcher:
+    """The market source in live mode, with the dated fallback of risk R.2 unless it is switched off."""
+    hours = getattr(settings, "fallback_max_age_hours", 0.0)
+    if hours <= 0:
+        return live
+    return LastGoodHttpClient(live, Path(settings.snapshot_dir).parent / "last_good", max_age_seconds=hours * 3600)
 
 
 def mode_enum(mode: str) -> Optional[DataMode]:
@@ -167,13 +176,17 @@ def mode_of(present: bool, modes: set[str], data_mode_setting: str) -> str:
 class _QueryLog:
     """A fetcher that writes every requested URL to the Evidence Query (O IO.6) before it asks the source."""
 
-    def __init__(self, fetcher: JsonFetcher, log: Callable[[str], None]):
+    def __init__(self, fetcher: JsonFetcher, log: Callable[[str], None], stale: Optional[Callable[[str, datetime], None]] = None):
         self._fetcher = fetcher
         self._log = log
+        self._stale = stale
 
     def get_json(self, url: str):
         self._log(url)
-        return self._fetcher.get_json(url)
+        fetched = self._fetcher.get_json(url)
+        if getattr(fetched, "snapshot_origin", None) == ORIGIN_LAST_GOOD and self._stale is not None:
+            self._stale(url, fetched.source_captured_at)      # the source did not answer: an earlier answer was used (R.2)
+        return fetched
 
     def __getattr__(self, name: str):
         return getattr(self._fetcher, name)
@@ -188,6 +201,7 @@ class SourceGateway:
         self.provider_access_terms = provider_access_terms
         self.evidence_query: list[str] = []          # O IO.6; it keeps growing while later steps ask their sources
         self._lanes: list[int] = []                  # the lane of each entry of the Evidence Query
+        self.stale: list[tuple[str, datetime]] = []  # (URL, when its answer was fetched) for every answer served from the fallback
         self._lane = threading.local()
         self._lock = threading.RLock()
         self._fetchers: dict[str, _QueryLog] = {}
@@ -211,7 +225,7 @@ class SourceGateway:
         with self._lock:
             if source not in self._fetchers:
                 fetcher = self._open(self.data_mode_setting, self.provider_access_terms, source)
-                self._fetchers[source] = _QueryLog(fetcher, self._note)
+                self._fetchers[source] = _QueryLog(fetcher, self._note, lambda url, at: self.stale.append((url, at)))
             return self._fetchers[source]
 
     def guarded(self, source: str, provider_id: str, guard: "SourceGuard") -> Optional[JsonFetcher]:

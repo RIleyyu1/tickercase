@@ -22,7 +22,7 @@ from .tiers import TIERS, tier
 
 Pair = tuple[str, str]
 __all__ = ["TIERS", "tier", "pct", "rate", "headline", "claim_sentence", "reasons", "other_condition", "why_a_range", "calibration_line", "index_parts", "answer_chips", "major_event_cards",
-           "assumptions", "restate", "outcomes", "number_cards", "price_cards", "money_cards"]
+           "assumptions", "restate", "outcomes", "number_cards", "price_cards", "money_cards", "stale_note"]
 
 
 def pct(p: float) -> str:
@@ -665,3 +665,12 @@ def money_cards(result: CaseResult) -> list[Reason]:
                                   "公司发新股时，原来每一股占的份额会变小；回购股票时，份额会变大。")))
     return out
 
+
+def stale_note(result: CaseResult) -> Optional[Pair]:
+    """Said above the answer when a source did not answer and its earlier answers were used (the fallback of risk R.2)."""
+    stale = getattr(result, "stale_sources", None)
+    if not stale:
+        return None
+    en = "; ".join(f"{s.source} did not answer, so its figures are from {s.captured_at:%Y-%m-%d %H:%M} UTC, {s.age_hours:g} hours before this answer" for s in stale)
+    zh = "；".join(f"{s.source} 这次没有应答，它的数据是 {s.captured_at:%Y-%m-%d %H:%M} UTC 取到的，比这个答案早 {s.age_hours:g} 小时" for s in stale)
+    return (en + ". The price may have moved since; ask again later for a current answer.", zh + "。此后价格可能已经变化，稍后再查一次可以得到最新的答案。")

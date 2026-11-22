@@ -42,6 +42,16 @@ TickerCase is a stock-only take on [komako-workshop/digital-oracle](https://gith
 
 The range is [min, max] of the usable methods; the tier follows the middle estimate (<5% lottery, 5–20% unlikely, 20–50% possible, >50% likely). Where methods disagree, the page says which is higher and what each measures. Context layers: insider Form 4 transactions split by code (only P purchases and S sales are trades by choice; grants, exercises and tax withholding are not selling), Polymarket contracts on the ticker, CNN Fear & Greed, S&P 500 and Nasdaq-100 returns over the same length. The page shows each data step as it runs and which ones failed. A live RKLB run fetches all eleven steps in about 12 seconds.
 
+## When the market source does not answer (v0.25.0)
+
+The risk assessment of Lab Manual Chapter 12 (`docs/risks.md`) put one risk in the red area: the market data source changes, slows or blocks the product, and three of the four methods lose their inputs (R.2). The product now contains that failure.
+
+- **Fallback.** Every good answer of the market source is kept (`data/snapshots/last_good`). When the source does not answer, the last good answer to the same request is used, and the answer page says, before the number, which source was away and how many hours old its figures are. The case record keeps it (`stale_sources`).
+- **Guardrail on the fallback.** A stored answer older than 72 hours (`TICKERCASE_FALLBACK_HOURS`, 0 switches the fallback off) is refused, and so is a stored file that is damaged, dated in the future or written for another request. An old price must never pass for today's.
+- **Tests of the failure path** (`tests/test_fallback.py`, 22 tests): the source refuses every request and the case gives the same number and says the data is 20 hours old; past the limit the market steps are reported as failed; six kinds of damaged or planted file are not served; a wrong request is never hidden by a stored answer.
+- Not covered: a change of the response format that still parses (the step fails as before), and a stock asked for the first time during an outage.
+- `docs/risks.md` is the product risk register: five system-level risks from the interactions of the architecture model, six risks of an AI-enabled product, the scales, and what the product does about each one.
+
 ## Two lanes: the SEC and the market sources are asked side by side (v0.24.0)
 
 A trade study (Lab Manual Chapter 11) settled how A2 asks its sources. Three alternatives were measured with 10 live runs each on 2026-11-21:

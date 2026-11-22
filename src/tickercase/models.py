@@ -1067,6 +1067,15 @@ class ReferenceSnapshot(BaseModel):
     data_modes: dict[str, str] = Field(default_factory=dict)
 
 
+class StaleSource(BaseModel):
+    """A source that did not answer during a live run: the case used the answers it gave earlier, and says so."""
+
+    source: str                 # the outside service, by the name the sequence diagram gives it
+    answers: int                # how many of its answers came from the stored copies
+    captured_at: datetime       # when the oldest of them was fetched
+    age_hours: float            # how old that one was when the case ran
+
+
 class CaseStatus(str, Enum):
     EVALUATED = "evaluated"
     EVALUATED_WITH_PROVIDER_ERRORS = "evaluated_with_provider_errors"
@@ -1117,6 +1126,8 @@ class CaseResult(BaseModel):
     warnings_zh: list[str] = Field(default_factory=list)
     data_modes: dict[str, str] = Field(default_factory=dict)
     mixed_sources: bool = False
+    # since v0.25.0: the sources that did not answer and whose earlier answers were used (the fallback of risk R.2)
+    stale_sources: list["StaleSource"] = Field(default_factory=list)
     # "not_implemented" is kept so cases saved by v0.1 still load
     analysis_status: Literal["not_run", "deterministic_rules", "not_implemented"] = "not_run"
     disclaimer: str = (
